@@ -1,10 +1,15 @@
 import { Module } from '@nestjs/common';
+import { CustomerService } from './customer.service';
+import { ConversationService } from './conversation.service';
 
 /**
  * Services Module
  *
  * Contains application services that don't fit in domain or orchestrator.
- * This is a placeholder module for MVP bootstrap.
+ *
+ * Current services:
+ * - CustomerService: identity resolution by phone
+ * - ConversationService: chat session management
  *
  * Future responsibilities:
  * - Catalog service (product search)
@@ -12,5 +17,8 @@ import { Module } from '@nestjs/common';
  * - Delivery service (tracking, zones)
  * - Knowledge base service (RAG for FAQs)
  */
-@Module({})
+@Module({
+  providers: [CustomerService, ConversationService],
+  exports: [CustomerService, ConversationService],
+})
 export class ServicesModule {}

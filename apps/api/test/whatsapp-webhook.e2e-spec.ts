@@ -284,12 +284,8 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
 
       // Send two identical requests concurrently
       const [response1, response2] = await Promise.all([
-        request(app.getHttpServer())
-          .post('/webhooks/whatsapp/inbound')
-          .send(racePayload),
-        request(app.getHttpServer())
-          .post('/webhooks/whatsapp/inbound')
-          .send(racePayload),
+        request(app.getHttpServer()).post('/webhooks/whatsapp/inbound').send(racePayload),
+        request(app.getHttpServer()).post('/webhooks/whatsapp/inbound').send(racePayload),
       ]);
 
       // Both should return 200
