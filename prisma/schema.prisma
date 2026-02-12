@@ -45,10 +45,62 @@ model InboundMessage {
 }
 
 // ============================================================================
+// PR-02: Customer, Merchant, Conversation (identity + session)
+// ============================================================================
+
+/// Merchant represents a business using the platform
+model Merchant {
+  id             String   @id @default(cuid())
+  name           String
+  whatsappNumber String   @map("whatsapp_number")
+  apiKey         String   @unique @map("api_key")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  conversations Conversation[]
+
+  @@map("merchants")
+}
+
+/// Customer represents an end-user (identity resolved by phone)
+model Customer {
+  id        String    @id @default(cuid())
+  phone     String    @unique // Normalized phone number (e.g., +573001234567)
+  name      String?
+  language  String    @default("es") // ISO 639-1 code
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  conversations Conversation[]
+
+  @@map("customers")
+  @@index([phone])
+}
+
+/// Conversation represents a chat session between customer and merchant
+model Conversation {
+  id            String    @id @default(cuid())
+  customerId    String    @map("customer_id")
+  merchantId    String    @map("merchant_id")
+  channel       String    // whatsapp, webchat, instagram
+  status        String    @default("active") // active, closed, handoff
+  lastMessageAt DateTime? @map("last_message_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  merchant Merchant @relation(fields: [merchantId], references: [id])
+
+  @@map("conversations")
+  @@index([customerId])
+  @@index([merchantId])
+  @@index([customerId, channel])
+  @@index([status])
+}
+
+// ============================================================================
 // Future entities (Core V1 MVP)
 // ============================================================================
-// - Customer (identity, phone, name, preferences)
-// - Conversation (conversation_id, customer, channel, status)
 // - Cart (cart_id, customer, items, status, expires_at)
 // - CartItem (cart, product, variant, quantity, price)
 // - Order (order_id, customer, cart_snapshot, status, payment_method)

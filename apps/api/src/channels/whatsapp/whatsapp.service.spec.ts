@@ -131,12 +131,8 @@ describe('WhatsAppService', () => {
       await service.processInboundMessage(validDto);
 
       // Verify logger was called with masked phone (****7890)
-      expect(loggerSpy).toHaveBeenCalledWith(
-        expect.stringContaining('****7890'),
-      );
-      expect(loggerSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('1234567890'),
-      );
+      expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('****7890'));
+      expect(loggerSpy).not.toHaveBeenCalledWith(expect.stringContaining('1234567890'));
 
       loggerSpy.mockRestore();
     });
