@@ -4,6 +4,8 @@ import { MessageRepository } from './repositories/message.repository';
 import { CustomerRepository } from './repositories/customer.repository';
 import { MerchantRepository } from './repositories/merchant.repository';
 import { ConversationRepository } from './repositories/conversation.repository';
+import { CategoryRepository } from './repositories/category.repository';
+import { ProductRepository } from './repositories/product.repository';
 
 @Global()
 @Module({
@@ -13,6 +15,8 @@ import { ConversationRepository } from './repositories/conversation.repository';
     CustomerRepository,
     MerchantRepository,
     ConversationRepository,
+    CategoryRepository,
+    ProductRepository,
   ],
   exports: [
     PrismaService,
@@ -20,6 +24,8 @@ import { ConversationRepository } from './repositories/conversation.repository';
     CustomerRepository,
     MerchantRepository,
     ConversationRepository,
+    CategoryRepository,
+    ProductRepository,
   ],
 })
 export class PersistenceModule {}
