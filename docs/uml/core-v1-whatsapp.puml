@@ -1,0 +1,553 @@
+@startuml Core_V1_WhatsApp_Definitive
+' ============================================================
+' Core V1 (Core B1) - WhatsApp Only - Definitive UML Pack
+' Includes:
+' 1) Component diagram
+' 2) Sequences: inbound, checkout, payment webhook, status/handoff
+' 3) State machines: conversation + order
+' 4) Minimal data model (class diagram) + idempotency constraints
+' ============================================================
+
+skinparam componentStyle rectangle
+
+' ----------------------------
+' 1) COMPONENT DIAGRAM
+' ----------------------------
+title Core V1 - WhatsApp Only (Definitive) - Components
+
+package "Channel (WhatsApp)" {
+  [WhatsApp Webhook Adapter] as wa_in
+  [WhatsApp Outbound Adapter] as wa_out
+  [Signature Verifier] as sig
+}
+
+package "Orchestrator" {
+  [Conversation Orchestrator] as orch
+  [Conversation State Machine] as csm
+  [Order State Machine] as osm
+  [Idempotency Manager] as idem
+}
+
+package "Application Services" {
+  [Intent Router] as router
+  [Merchant Resolver] as mres
+  [Policy/Guardrails] as guard
+  [Knowledge Service] as kb
+  [Catalog Service] as catalog
+  [Cart Service] as cart
+  [Checkout Service] as checkout
+  [Payment Service] as pay
+  [Order Service] as order
+  [Ticket/Handoff Service] as ticket
+}
+
+package "Persistence (PostgreSQL)" {
+  database "PostgreSQL" as pg
+  [Merchant Repo] as merchRepo
+  [Conversation Repo] as convRepo
+  [Event Log Repo] as eventRepo
+  [Idempotency Repo] as idemRepo
+  [Catalog Repo] as catalogRepo
+  [Cart Repo] as cartRepo
+  [Order Repo] as orderRepo
+  [PaymentIntent Repo] as payRepo
+  [KB Repo] as kbRepo
+  [Ticket Repo] as ticketRepo
+}
+
+package "External Providers" {
+  [Payment Provider API] as payProv
+  [WhatsApp Provider API] as waProv
+}
+
+package "LLM Layer" {
+  [LLM Gateway] as llm
+  [Prompt Templates] as prompts
+  [RAG Retriever] as rag
+}
+
+package "Observability" {
+  [Structured Logger] as log
+  [Metrics/Tracing] as metrics
+}
+
+' Inbound path
+waProv --> wa_in : webhook(message_id, payload)
+wa_in --> sig : verify signature (if available)
+sig --> orch : verified payload
+
+' Orchestration
+orch --> mres : resolve merchant/store\n(from number-id / metadata)
+mres --> merchRepo
+orch --> idem : dedupe (message_id/payment_intent_id)
+idem --> idemRepo
+orch --> convRepo : load/create conversation (merchant_id, phone)
+orch --> eventRepo : append event log (correlationId)
+
+orch --> csm : conversation transitions
+orch --> router : classify + route
+router --> guard : enforce tool-truth + safety
+router --> kb
+router --> catalog
+router --> cart
+router --> checkout
+router --> pay
+router --> order
+router --> ticket
+orch --> osm : order transitions
+
+' Persistence
+kbRepo --> pg
+catalogRepo --> pg
+cartRepo --> pg
+orderRepo --> pg
+payRepo --> pg
+idemRepo --> pg
+eventRepo --> pg
+merchRepo --> pg
+ticketRepo --> pg
+
+' LLM usage (bounded)
+kb --> rag : retrieve KB chunks
+rag --> kbRepo
+kb --> llm : generate response using docs + guardrails
+llm --> prompts
+llm --> guard
+
+' Outbound messages
+orch --> wa_out : sendMessage(...)
+wa_out --> waProv : outbound API call
+
+' Payments
+pay --> payProv : create/verify intents
+payProv --> orch : payment webhook (payment_intent_id)
+
+' Observability
+orch --> log
+orch --> metrics
+@enduml
+
+@startuml SEQUENCE A
+
+' ----------------------------
+' 2) SEQUENCE A
+' Inbound message -> multi-tenant -> idempotency -> route -> respond
+' ----------------------------
+title Flow A - WhatsApp Inbound (Multi-tenant + Idempotency + Event Log)
+
+actor Customer
+participant "WhatsApp Provider" as WAP
+participant "WhatsApp Webhook Adapter" as WAIn
+participant "Signature Verifier" as Sig
+participant "Conversation Orchestrator" as Orch
+participant "Merchant Resolver" as MRes
+participant "Merchant Repo" as MerchRepo
+participant "Idempotency Repo" as Idem
+participant "Event Log Repo" as EventRepo
+participant "Conversation Repo" as ConvRepo
+participant "Intent Router" as Router
+participant "Policy/Guardrails" as Guard
+participant "Knowledge Service" as KB
+participant "Catalog Service" as Catalog
+participant "Cart Service" as Cart
+participant "WhatsApp Outbound Adapter" as WAOut
+
+Customer -> WAP : sends message (text/voice)
+WAP -> WAIn : webhook(message_id, payload)
+
+WAIn -> Sig : verify(payload, signature)
+alt invalid signature (if supported)
+  Sig --> WAIn : invalid
+  WAIn -> WAP : 401/403
+else valid or not supported
+  Sig --> Orch : verified(message_id, payload)
+
+  Orch -> MRes : resolveMerchant(payload.receiverNumberId / metadata)
+  MRes -> MerchRepo : find merchant by whatsapp number-id
+  MerchRepo --> MRes : merchant_id, store_id
+  MRes --> Orch : merchant context
+
+  Orch -> Idem : exists(merchant_id, message_id)?
+  alt duplicated message_id
+    Idem --> Orch : YES
+    Orch -> WAIn : return 200 OK (no-op)
+  else new message_id
+    Idem --> Orch : NO
+    Orch -> Idem : store(merchant_id, message_id)
+
+    Orch -> EventRepo : append(event=INBOUND, correlationId)
+    Orch -> ConvRepo : loadOrCreateConversation(merchant_id, phone)
+    ConvRepo --> Orch : conversation
+
+    Orch -> Router : route(merchant, conversation, payload)
+    Router -> Guard : enforce policies (no hallucinated facts)
+    Guard --> Router : ok
+
+    alt FAQ / policy question
+      Router -> KB : answer(question)
+      KB --> Router : response
+    else product discovery
+      Router -> Catalog : searchProducts(query)
+      Catalog --> Router : list
+    else cart update
+      Router -> Cart : updateCart(items)
+      Cart --> Router : cart snapshot
+    end
+
+    Router --> Orch : responseMessage
+    Orch -> EventRepo : append(event=OUTBOUND, correlationId)
+    Orch -> WAOut : sendMessage(phone, responseMessage)
+    WAOut -> WAP : outbound API
+    WAP --> Customer : delivered
+    Orch -> WAIn : return 200 OK
+  end
+end
+
+@enduml
+@startuml SEQUENCE B
+
+' ----------------------------
+' 3) SEQUENCE B
+' Checkout -> PaymentIntent -> Order draft -> send payment link
+' ----------------------------
+title Flow B - Checkout -> PaymentIntent -> Order Draft (Multi-tenant)
+
+actor Customer
+participant "WhatsApp Webhook Adapter" as WAIn
+participant "Conversation Orchestrator" as Orch
+participant "Merchant Resolver" as MRes
+participant "Idempotency Repo" as Idem
+participant "Cart Repo" as CartRepo
+participant "Checkout Service" as Checkout
+participant "Payment Service" as Payment
+participant "Payment Provider API" as PayProv
+participant "Order Service" as Order
+participant "Order Repo" as OrderRepo
+participant "WhatsApp Outbound Adapter" as WAOut
+
+Customer -> WAIn : "Quiero pagar"
+WAIn -> Orch : inboundMessage(message_id, payload)
+
+Orch -> MRes : resolveMerchant(...)
+MRes --> Orch : merchant_id, store_id
+
+Orch -> Idem : exists(merchant_id, message_id)?
+alt duplicate
+  Orch -> WAIn : 200 OK
+else new
+  Orch -> Idem : store(merchant_id, message_id)
+
+  Orch -> CartRepo : getActiveCart(merchant_id, phone)
+  CartRepo --> Orch : cart
+
+  Orch -> Checkout : validateCart(cart)
+  alt invalid cart
+    Checkout --> Orch : error(reason)
+    Orch -> WAOut : sendMessage(phone, "No puedo pagar: ...")
+  else ok
+    Checkout --> Orch : summary(total, items)
+
+    Orch -> Payment : createPaymentIntent(merchant_id, phone, total, metadata)
+    Payment -> PayProv : createIntent(amount, metadata)
+    PayProv --> Payment : payment_intent_id, payment_url
+    Payment --> Orch : intent(id, url)
+
+    Orch -> Order : createDraft(merchant_id, cart, payment_intent_id)
+    Order -> OrderRepo : insert(status=PENDING_PAYMENT)
+    OrderRepo --> Order : order_id
+    Order --> Orch : order_id
+
+    Orch -> WAOut : sendMessage(phone, "Paga aquí: PAYMENT_URL | Pedido: ORDER_ID")
+  end
+end
+@endunml
+@startuml SEQUENCE C
+
+' ----------------------------
+' 4) SEQUENCE C
+' Payment webhook -> idempotency -> verify -> transition order -> notify
+' ----------------------------
+title Flow C - Payment Webhook (Idempotent + Order Transition)
+
+participant "Payment Provider API" as PayProv
+participant "Payment Webhook Adapter" as PayWA
+participant "Conversation Orchestrator" as Orch
+participant "Merchant Resolver" as MRes
+participant "Idempotency Repo" as Idem
+participant "Payment Service" as Payment
+participant "Order Repo" as OrderRepo
+participant "Order Service" as Order
+participant "WhatsApp Outbound Adapter" as WAOut
+
+PayProv -> PayWA : webhook(payment_intent_id, status=SUCCEEDED, merchantRef)
+PayWA -> Orch : handlePaymentWebhook(payment_intent_id, payload)
+
+Orch -> MRes : resolveMerchant(payload.merchantRef)
+MRes --> Orch : merchant_id, store_id
+
+Orch -> Idem : exists(merchant_id, payment_intent_id)?
+alt duplicate callback
+  Orch -> PayWA : 200 OK (no-op)
+else new callback
+  Orch -> Idem : store(merchant_id, payment_intent_id)
+
+  Orch -> Payment : verifyAndNormalize(payload)
+  Payment --> Orch : normalized(status, amount, phoneRef)
+
+  Orch -> OrderRepo : findByPaymentIntent(merchant_id, payment_intent_id)
+  OrderRepo --> Orch : order(status=PENDING_PAYMENT)
+
+  Orch -> Order : transition(order, PAYMENT_CONFIRMED)
+  Order -> OrderRepo : update(status=PAID, paidAt=now)
+  OrderRepo --> Order : ok
+
+  Orch -> WAOut : sendMessage(phoneRef, "Pago confirmado. Pedido #X en preparación.")
+  Orch -> PayWA : 200 OK
+end
+
+@enduml
+@startuml SEQUENCE D
+
+' ----------------------------
+' 5) SEQUENCE D
+' Order status + human handoff (WhatsApp only)
+' ----------------------------
+title Flow D - Order Status + Human Handoff (Multi-tenant)
+
+actor Customer
+participant "WhatsApp Webhook Adapter" as WAIn
+participant "Conversation Orchestrator" as Orch
+participant "Merchant Resolver" as MRes
+participant "Intent Router" as Router
+participant "Order Service" as Order
+participant "Ticket/Handoff Service" as Ticket
+participant "Ticket Repo" as TicketRepo
+participant "WhatsApp Outbound Adapter" as WAOut
+
+Customer -> WAIn : "Necesito ayuda" / "¿Cómo va mi pedido?"
+WAIn -> Orch : inboundMessage(message_id, text)
+
+Orch -> MRes : resolveMerchant(...)
+MRes --> Orch : merchant_id, store_id
+
+Orch -> Router : route(intent)
+alt order status
+  Router -> Order : getLatestOrder(merchant_id, phone)
+  Order --> Router : status text
+  Router --> Orch : message
+  Orch -> WAOut : sendMessage(phone, status)
+else needs human
+  Router -> Ticket : openTicket(merchant_id, phone, reason)
+  Ticket -> TicketRepo : insert(status=OPEN, channel=WHATSAPP)
+  TicketRepo --> Ticket : ticket_id
+  Ticket --> Router : ticket_id
+
+  Router --> Orch : handoff message
+  Orch -> WAOut : sendMessage(phone, "Te paso con un asesor… Ticket: <id>")
+end
+
+@enduml
+@startuml STATE MACHINES
+
+' ----------------------------
+' 6) STATE MACHINES
+' ----------------------------
+title Conversation State Machine (Core V1)
+
+[*] --> NEW
+NEW --> ACTIVE : first inbound message
+ACTIVE --> CHECKOUTING : user triggers checkout
+CHECKOUTING --> WAITING_PAYMENT : payment link sent
+WAITING_PAYMENT --> ACTIVE : user continues browsing
+WAITING_PAYMENT --> POST_PURCHASE : payment confirmed
+POST_PURCHASE --> ACTIVE : post-purchase questions
+ACTIVE --> HANDOFF : needs human support
+HANDOFF --> ACTIVE : human resolved
+ACTIVE --> CLOSED : inactivity timeout
+CLOSED --> ACTIVE : user returns
+
+
+title Order State Machine (Core V1)
+
+[*] --> DRAFT
+DRAFT --> PENDING_PAYMENT : checkout started
+PENDING_PAYMENT --> PAID : payment webhook succeeded
+PENDING_PAYMENT --> CANCELED : user cancels / expires
+PAID --> FULFILLING : picking/packing
+FULFILLING --> READY : ready for pickup / ready to ship
+READY --> COMPLETED : delivered / picked up
+COMPLETED --> [*]
+
+PAID --> REFUND_REQUESTED : user requests refund
+REFUND_REQUESTED --> REFUNDED : refund processed
+
+@enduml
+@startuml CLASS DIAGRAM (MINIMAL DATA MODEL)
+' ----------------------------
+' 7) CLASS DIAGRAM (MINIMAL DATA MODEL)
+' ----------------------------
+title Core V1 - Minimal Data Model (Multi-tenant + Idempotency)
+
+class Merchant {
+  +id: UUID
+  +name: string
+  +status: MerchantStatus
+  +createdAt: Date
+}
+
+class Store {
+  +id: UUID
+  +merchantId: UUID
+  +name: string
+  +timezone: string
+}
+
+class ChannelAccount {
+  +id: UUID
+  +merchantId: UUID
+  +type: ChannelType  <<WHATSAPP>>
+  +providerNumberId: string
+  +webhookSecret: string?
+}
+
+class Customer {
+  +id: UUID
+  +merchantId: UUID
+  +phoneE164: string
+  +name: string?
+  +createdAt: Date
+}
+
+class Conversation {
+  +id: UUID
+  +merchantId: UUID
+  +customerId: UUID
+  +state: ConversationState
+  +lastMessageAt: Date
+}
+
+class MessageEvent {
+  +id: UUID
+  +merchantId: UUID
+  +conversationId: UUID
+  +direction: MessageDirection <<IN|OUT>>
+  +providerMessageId: string?
+  +payloadJson: JSON
+  +correlationId: string
+  +createdAt: Date
+}
+
+class IdempotencyKey {
+  +id: UUID
+  +merchantId: UUID
+  +scope: IdemScope <<INBOUND|PAYMENT>>
+  +key: string  <<message_id/payment_intent_id>>
+  +createdAt: Date
+}
+
+class Product {
+  +id: UUID
+  +merchantId: UUID
+  +sku: string
+  +name: string
+  +price: number
+  +currency: string
+  +active: boolean
+}
+
+class Cart {
+  +id: UUID
+  +merchantId: UUID
+  +customerId: UUID
+  +status: CartStatus <<ACTIVE|CHECKED_OUT>>
+  +updatedAt: Date
+}
+
+class CartItem {
+  +id: UUID
+  +cartId: UUID
+  +productId: UUID
+  +qty: number
+  +unitPrice: number
+}
+
+class Order {
+  +id: UUID
+  +merchantId: UUID
+  +customerId: UUID
+  +status: OrderStatus
+  +total: number
+  +currency: string
+  +paymentIntentId: UUID?
+  +createdAt: Date
+}
+
+class PaymentIntent {
+  +id: UUID
+  +merchantId: UUID
+  +provider: string
+  +providerIntentId: string
+  +status: PaymentStatus
+  +amount: number
+  +currency: string
+  +paymentUrl: string?
+  +createdAt: Date
+}
+
+class Ticket {
+  +id: UUID
+  +merchantId: UUID
+  +customerId: UUID
+  +conversationId: UUID
+  +status: TicketStatus <<OPEN|RESOLVED>>
+  +reason: string
+  +createdAt: Date
+}
+
+Merchant "1" -- "many" Store
+Merchant "1" -- "many" ChannelAccount
+Merchant "1" -- "many" Customer
+Merchant "1" -- "many" Conversation
+Merchant "1" -- "many" IdempotencyKey
+Merchant "1" -- "many" Product
+Merchant "1" -- "many" Cart
+Merchant "1" -- "many" Order
+Merchant "1" -- "many" PaymentIntent
+Merchant "1" -- "many" Ticket
+
+Customer "1" -- "many" Conversation
+Conversation "1" -- "many" MessageEvent
+
+Cart "1" -- "many" CartItem
+CartItem "*" -- "1" Product
+
+Order "*" -- "1" PaymentIntent
+
+note right of IdempotencyKey
+Unique constraint:
+(merchantId, scope, key)
+end note
+
+note right of MessageEvent
+Optional unique:
+(merchantId, providerMessageId)
+when direction=IN
+end note
+
+@enduml
+@startuml GUARDRAILS CONTRACT (ANNOTATION)
+
+' ----------------------------
+' 8) GUARDRAILS CONTRACT (ANNOTATION)
+' ----------------------------
+title Guardrails Contract (Core V1)
+
+note as Guardrails
+Hard rule:
+- Any response mentioning price/stock/total/shipping/hours MUST come from services (Catalog/Cart/Order),
+  never invented by LLM.
+- LLM can: classify intent, summarize, generate wording using verified facts from tools/DB.
+- All external payloads validated; all webhooks idempotent.
+end note
+
+@enduml

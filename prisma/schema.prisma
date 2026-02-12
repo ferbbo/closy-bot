@@ -1,0 +1,58 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// Bootstrap placeholder model
+// This will be removed when real entities are added
+// ============================================================================
+
+model HealthCheck {
+  id        String   @id @default(cuid())
+  checkedAt DateTime @default(now())
+
+  @@map("health_checks")
+}
+
+// ============================================================================
+// Core V1 MVP Entities
+// ============================================================================
+
+/// Inbound messages from WhatsApp (or other channels)
+/// Implements idempotency via unique constraint on messageId
+model InboundMessage {
+  id        String   @id @default(cuid())
+  messageId String   @unique @map("message_id") // Provider unique ID (WhatsApp message_id)
+  from      String   // Phone number or user identifier
+  timestamp DateTime // Message timestamp from provider
+  text      String?  // Text content
+  mediaType String?  @map("media_type") // image, document, audio, video
+  mediaUrl  String?  @map("media_url") // URL to media attachment
+  processed Boolean  @default(false) // Processing status
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("inbound_messages")
+  @@index([from])
+  @@index([timestamp])
+}
+
+// ============================================================================
+// Future entities (Core V1 MVP)
+// ============================================================================
+// - Customer (identity, phone, name, preferences)
+// - Conversation (conversation_id, customer, channel, status)
+// - Cart (cart_id, customer, items, status, expires_at)
+// - CartItem (cart, product, variant, quantity, price)
+// - Order (order_id, customer, cart_snapshot, status, payment_method)
+// - Payment (payment_id, payment_intent_id UNIQUE for idempotency, order, status)
+// - Ticket (ticket_id, customer, order?, type, status, description)
+// - Product (sku, name, price, stock, category)
+// ============================================================================

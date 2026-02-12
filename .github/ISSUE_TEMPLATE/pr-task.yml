@@ -1,0 +1,130 @@
+name: "PR Task"
+description: "Tarea para implementar un PR pequeño y mergeable (Core V1 MVP) usando PR Stack + PR Brief."
+title: "PR-XX: <título corto>"
+labels:
+  - pr-task
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Usa este issue para preparar un PR del stack.
+
+        Artefactos:
+        - Stack: `docs/plan/PR-STACK-core-v1.md`
+        - PR Brief: `docs/plan/pr-briefs/PR-XX-<slug>.md` (requerido antes de codear)
+
+  - type: input
+    id: pr_id
+    attributes:
+      label: "PR ID"
+      description: "Ej: PR-01, PR-06"
+      placeholder: "PR-01"
+    validations:
+      required: true
+
+  - type: input
+    id: brief_path
+    attributes:
+      label: "PR Brief (ruta)"
+      description: "Ruta al brief (debe existir antes de implementar)."
+      placeholder: "docs/plan/pr-briefs/PR-01-whatsapp-inbound-dedupe.md"
+    validations:
+      required: true
+
+  - type: textarea
+    id: objetivo
+    attributes:
+      label: "Objetivo"
+      description: "1–2 frases. Qué cambia y para qué."
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: "Scope fence"
+      description: "Define included/excluded para evitar scope creep."
+      value: |
+        ✅ Included
+        -
+
+        ❌ Excluded
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: paths
+    attributes:
+      label: "Paths a tocar"
+      description: "Lista concreta de archivos/carpetas (idealmente 5–15)."
+      placeholder: |
+        - apps/api/src/channels/...
+        - prisma/schema.prisma
+    validations:
+      required: true
+
+  - type: textarea
+    id: contracts
+    attributes:
+      label: "Contratos / Interfaces"
+      description: "Endpoints, DTOs, eventos, modelos Prisma y claves de idempotencia (si aplica)."
+      placeholder: |
+        - POST /webhooks/whatsapp
+        - InboundMessageDto
+        - Idempotency key: message_id (unique)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: dod
+    attributes:
+      label: "DoD (Core V1)"
+      description: "Debe cumplirse antes de cerrar el issue."
+      options:
+        - label: "Idempotencia implementada y testeada (message_id / payment_intent_id) donde aplique"
+          required: true
+        - label: "Estado persistido en Postgres (sin lógica solo en memoria)"
+          required: true
+        - label: "Guardrails: no inventa precio/stock/políticas/ETA (confirmaciones desde servicios)"
+          required: true
+        - label: "PII minimizada y sin logs de datos sensibles"
+          required: true
+        - label: "Tests unit/integration relevantes agregados/actualizados"
+          required: true
+        - label: "`pnpm lint` y `pnpm test` pasan"
+          required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: "Acceptance criteria (verificables)"
+      description: "Checklist de criterios que se pueden validar con tests/comandos."
+      placeholder: |
+        - [ ] Webhook duplicado (mismo message_id) se procesa 1 vez
+        - [ ] Reintentos no duplican órdenes/pagos
+    validations:
+      required: true
+
+  - type: textarea
+    id: comandos
+    attributes:
+      label: "Comandos para validar"
+      description: "Qué correr para verificar."
+      value: |
+        - pnpm lint
+        - pnpm test
+        - (si aplica) pnpm db:migrate
+    validations:
+      required: true
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: "Riesgos / mitigaciones"
+      description: "Riesgos técnicos y cómo mitigarlos."
+      placeholder: |
+        - Riesgo: doble procesamiento por reintentos
+          Mitigación: unique constraint + transacción
+    validations:
+      required: false
