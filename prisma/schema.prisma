@@ -58,6 +58,8 @@ model Merchant {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   conversations Conversation[]
+  categories    Category[]
+  products      Product[]
 
   @@map("merchants")
 }
@@ -99,6 +101,67 @@ model Conversation {
 }
 
 // ============================================================================
+// PR-03: Catalog (Product, Category, ProductVariant)
+// ============================================================================
+
+/// Category groups products for easier navigation
+model Category {
+  id         String    @id @default(cuid())
+  name       String
+  merchantId String    @map("merchant_id")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  merchant Merchant  @relation(fields: [merchantId], references: [id])
+  products Product[]
+
+  @@map("categories")
+  @@unique([merchantId, name])
+  @@index([merchantId])
+}
+
+/// Product represents an item in the catalog
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  categoryId  String   @map("category_id")
+  merchantId  String   @map("merchant_id")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  category Category          @relation(fields: [categoryId], references: [id])
+  merchant Merchant          @relation(fields: [merchantId], references: [id])
+  variants ProductVariant[]
+
+  @@map("products")
+  @@index([merchantId])
+  @@index([categoryId])
+  @@index([merchantId, isActive])
+}
+
+/// ProductVariant represents a specific SKU with price and stock
+model ProductVariant {
+  id        String   @id @default(cuid())
+  productId String   @map("product_id")
+  sku       String // Required SKU for idempotency in imports
+  name      String // Variant name (e.g., "Talla M", "Color Rojo")
+  price     Decimal  @db.Decimal(10, 2) // Price with 2 decimal places
+  stock     Int      @default(0) // Available stock
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("product_variants")
+  @@unique([productId, sku]) // Ensure SKU is unique per product
+  @@index([productId])
+  @@index([isActive])
+}
+
+// ============================================================================
 // Future entities (Core V1 MVP)
 // ============================================================================
 // - Cart (cart_id, customer, items, status, expires_at)
@@ -106,5 +169,4 @@ model Conversation {
 // - Order (order_id, customer, cart_snapshot, status, payment_method)
 // - Payment (payment_id, payment_intent_id UNIQUE for idempotency, order, status)
 // - Ticket (ticket_id, customer, order?, type, status, description)
-// - Product (sku, name, price, stock, category)
 // ============================================================================

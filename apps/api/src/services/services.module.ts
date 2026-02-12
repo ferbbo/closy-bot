@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { CustomerService } from './customer.service';
 import { ConversationService } from './conversation.service';
+import { CatalogService } from './catalog.service';
+import { ImportService } from './import.service';
 
 /**
  * Services Module
@@ -10,15 +12,16 @@ import { ConversationService } from './conversation.service';
  * Current services:
  * - CustomerService: identity resolution by phone
  * - ConversationService: chat session management
+ * - CatalogService: product search and retrieval
+ * - ImportService: CSV product import with validation
  *
  * Future responsibilities:
- * - Catalog service (product search)
  * - Payment service (payment gateway integration)
  * - Delivery service (tracking, zones)
  * - Knowledge base service (RAG for FAQs)
  */
 @Module({
-  providers: [CustomerService, ConversationService],
-  exports: [CustomerService, ConversationService],
+  providers: [CustomerService, ConversationService, CatalogService, ImportService],
+  exports: [CustomerService, ConversationService, CatalogService, ImportService],
 })
 export class ServicesModule {}
