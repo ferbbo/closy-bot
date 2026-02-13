@@ -3,6 +3,7 @@ import { CustomerService } from './customer.service';
 import { ConversationService } from './conversation.service';
 import { CatalogService } from './catalog.service';
 import { ImportService } from './import.service';
+import { CartService } from './cart.service';
 
 /**
  * Services Module
@@ -14,6 +15,7 @@ import { ImportService } from './import.service';
  * - ConversationService: chat session management
  * - CatalogService: product search and retrieval
  * - ImportService: CSV product import with validation
+ * - CartService: shopping cart CRUD operations (PR-04)
  *
  * Future responsibilities:
  * - Payment service (payment gateway integration)
@@ -21,7 +23,7 @@ import { ImportService } from './import.service';
  * - Knowledge base service (RAG for FAQs)
  */
 @Module({
-  providers: [CustomerService, ConversationService, CatalogService, ImportService],
-  exports: [CustomerService, ConversationService, CatalogService, ImportService],
+  providers: [CustomerService, ConversationService, CatalogService, ImportService, CartService],
+  exports: [CustomerService, ConversationService, CatalogService, ImportService, CartService],
 })
 export class ServicesModule {}

@@ -74,6 +74,7 @@ model Customer {
   updatedAt DateTime  @updatedAt @map("updated_at")
 
   conversations Conversation[]
+  carts         Cart[]
 
   @@map("customers")
   @@index([phone])
@@ -131,9 +132,10 @@ model Product {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  category Category          @relation(fields: [categoryId], references: [id])
-  merchant Merchant          @relation(fields: [merchantId], references: [id])
-  variants ProductVariant[]
+  category  Category          @relation(fields: [categoryId], references: [id])
+  merchant  Merchant          @relation(fields: [merchantId], references: [id])
+  variants  ProductVariant[]
+  cartItems CartItem[]
 
   @@map("products")
   @@index([merchantId])
@@ -153,7 +155,8 @@ model ProductVariant {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  product Product @relation(fields: [productId], references: [id])
+  product   Product    @relation(fields: [productId], references: [id])
+  cartItems CartItem[]
 
   @@map("product_variants")
   @@unique([productId, sku]) // Ensure SKU is unique per product
@@ -162,10 +165,48 @@ model ProductVariant {
 }
 
 // ============================================================================
+// PR-04: Cart (shopping cart persistence)
+// ============================================================================
+
+/// Cart represents a customer's shopping cart tied to a conversation
+model Cart {
+  id             String   @id @default(cuid())
+  customerId     String   @map("customer_id")
+  conversationId String   @map("conversation_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  customer Customer   @relation(fields: [customerId], references: [id])
+  items    CartItem[]
+
+  @@map("carts")
+  @@unique([conversationId]) // One cart per conversation
+  @@index([customerId])
+}
+
+/// CartItem represents a single product in the cart
+model CartItem {
+  id              String   @id @default(cuid())
+  cartId          String   @map("cart_id")
+  productId       String   @map("product_id")
+  productVariantId String?  @map("product_variant_id")
+  quantity        Int      @default(1)
+  unitPrice       Decimal  @map("unit_price") @db.Decimal(10, 2) // Snapshot of price at add time
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  cart    Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id])
+  variant ProductVariant? @relation(fields: [productVariantId], references: [id])
+
+  @@map("cart_items")
+  @@unique([cartId, productId, productVariantId], name: "cart_items_unique_product_per_cart")
+  @@index([cartId])
+  @@index([productId])
+}
+
+// ============================================================================
 // Future entities (Core V1 MVP)
 // ============================================================================
-// - Cart (cart_id, customer, items, status, expires_at)
-// - CartItem (cart, product, variant, quantity, price)
 // - Order (order_id, customer, cart_snapshot, status, payment_method)
 // - Payment (payment_id, payment_intent_id UNIQUE for idempotency, order, status)
 // - Ticket (ticket_id, customer, order?, type, status, description)
