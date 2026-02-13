@@ -118,6 +118,37 @@ describe('CartService', () => {
       expect(result).toEqual(mockCart);
       expect(cartRepository.create).toHaveBeenCalled();
     });
+
+    it('should handle race condition when cart is created by concurrent request (P2002)', async () => {
+      cartRepository.findByConversationId.mockResolvedValueOnce(null);
+      const p2002Error = Object.assign(new Error('Unique constraint violation'), { code: 'P2002' });
+      cartRepository.create.mockRejectedValueOnce(p2002Error);
+      cartRepository.findByConversationId.mockResolvedValueOnce(mockCart);
+
+      const result = await service.getOrCreateCart(mockConversationId, mockCustomerId);
+
+      expect(result).toEqual(mockCart);
+      expect(cartRepository.findByConversationId).toHaveBeenCalledTimes(2);
+    });
+
+    it('should throw error if cart still not found after P2002', async () => {
+      cartRepository.findByConversationId.mockResolvedValueOnce(null);
+      const p2002Error = Object.assign(new Error('Unique constraint violation'), { code: 'P2002' });
+      cartRepository.create.mockRejectedValueOnce(p2002Error);
+      cartRepository.findByConversationId.mockResolvedValueOnce(null);
+
+      await expect(service.getOrCreateCart(mockConversationId, mockCustomerId)).rejects.toThrow();
+    });
+
+    it('should re-throw non-P2002 errors', async () => {
+      cartRepository.findByConversationId.mockResolvedValueOnce(null);
+      const otherError = Object.assign(new Error('Database connection failed'), { code: 'P1001' });
+      cartRepository.create.mockRejectedValueOnce(otherError);
+
+      await expect(service.getOrCreateCart(mockConversationId, mockCustomerId)).rejects.toThrow(
+        'Database connection failed',
+      );
+    });
   });
 
   describe('addItem', () => {
@@ -221,6 +252,78 @@ describe('CartService', () => {
           unitPrice: mockVariant.price,
         }),
       );
+    });
+
+    it('should throw BadRequestException when adding more than stock considering items already in cart', async () => {
+      const existingCartItem = { ...mockCartItem, quantity: 3 };
+      const cartWithExistingItem = { ...mockCart, items: [existingCartItem] };
+      const lowStockVariant = { ...mockVariant, stock: 5 }; // Only 5 in stock
+      const productWithLowStock = { ...mockProduct, variants: [lowStockVariant] };
+
+      cartRepository.findByConversationId.mockResolvedValue(cartWithExistingItem);
+      productRepository.findById.mockResolvedValue(productWithLowStock);
+
+      // Trying to add 3 more, but already have 3 in cart. Total would be 6, stock is 5
+      await expect(
+        service.addItem({
+          conversationId: mockConversationId,
+          customerId: mockCustomerId,
+          productId: mockProductId,
+          variantId: mockVariantId,
+          quantity: 3,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should allow adding when total quantity (existing + new) does not exceed stock', async () => {
+      const existingCartItem = { ...mockCartItem, quantity: 2 };
+      const cartWithExistingItem = { ...mockCart, items: [existingCartItem] };
+      const updatedCart = {
+        ...mockCart,
+        items: [{ ...existingCartItem, quantity: 5 }],
+      };
+      const variantWithStock = { ...mockVariant, stock: 10 };
+      const productWithStock = { ...mockProduct, variants: [variantWithStock] };
+
+      cartRepository.findByConversationId.mockResolvedValue(cartWithExistingItem);
+      productRepository.findById.mockResolvedValue(productWithStock);
+      cartRepository.addItem.mockResolvedValue({ ...existingCartItem, quantity: 5 });
+      cartRepository.findById.mockResolvedValue(updatedCart);
+
+      // Adding 3 more, already have 2, total 5. Stock is 10, should succeed
+      const result = await service.addItem({
+        conversationId: mockConversationId,
+        customerId: mockCustomerId,
+        productId: mockProductId,
+        variantId: mockVariantId,
+        quantity: 3,
+      });
+
+      expect(result).toEqual(updatedCart);
+      expect(cartRepository.addItem).toHaveBeenCalled();
+    });
+
+    it('should handle null variant properly when checking existing items', async () => {
+      const itemWithoutVariant = { ...mockCartItem, productVariantId: null, quantity: 2 };
+      const cartWithItem = { ...mockCart, items: [itemWithoutVariant] };
+      const variantWithStock = { ...mockVariant, stock: 10 };
+      const productWithStock = { ...mockProduct, variants: [variantWithStock] };
+
+      cartRepository.findByConversationId.mockResolvedValue(cartWithItem);
+      productRepository.findById.mockResolvedValue(productWithStock);
+      cartRepository.addItem.mockResolvedValue(itemWithoutVariant);
+      cartRepository.findById.mockResolvedValue(cartWithItem);
+
+      // Adding to same product without specifying variant (should match existing null variant item)
+      await service.addItem({
+        conversationId: mockConversationId,
+        customerId: mockCustomerId,
+        productId: mockProductId,
+        // No variantId specified
+        quantity: 3,
+      });
+
+      expect(cartRepository.addItem).toHaveBeenCalled();
     });
   });
 

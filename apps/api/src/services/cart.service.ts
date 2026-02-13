@@ -44,6 +44,7 @@ export class CartService {
 
   /**
    * Get or create cart for a conversation
+   * Handles race condition where multiple requests try to create cart simultaneously
    */
   async getOrCreateCart(
     conversationId: string,
@@ -53,14 +54,27 @@ export class CartService {
 
     if (!cart) {
       this.logger.log(`Creating new cart for conversation ${conversationId}`);
-      const created = await this.cartRepository.create({
-        customer: { connect: { id: customerId } },
-        conversationId,
-      });
-      // Fetch with items
-      cart = await this.cartRepository.findById(created.id);
-      if (!cart) {
-        throw new Error('Failed to create cart');
+      try {
+        const created = await this.cartRepository.create({
+          customer: { connect: { id: customerId } },
+          conversationId,
+        });
+        // Fetch with items
+        cart = await this.cartRepository.findById(created.id);
+        if (!cart) {
+          throw new Error('Failed to create cart');
+        }
+      } catch (error) {
+        // Handle race condition: cart was created by concurrent request
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+          this.logger.log(`Cart already exists for conversation ${conversationId}, fetching it`);
+          cart = await this.cartRepository.findByConversationId(conversationId);
+          if (!cart) {
+            throw error; // Still not found, re-throw original error
+          }
+        } else {
+          throw error;
+        }
       }
     }
 
@@ -118,10 +132,18 @@ export class CartService {
       unitPrice = availableVariant.price;
     }
 
-    // Validate stock
-    if (availableStock < quantity) {
+    // M3: Validate stock considering items already in cart
+    const existingItem = cart.items.find(
+      (item) =>
+        item.productId === productId &&
+        (variantId ? item.productVariantId === variantId : !item.productVariantId),
+    );
+    const currentQuantityInCart = existingItem ? existingItem.quantity : 0;
+    const totalQuantity = currentQuantityInCart + quantity;
+
+    if (availableStock < totalQuantity) {
       throw new BadRequestException(
-        `Insufficient stock. Available: ${availableStock}, requested: ${quantity}`,
+        `Insufficient stock. Available: ${availableStock}, in cart: ${currentQuantityInCart}, requested: ${quantity}, total would be: ${totalQuantity}`,
       );
     }
 
@@ -187,6 +209,8 @@ export class CartService {
       availableStock = variant.stock;
     }
 
+    // M3: No need to check accumulated stock here since we're setting absolute quantity
+    // The new quantity IS the total that will be in cart
     if (availableStock < quantity) {
       throw new BadRequestException(
         `Insufficient stock. Available: ${availableStock}, requested: ${quantity}`,
