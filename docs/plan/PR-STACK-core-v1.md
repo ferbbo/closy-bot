@@ -27,29 +27,45 @@
 
 ## Stack
 
-### PR-01 — Inbound WhatsApp: normalización + dedupe persistido
-- **Objetivo:** recibir webhook inbound, normalizar mensaje y asegurar “exactly-once” lógico vía dedupe por `message_id`.
+### PR-01 — Inbound WhatsApp: normalización + dedupe persistido ✅ MERGED
+- **Objetivo:** recibir webhook inbound, normalizar mensaje y asegurar "exactly-once" lógico vía dedupe por `message_id`.
 - **Depende de:** bootstrap completado.
 - **Incluye:** endpoint webhook + validación básica + persistencia de inbound events + dedupe por constraint unique.
 - **Excluye:** NLP/LLM avanzado, catálogo/carrito.
 - **DoD específico:** test de webhook duplicado (mismo `message_id`) se procesa 1 vez.
 
-### PR-02 — Modelos base: merchant/customer/conversation + estado mínimo
+### PR-02 — Modelos base: merchant/customer/conversation + estado mínimo ✅ MERGED
 - **Objetivo:** resolver identidad por teléfono y mantener `conversation_id` con estado mínimo persistido.
 - **Depende de:** PR-01.
 - **Incluye:** tablas/modelos + repos + servicios; correlación por `conversation_id` en logs.
 - **Excluye:** flows de compra.
 
-### PR-03 — Catálogo: import CSV + búsqueda simple
+### PR-03 — Catálogo: import CSV + búsqueda simple ✅ MERGED
 - **Objetivo:** cargar catálogo por CSV y buscar productos por texto.
 - **Depende de:** PR-02.
 - **Incluye:** schema productos/variantes/stock/precio + import service + búsqueda.
 - **Excluye:** recomendaciones ML, integraciones Shopify/Woo.
 - **Notas:** precios/stock siempre desde backend (guardrails).
 
+### PR-03.5 — Outbound Sender + Orchestrator básico + Búsqueda catálogo conversacional 🔴 CRÍTICO
+- **Objetivo:** habilitar conversación end-to-end (recibir → entender → responder) y búsqueda de catálogo via chat.
+- **Depende de:** PR-03.
+- **Incluye:**
+  - WhatsApp Outbound Sender (enviar mensajes via Meta Cloud API)
+  - Orchestrator básico (inbound → identity → router → outbound)
+  - IntentRouter simple por keywords (SEARCH_PRODUCT, GREETING, HELP, UNKNOWN)
+  - Merchant resolver por número receptor
+  - Flujo de búsqueda catálogo con resultados paginados
+- **Excluye:** LLM/NLP avanzado, carrito, checkout, botones interactivos.
+- **DoD específico:** 
+  - Usuario envía "busco X" → bot responde con productos del catálogo
+  - Usuario envía "hola" → bot responde con saludo
+  - Test e2e: inbound → outbound response
+- **Issue:** #14 — **BLOCKER para todo el flujo de ventas**
+
 ### PR-04 — Carrito: CRUD conversacional persistido
 - **Objetivo:** crear carrito por customer/merchant, agregar/remover/actualizar qty, y mostrar resumen.
-- **Depende de:** PR-03.
+- **Depende de:** PR-03.5.
 - **Incluye:** modelos cart/cart_item + reglas básicas + endpoints/handlers internos.
 - **Excluye:** checkout.
 
