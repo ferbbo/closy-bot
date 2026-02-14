@@ -4,6 +4,7 @@ import { IntentRouterService, IntentType } from './intent/intent-router.service'
 import { CustomerService } from '../services/customer.service';
 import { ConversationService } from '../services/conversation.service';
 import { MerchantResolverService } from '../services/merchant-resolver.service';
+import type { MerchantPlaybookData } from '../services/playbook.service';
 import { SearchCatalogFlow } from './flows/search-catalog.flow';
 import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
@@ -99,18 +100,16 @@ export class ConversationOrchestrator {
     // If LLM is enabled, use it for all intents (except explicit flows like search)
     if (this.llmEnabled) {
       this.logger.debug('Using LLM for response generation');
-      response = await this.llmService.generateConversationalResponse(
-        {
-          userMessage: input.text,
-          merchantId: merchant.id,
-          conversationContext: {
-            conversationId: conversation.id,
-            merchantName: merchant.name,
-            industry: merchant.industry ?? undefined,
-          },
+      response = await this.llmService.generateConversationalResponse({
+        userMessage: input.text,
+        merchantId: merchant.id,
+        merchant: merchantPlaybookData,
+        conversationContext: {
+          conversationId: conversation.id,
+          merchantName: merchant.name,
+          industry: merchant.industry ?? undefined,
         },
-        merchantPlaybookData,
-      );
+      });
     } else {
       // Fallback to templated flow handlers
       switch (intentResult.intent) {
