@@ -13,6 +13,10 @@ export class InboundMessageDto {
   @IsNotEmpty()
   from: string;
 
+  @IsString()
+  @IsOptional()
+  receiver_phone_id?: string; // WhatsApp phone number ID (for merchant resolution)
+
   @IsDateString()
   timestamp: string;
 

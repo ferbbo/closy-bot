@@ -6,6 +6,7 @@ import { ServicesModule } from './services/services.module';
 import { PersistenceModule } from './persistence/persistence.module';
 import { OrchestratorModule } from './orchestrator/orchestrator.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { LlmModule } from './llm/llm.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     ChannelsModule,
     DomainModule,
     ServicesModule,
+    LlmModule,
     OrchestratorModule,
     AnalyticsModule,
   ],

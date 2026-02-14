@@ -3,6 +3,8 @@ import { CustomerService } from './customer.service';
 import { ConversationService } from './conversation.service';
 import { CatalogService } from './catalog.service';
 import { ImportService } from './import.service';
+import { MerchantResolverService } from './merchant-resolver.service';
+import { PersistenceModule } from '../persistence/persistence.module';
 
 /**
  * Services Module
@@ -14,6 +16,7 @@ import { ImportService } from './import.service';
  * - ConversationService: chat session management
  * - CatalogService: product search and retrieval
  * - ImportService: CSV product import with validation
+ * - MerchantResolverService: merchant resolution by WhatsApp phone
  *
  * Future responsibilities:
  * - Payment service (payment gateway integration)
@@ -21,7 +24,20 @@ import { ImportService } from './import.service';
  * - Knowledge base service (RAG for FAQs)
  */
 @Module({
-  providers: [CustomerService, ConversationService, CatalogService, ImportService],
-  exports: [CustomerService, ConversationService, CatalogService, ImportService],
+  imports: [PersistenceModule],
+  providers: [
+    CustomerService,
+    ConversationService,
+    CatalogService,
+    ImportService,
+    MerchantResolverService,
+  ],
+  exports: [
+    CustomerService,
+    ConversationService,
+    CatalogService,
+    ImportService,
+    MerchantResolverService,
+  ],
 })
 export class ServicesModule {}

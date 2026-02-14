@@ -63,9 +63,28 @@
   - Test e2e: inbound → outbound response
 - **Issue:** #14 — **BLOCKER para todo el flujo de ventas**
 
+### PR-03.6 — LLM Adapter: Groq + System Prompt conversacional 🟡 ENHANCEMENT
+- **Objetivo:** integrar LLM con arquitectura adapter para respuestas naturales con tono vendedor/persuasivo.
+- **Depende de:** PR-03.5.
+- **Incluye:**
+  - Módulo `llm/` con interface `LlmProvider` abstracta
+  - `GroqLlmProvider` como implementación inicial (económico para MVP)
+  - System prompt composable: base + playbook + merchant + context
+  - Guardrails anti-hacking y anti-injection
+  - Feature flag `LLM_ENABLED` para toggle
+  - Fallback a respuestas templated si LLM falla
+  - Stubs de prompts por industria (prepara PR-11)
+- **Excluye:** RAG/vector DB, tool calling complejo, multi-provider routing.
+- **DoD específico:**
+  - Bot responde con lenguaje natural usando Groq
+  - System prompt impide manipulación (prompt injection básico)
+  - Fallback funcional si LLM falla
+  - Provider intercambiable sin cambiar orchestrator
+- **Issue:** #16
+
 ### PR-04 — Carrito: CRUD conversacional persistido
 - **Objetivo:** crear carrito por customer/merchant, agregar/remover/actualizar qty, y mostrar resumen.
-- **Depende de:** PR-03.5.
+- **Depende de:** PR-03.5 (PR-03.6 opcional pero recomendado).
 - **Incluye:** modelos cart/cart_item + reglas básicas + endpoints/handlers internos.
 - **Excluye:** checkout.
 
@@ -108,8 +127,8 @@
 
 ### PR-11 — Playbooks: ropa/belleza/minimarket (defaults)
 - **Objetivo:** configurar defaults por industria (preguntas mínimas, mensajes base, reglas).
-- **Depende de:** PR-02 (merchant) y PR-04/05 (flows).
-- **Incluye:** seed/config por playbook + selección por merchant.
+- **Depende de:** PR-02 (merchant), PR-03.6 (LLM prompts) y PR-04/05 (flows).
+- **Incluye:** seed/config por playbook + selección por merchant + composición de prompts LLM.
 - **Excluye:** editor visual avanzado.
 
 ---

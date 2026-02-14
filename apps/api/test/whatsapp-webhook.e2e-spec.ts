@@ -270,7 +270,8 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
         .send(payloadWithExtra)
         .expect(400)
         .expect((res) => {
-          expect(res.body.message).toContain('property');
+          const messages = Array.isArray(res.body.message) ? res.body.message : [res.body.message];
+          expect(messages.some((msg: string) => msg.includes('property'))).toBe(true);
         });
     });
 
@@ -305,6 +306,177 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
         where: { messageId: racePayload.message_id },
       });
 
+      expect(messages).toHaveLength(1);
+    });
+  });
+
+  describe('Conversation Flow (e2e)', () => {
+    // Need to seed merchant and products for these tests
+    beforeAll(async () => {
+      // Ensure merchant exists
+      await prisma.merchant.upsert({
+        where: { apiKey: 'sk_test_dev_merchant_001' },
+        update: {},
+        create: {
+          name: 'Dev Test Store',
+          whatsappNumber: '+573001111111',
+          apiKey: 'sk_test_dev_merchant_001',
+        },
+      });
+    });
+
+    it('should respond to greeting message', async () => {
+      const greetingPayload = {
+        message_id: 'test-greeting-001',
+        from: '+573001234567',
+        timestamp: '2026-02-13T10:00:00Z',
+        text: 'hola',
+      };
+
+      const response = await request(app.getHttpServer())
+        .post('/webhooks/whatsapp/inbound')
+        .send(greetingPayload)
+        .expect(200);
+
+      expect(response.body.processed).toBe(true);
+
+      // Verify conversation and customer were created
+      const customer = await prisma.customer.findUnique({
+        where: { phone: greetingPayload.from },
+      });
+      expect(customer).toBeDefined();
+
+      const conversation = await prisma.conversation.findFirst({
+        where: {
+          customerId: customer!.id,
+          channel: 'whatsapp',
+        },
+      });
+      expect(conversation).toBeDefined();
+    });
+
+    it('should respond to help request', async () => {
+      const helpPayload = {
+        message_id: 'test-help-001',
+        from: '+573002222222',
+        timestamp: '2026-02-13T10:05:00Z',
+        text: 'ayuda',
+      };
+
+      const response = await request(app.getHttpServer())
+        .post('/webhooks/whatsapp/inbound')
+        .send(helpPayload)
+        .expect(200);
+
+      expect(response.body.processed).toBe(true);
+    });
+
+    it('should search products and return results', async () => {
+      const searchPayload = {
+        message_id: 'test-search-001',
+        from: '+573003333333',
+        timestamp: '2026-02-13T10:10:00Z',
+        text: 'busco camisa',
+      };
+
+      const response = await request(app.getHttpServer())
+        .post('/webhooks/whatsapp/inbound')
+        .send(searchPayload)
+        .expect(200);
+
+      expect(response.body.processed).toBe(true);
+    });
+
+    it('should handle different customer in same conversation flow', async () => {
+      const customer1Phone = '+573004444444';
+      const customer2Phone = '+573005555555';
+
+      // Customer 1 sends greeting
+      await request(app.getHttpServer())
+        .post('/webhooks/whatsapp/inbound')
+        .send({
+          message_id: 'test-multi-user-1',
+          from: customer1Phone,
+          timestamp: '2026-02-13T10:15:00Z',
+          text: 'hola',
+        })
+        .expect(200);
+
+      // Customer 2 sends different message
+      await request(app.getHttpServer())
+        .post('/webhooks/whatsapp/inbound')
+        .send({
+          message_id: 'test-multi-user-2',
+          from: customer2Phone,
+          timestamp: '2026-02-13T10:16:00Z',
+          text: 'busco pantalón',
+        })
+        .expect(200);
+
+      // Verify separate conversations
+      const customer1 = await prisma.customer.findUnique({
+        where: { phone: customer1Phone },
+      });
+      const customer2 = await prisma.customer.findUnique({
+        where: { phone: customer2Phone },
+      });
+
+      const conv1 = await prisma.conversation.findFirst({
+        where: { customerId: customer1!.id },
+      });
+      const conv2 = await prisma.conversation.findFirst({
+        where: { customerId: customer2!.id },
+      });
+
+      expect(conv1!.id).not.toBe(conv2!.id);
+    });
+
+    it('should handle unknown intent with fallback search', async () => {
+      const unknownPayload = {
+        message_id: 'test-unknown-001',
+        from: '+573006666666',
+        timestamp: '2026-02-13T10:20:00Z',
+        text: 'asdfghjkl random text',
+      };
+
+      const response = await request(app.getHttpServer())
+        .post('/webhooks/whatsapp/inbound')
+        .send(unknownPayload)
+        .expect(200);
+
+      expect(response.body.processed).toBe(true);
+    });
+
+    it('should not send duplicate responses for duplicate messages', async () => {
+      const dupePayload = {
+        message_id: 'test-dupe-response-001',
+        from: '+573007777777',
+        timestamp: '2026-02-13T10:25:00Z',
+        text: 'hola',
+      };
+
+      // First message - should process and respond
+      const response1 = await request(app.getHttpServer())
+        .post('/webhooks/whatsapp/inbound')
+        .send(dupePayload)
+        .expect(200);
+
+      expect(response1.body.processed).toBe(true);
+      expect(response1.body.duplicate).toBeUndefined();
+
+      // Duplicate message - should not reprocess
+      const response2 = await request(app.getHttpServer())
+        .post('/webhooks/whatsapp/inbound')
+        .send(dupePayload)
+        .expect(200);
+
+      expect(response2.body.processed).toBe(false);
+      expect(response2.body.duplicate).toBe(true);
+
+      // Verify only one inbound message record
+      const messages = await prisma.inboundMessage.findMany({
+        where: { messageId: dupePayload.message_id },
+      });
       expect(messages).toHaveLength(1);
     });
   });
