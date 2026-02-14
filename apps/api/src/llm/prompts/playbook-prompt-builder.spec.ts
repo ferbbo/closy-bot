@@ -21,7 +21,8 @@ describe('PlaybookPromptBuilder', () => {
 
       expect(result).toContain('CONTEXTO DE INDUSTRIA');
       expect(result).toContain('Ropa y Moda');
-      expect(result).toContain('Tallas');
+      expect(result).toContain('talla');
+      expect(result).toContain('color');
     });
 
     it('should include belleza industry playbook', () => {
@@ -42,7 +43,8 @@ describe('PlaybookPromptBuilder', () => {
       });
 
       expect(result).toContain('Minimarket');
-      expect(result).toContain('Disponibilidad inmediata');
+      expect(result).toContain('sustituciones');
+      expect(result).toContain('urgencia');
     });
 
     it('should include merchant context section', () => {

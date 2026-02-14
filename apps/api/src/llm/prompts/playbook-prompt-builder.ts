@@ -16,17 +16,22 @@ export interface SystemPromptParams {
   merchantName: string;
   industry?: 'ropa' | 'belleza' | 'minimarket';
   context?: LlmContext;
+  playbookPrompt?: string; // PR-11: Injected playbook prompt from PlaybookService
 }
 
 export class PlaybookPromptBuilder {
   /**
    * Build complete system prompt with all layers
+   * PR-11: Now supports injected playbook prompt
    */
   static build(params: SystemPromptParams): string {
     const parts: string[] = [BASE_SYSTEM_PROMPT];
 
-    // Add industry-specific playbook (stub for MVP)
-    if (params.industry) {
+    // Add industry-specific playbook
+    // PR-11: Use injected playbook prompt if available, otherwise use stub
+    if (params.playbookPrompt) {
+      parts.push('\n---\n## CONTEXTO DE INDUSTRIA\n\n' + params.playbookPrompt);
+    } else if (params.industry) {
       const playbookPrompt = this.getIndustryPlaybook(params.industry);
       if (playbookPrompt) {
         parts.push('\n---\n## CONTEXTO DE INDUSTRIA\n\n' + playbookPrompt);

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { LlmService } from './llm.service';
 import { GroqLlmProvider } from './providers/groq-llm.provider';
 import { LlmProviderError } from './interfaces/llm-provider.interface';
+import { PlaybookService } from '../services/playbook.service';
 
 describe('LlmService', () => {
   let service: LlmService;
@@ -17,6 +18,7 @@ describe('LlmService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           LlmService,
+          PlaybookService,
           {
             provide: ConfigService,
             useValue: {
@@ -184,6 +186,7 @@ describe('LlmService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           LlmService,
+          PlaybookService,
           {
             provide: ConfigService,
             useValue: {
@@ -250,6 +253,7 @@ describe('LlmService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           LlmService,
+          PlaybookService,
           {
             provide: ConfigService,
             useValue: {
@@ -283,7 +287,8 @@ describe('LlmService', () => {
       });
 
       expect(result).toContain('Ropa y Moda');
-      expect(result).toContain('Tallas');
+      expect(result).toContain('talla');
+      expect(result).toContain('estilo');
     });
 
     it('should include belleza industry prompt', () => {

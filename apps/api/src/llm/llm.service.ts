@@ -4,12 +4,13 @@ import { LlmProvider, LlmContext } from './interfaces/llm-provider.interface';
 import { GroqLlmProvider } from './providers/groq-llm.provider';
 import { PlaybookPromptBuilder, SystemPromptParams } from './prompts/playbook-prompt-builder';
 import { containsSuspiciousPatterns } from './prompts/base-system-prompt';
+import { PlaybookService, MerchantPlaybookData } from '../services/playbook.service';
 
 /**
  * LLM Service - Facade for LLM operations
  * Handles:
  * - LLM provider selection and initialization
- * - System prompt composition
+ * - System prompt composition (with playbook integration - PR-11)
  * - Fallback to templated responses
  * - Guardrails and validation
  */
@@ -40,6 +41,7 @@ export class LlmService {
   constructor(
     private readonly configService: ConfigService,
     private readonly groqProvider: GroqLlmProvider,
+    private readonly playbookService: PlaybookService,
   ) {
     this.llmEnabled = this.configService.get<boolean>('LLM_ENABLED', false);
 
@@ -54,6 +56,7 @@ export class LlmService {
 
   /**
    * Generate conversational response using LLM or fallback
+   * PR-11: Now uses PlaybookService for prompt composition
    *
    * @param params - Request parameters
    * @returns Generated response text
@@ -61,6 +64,7 @@ export class LlmService {
   async generateConversationalResponse(params: {
     userMessage: string;
     merchantId: string;
+    merchant?: MerchantPlaybookData;
     conversationContext?: ConversationContext;
   }): Promise<string> {
     // If LLM is disabled, use fallback immediately
@@ -69,10 +73,11 @@ export class LlmService {
     }
 
     try {
-      // Build system prompt
-      const systemPrompt = this.buildSystemPrompt({
+      // Build system prompt with playbook integration
+      const systemPrompt = this.buildSystemPromptWithPlaybook({
         merchantName: params.conversationContext?.merchantName || 'Tu tienda',
         industry: params.conversationContext?.industry,
+        merchant: params.merchant,
         context: this.buildLlmContext(params.conversationContext),
       });
 
@@ -104,6 +109,34 @@ export class LlmService {
       );
       return this.getFallbackResponse(params.userMessage);
     }
+  }
+
+  /**
+   * Build system prompt with playbook integration (PR-11)
+   */
+  private buildSystemPromptWithPlaybook(params: {
+    merchantName: string;
+    industry?: 'ropa' | 'belleza' | 'minimarket';
+    merchant?: MerchantPlaybookData;
+    context?: LlmContext;
+  }): string {
+    // If we have full merchant data, use PlaybookService
+    if (params.merchant) {
+      const playbookPrompt = this.playbookService.getLlmPromptForMerchant(params.merchant);
+      return PlaybookPromptBuilder.build({
+        merchantName: params.merchantName,
+        industry: params.industry,
+        context: params.context,
+        playbookPrompt, // Inject playbook prompt
+      });
+    }
+
+    // Fallback to simple composition
+    return PlaybookPromptBuilder.build({
+      merchantName: params.merchantName,
+      industry: params.industry,
+      context: params.context,
+    });
   }
 
   /**
