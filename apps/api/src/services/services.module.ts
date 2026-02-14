@@ -4,6 +4,7 @@ import { ConversationService } from './conversation.service';
 import { CatalogService } from './catalog.service';
 import { ImportService } from './import.service';
 import { MerchantResolverService } from './merchant-resolver.service';
+import { PlaybookService } from './playbook.service';
 import { PersistenceModule } from '../persistence/persistence.module';
 
 /**
@@ -31,6 +32,7 @@ import { PersistenceModule } from '../persistence/persistence.module';
     CatalogService,
     ImportService,
     MerchantResolverService,
+    PlaybookService,
   ],
   exports: [
     CustomerService,
@@ -38,6 +40,7 @@ import { PersistenceModule } from '../persistence/persistence.module';
     CatalogService,
     ImportService,
     MerchantResolverService,
+    PlaybookService,
   ],
 })
 export class ServicesModule {}

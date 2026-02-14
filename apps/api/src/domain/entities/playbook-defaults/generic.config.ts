@@ -5,8 +5,8 @@
 
 import { PlaybookConfig } from '../playbook-config.interface';
 
-export const GenericPlaybookDefaults: PlaybookConfig = {
-  industry: 'ropa', // Placeholder, will be overridden
+export const GenericPlaybookDefaults: Omit<PlaybookConfig, 'industry'> & { industry?: string } = {
+  industry: undefined,
   llmPrompt: {
     tone: 'Amigable y profesional. Usa emojis con moderación',
     focusAreas: ['producto', 'cantidad', 'disponibilidad'],

@@ -6,7 +6,6 @@ import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
 import { ServicesModule } from '../services/services.module';
 import { LlmModule } from '../llm/llm.module';
-import { PlaybookService } from '../services/playbook.service';
 
 /**
  * Orchestrator Module
@@ -20,7 +19,7 @@ import { PlaybookService } from '../services/playbook.service';
  * - Conversation orchestration
  * - LLM-powered responses (when enabled)
  *
- * PR-11: Added PlaybookService for industry-specific behavior
+ * PR-11: Removed PlaybookService (now imported via ServicesModule in P2 fix)
  */
 @Module({
   imports: [ServicesModule, LlmModule],
@@ -30,7 +29,6 @@ import { PlaybookService } from '../services/playbook.service';
     SearchCatalogFlow,
     GreetingFlow,
     HelpFlow,
-    PlaybookService,
   ],
   exports: [ConversationOrchestrator],
 })

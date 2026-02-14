@@ -26,6 +26,8 @@ describe('ConversationOrchestrator', () => {
     name: 'Test Store',
     whatsappNumber: '+573001111111',
     apiKey: 'test-key',
+    industry: null,
+    playbookConfig: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -152,7 +154,12 @@ describe('ConversationOrchestrator', () => {
       expect(result.shouldSend).toBe(true);
       expect(result.conversationId).toBe('conv-1');
       expect(result.response).toBeDefined();
-      expect(greetingFlow.handle).toHaveBeenCalledWith('Test Customer');
+      expect(greetingFlow.handle).toHaveBeenCalledWith('Test Customer', {
+        id: 'merchant-1',
+        name: 'Test Store',
+        industry: undefined,
+        playbookConfig: null,
+      });
     });
 
     it('should process help message', async () => {
@@ -240,7 +247,12 @@ describe('ConversationOrchestrator', () => {
       });
 
       expect(result.response).toBeDefined();
-      expect(greetingFlow.handle).toHaveBeenCalledWith(undefined);
+      expect(greetingFlow.handle).toHaveBeenCalledWith(undefined, {
+        id: 'merchant-1',
+        name: 'Test Store',
+        industry: undefined,
+        playbookConfig: null,
+      });
     });
 
     it('should use full text as query when no query extracted', async () => {
