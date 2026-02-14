@@ -1,0 +1,305 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { SearchCatalogFlow } from './search-catalog.flow';
+import { CatalogService } from '../../services/catalog.service';
+import { ProductWithVariants } from '../../persistence/repositories/product.repository';
+
+describe('SearchCatalogFlow', () => {
+  let flow: SearchCatalogFlow;
+  let catalogService: jest.Mocked<CatalogService>;
+
+  beforeEach(async () => {
+    const mockCatalogService = {
+      searchProducts: jest.fn(),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SearchCatalogFlow,
+        {
+          provide: CatalogService,
+          useValue: mockCatalogService,
+        },
+      ],
+    }).compile();
+
+    flow = module.get<SearchCatalogFlow>(SearchCatalogFlow);
+    catalogService = module.get(CatalogService);
+  });
+
+  it('should be defined', () => {
+    expect(flow).toBeDefined();
+  });
+
+  describe('handle()', () => {
+    const merchantId = 'merchant-123';
+
+    it('should return no results message when no products found', async () => {
+      catalogService.searchProducts.mockResolvedValue([]);
+
+      const result = await flow.handle(merchantId, 'nonexistent product');
+
+      expect(result).toContain('No encontré productos');
+      expect(result).toContain('nonexistent product');
+    });
+
+    it('should format single product with stock', async () => {
+      const products: ProductWithVariants[] = [
+        {
+          id: 'prod-1',
+          merchantId,
+          name: 'Zapatillas Running',
+          description: 'Zapatillas deportivas cómodas',
+          variants: [
+            {
+              id: 'var-1',
+              productId: 'prod-1',
+              name: 'Talla 42',
+              sku: 'ZAP-RUN-42',
+              price: 50000,
+              stock: 10,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          ],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+
+      catalogService.searchProducts.mockResolvedValue(products);
+
+      const result = await flow.handle(merchantId, 'zapatillas');
+
+      expect(result).toContain('Resultados para "zapatillas"');
+      expect(result).toContain('Zapatillas Running');
+      expect(result).toContain('$50000.00');
+      expect(result).toContain('Stock: 10 unidades');
+    });
+
+    it('should format multiple products with price ranges', async () => {
+      const products: ProductWithVariants[] = [
+        {
+          id: 'prod-1',
+          merchantId,
+          name: 'Camisa Azul',
+          description: 'Camisa casual',
+          variants: [
+            {
+              id: 'var-1',
+              productId: 'prod-1',
+              name: 'M',
+              sku: 'CAM-AZ-M',
+              price: 30000,
+              stock: 5,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+            {
+              id: 'var-2',
+              productId: 'prod-1',
+              name: 'L',
+              sku: 'CAM-AZ-L',
+              price: 35000,
+              stock: 3,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          ],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'prod-2',
+          merchantId,
+          name: 'Camisa Roja',
+          description: 'Camisa elegante',
+          variants: [
+            {
+              id: 'var-3',
+              productId: 'prod-2',
+              name: 'M',
+              sku: 'CAM-RO-M',
+              price: 40000,
+              stock: 2,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          ],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+
+      catalogService.searchProducts.mockResolvedValue(products);
+
+      const result = await flow.handle(merchantId, 'camisa');
+
+      expect(result).toContain('Camisa Azul');
+      expect(result).toContain('Camisa Roja');
+      expect(result).toContain('$30000.00 - $35000.00'); // Price range for first product
+      expect(result).toContain('$40000.00'); // Single price for second product
+    });
+
+    it('should skip products with zero stock in all variants', async () => {
+      const products: ProductWithVariants[] = [
+        {
+          id: 'prod-1',
+          merchantId,
+          name: 'Product With Stock',
+          description: 'Available product',
+          variants: [
+            {
+              id: 'var-1',
+              productId: 'prod-1',
+              name: 'Variant 1',
+              sku: 'PROD-1-V1',
+              price: 20000,
+              stock: 5,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          ],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'prod-2',
+          merchantId,
+          name: 'Product Without Stock',
+          description: 'Out of stock product',
+          variants: [
+            {
+              id: 'var-2',
+              productId: 'prod-2',
+              name: 'Variant 1',
+              sku: 'PROD-2-V1',
+              price: 30000,
+              stock: 0,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+            {
+              id: 'var-3',
+              productId: 'prod-2',
+              name: 'Variant 2',
+              sku: 'PROD-2-V2',
+              price: 35000,
+              stock: 0,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          ],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+
+      catalogService.searchProducts.mockResolvedValue(products);
+
+      const result = await flow.handle(merchantId, 'product');
+
+      // Should include product with stock
+      expect(result).toContain('Product With Stock');
+      // Should NOT include product without stock
+      expect(result).not.toContain('Product Without Stock');
+    });
+
+    it('should return no results when all products have zero stock', async () => {
+      const products: ProductWithVariants[] = [
+        {
+          id: 'prod-1',
+          merchantId,
+          name: 'Out of Stock Product',
+          description: 'No stock',
+          variants: [
+            {
+              id: 'var-1',
+              productId: 'prod-1',
+              name: 'Variant 1',
+              sku: 'PROD-1-V1',
+              price: 20000,
+              stock: 0,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          ],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+
+      catalogService.searchProducts.mockResolvedValue(products);
+
+      const result = await flow.handle(merchantId, 'product');
+
+      expect(result).toContain('No encontré productos');
+      expect(result).not.toContain('Out of Stock Product');
+    });
+
+    it('should limit results to max 5 products as requested from catalog service', async () => {
+      // Create 7 products
+      const products: ProductWithVariants[] = Array.from({ length: 7 }, (_, i) => ({
+        id: `prod-${i}`,
+        merchantId,
+        name: `Product ${i}`,
+        description: `Description ${i}`,
+        variants: [
+          {
+            id: `var-${i}`,
+            productId: `prod-${i}`,
+            name: 'Default',
+            sku: `SKU-${i}`,
+            price: 10000 + i * 1000,
+            stock: 5,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+
+      catalogService.searchProducts.mockResolvedValue(products);
+
+      await flow.handle(merchantId, 'product');
+
+      // Verify catalog service was called with limit 5
+      expect(catalogService.searchProducts).toHaveBeenCalledWith(merchantId, 'product', 5);
+    });
+
+    it('should truncate long descriptions to 60 characters', async () => {
+      const longDescription =
+        'This is a very long product description that should be truncated to 60 characters maximum for WhatsApp readability';
+      const products: ProductWithVariants[] = [
+        {
+          id: 'prod-1',
+          merchantId,
+          name: 'Product',
+          description: longDescription,
+          variants: [
+            {
+              id: 'var-1',
+              productId: 'prod-1',
+              name: 'Default',
+              sku: 'PROD-1',
+              price: 20000,
+              stock: 5,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          ],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+
+      catalogService.searchProducts.mockResolvedValue(products);
+
+      const result = await flow.handle(merchantId, 'product');
+
+      expect(result).toContain('...');
+      expect(result).toContain(longDescription.substring(0, 60));
+      expect(result).not.toContain(longDescription);
+    });
+  });
+});
