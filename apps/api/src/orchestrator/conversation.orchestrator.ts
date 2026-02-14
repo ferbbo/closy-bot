@@ -4,6 +4,7 @@ import { IntentRouterService, IntentType } from './intent/intent-router.service'
 import { CustomerService } from '../services/customer.service';
 import { ConversationService } from '../services/conversation.service';
 import { MerchantResolverService } from '../services/merchant-resolver.service';
+import type { MerchantPlaybookData } from '../services/playbook.service';
 import { SearchCatalogFlow } from './flows/search-catalog.flow';
 import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
@@ -88,24 +89,35 @@ export class ConversationOrchestrator {
     // 5. Execute flow handler
     let response: string;
 
+    // PR-11: Build merchant playbook data for downstream components
+    const merchantPlaybookData: MerchantPlaybookData = {
+      id: merchant.id,
+      name: merchant.name,
+      industry: merchant.industry ?? undefined,
+      playbookConfig: merchant.playbookConfig,
+    };
+
     // If LLM is enabled, use it for all intents (except explicit flows like search)
     if (this.llmEnabled) {
       this.logger.debug('Using LLM for response generation');
       response = await this.llmService.generateConversationalResponse({
         userMessage: input.text,
         merchantId: merchant.id,
+        merchant: merchantPlaybookData,
         conversationContext: {
           conversationId: conversation.id,
           merchantName: merchant.name,
-          // TODO: PR-11 - add industry from merchant profile
-          industry: undefined,
+          industry: merchant.industry ?? undefined,
         },
       });
     } else {
       // Fallback to templated flow handlers
       switch (intentResult.intent) {
         case 'GREETING':
-          response = await this.greetingFlow.handle(customer.name ?? undefined);
+          response = await this.greetingFlow.handle(
+            customer.name ?? undefined,
+            merchantPlaybookData,
+          );
           break;
 
         case 'HELP':

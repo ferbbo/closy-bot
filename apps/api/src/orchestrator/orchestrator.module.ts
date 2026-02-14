@@ -18,6 +18,8 @@ import { LlmModule } from '../llm/llm.module';
  * - Merchant and customer resolution
  * - Conversation orchestration
  * - LLM-powered responses (when enabled)
+ *
+ * PR-11: Removed PlaybookService (now imported via ServicesModule in P2 fix)
  */
 @Module({
   imports: [ServicesModule, LlmModule],

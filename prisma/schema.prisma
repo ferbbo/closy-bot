@@ -50,18 +50,27 @@ model InboundMessage {
 
 /// Merchant represents a business using the platform
 model Merchant {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   name           String
-  whatsappNumber String   @map("whatsapp_number")
-  apiKey         String   @unique @map("api_key")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  whatsappNumber String    @map("whatsapp_number")
+  apiKey         String    @unique @map("api_key")
+  industry       Industry? // PR-11: Playbook industry
+  playbookConfig Json?     @map("playbook_config") // PR-11: Custom playbook overrides
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   conversations Conversation[]
   categories    Category[]
   products      Product[]
 
   @@map("merchants")
+}
+
+/// Industry enum for playbook selection (PR-11)
+enum Industry {
+  ropa
+  belleza
+  minimarket
 }
 
 /// Customer represents an end-user (identity resolved by phone)
