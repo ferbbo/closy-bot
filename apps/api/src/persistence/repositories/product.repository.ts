@@ -119,12 +119,39 @@ export class ProductRepository {
   }
 
   /**
+   * Find product by ID and merchantId (multi-tenant isolation)
+   * Returns null if not found or belongs to different merchant
+   */
+  async findByIdAndMerchant(id: string, merchantId: string): Promise<ProductWithVariants | null> {
+    return this.prisma.product.findFirst({
+      where: {
+        id,
+        merchantId,
+      },
+      include: { variants: true },
+    });
+  }
+
+  /**
    * Update product
    */
   async update(id: string, data: Prisma.ProductUpdateInput): Promise<ProductWithVariants> {
     return this.prisma.product.update({
       where: { id },
       data,
+      include: { variants: true },
+    });
+  }
+
+  /**
+   * Soft delete product (set isActive to false)
+   * @param id - Product ID
+   * @returns Updated product
+   */
+  async softDelete(id: string): Promise<ProductWithVariants> {
+    return this.prisma.product.update({
+      where: { id },
+      data: { isActive: false },
       include: { variants: true },
     });
   }
