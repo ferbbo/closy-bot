@@ -4,7 +4,9 @@ import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true, // Required for webhook signature validation (Meta WhatsApp)
+  });
   const logger = new Logger('Bootstrap');
 
   // Get config service
