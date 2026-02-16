@@ -7,6 +7,7 @@ import { PersistenceModule } from './persistence/persistence.module';
 import { OrchestratorModule } from './orchestrator/orchestrator.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { LlmModule } from './llm/llm.module';
+import { CatalogManagementModule } from './catalog-management/catalog-management.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { LlmModule } from './llm/llm.module';
     LlmModule,
     OrchestratorModule,
     AnalyticsModule,
+    CatalogManagementModule,
   ],
 })
 export class AppModule {}
