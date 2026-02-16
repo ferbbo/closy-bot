@@ -4,7 +4,6 @@ import request from 'supertest';
 import * as crypto from 'crypto';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/persistence/prisma/prisma.service';
-import { ConfigService } from '@nestjs/config';
 
 /**
  * E2E tests for Meta WhatsApp Cloud API webhook compliance
@@ -19,7 +18,6 @@ import { ConfigService } from '@nestjs/config';
 describe('Meta WhatsApp Webhook Compliance (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  let configService: ConfigService;
   let appSecret: string;
   let verifyToken: string;
 
@@ -48,7 +46,6 @@ describe('Meta WhatsApp Webhook Compliance (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
-    configService = app.get(ConfigService);
 
     // Get config values from environment
     appSecret = process.env.WHATSAPP_APP_SECRET!;

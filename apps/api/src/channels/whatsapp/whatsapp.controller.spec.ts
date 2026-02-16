@@ -43,7 +43,7 @@ describe('WhatsAppController', () => {
     };
 
     const mockConfigService = {
-      get: jest.fn((key: string, defaultValue?: any) => {
+      get: jest.fn((key: string, defaultValue?: unknown) => {
         if (key === 'WHATSAPP_WEBHOOK_VERIFY_TOKEN') return 'test-token';
         if (key === 'WHATSAPP_APP_SECRET') return 'test-secret';
         return defaultValue;

@@ -82,6 +82,58 @@ curl http://localhost:3000/health/db
 # Expected: {"status":"ok","timestamp":"...","latency":10}
 ```
 
+## 🔗 Meta WhatsApp Webhook Setup
+
+To receive WhatsApp messages, you need to configure the Meta webhook:
+
+### 1. Configure environment variables
+
+Add these to your `.env`:
+
+```bash
+# Webhook verification token (you choose this)
+WHATSAPP_WEBHOOK_VERIFY_TOKEN="your-custom-verify-token-here"
+
+# App Secret from Meta Dashboard
+WHATSAPP_APP_SECRET="your-app-secret-from-meta-dashboard"
+```
+
+### 2. Expose your local server (for development)
+
+Use **ngrok** or similar:
+
+```bash
+ngrok http 3000
+# Copy the HTTPS URL (e.g., https://abc123.ngrok.io)
+```
+
+### 3. Configure webhook in Meta Dashboard
+
+1. Go to https://developers.facebook.com/apps/
+2. Select your app > **WhatsApp** > **Configuration**
+3. Click **Edit** on Webhook
+4. Enter:
+   - **Callback URL**: `https://your-domain.com/webhooks/whatsapp`
+   - **Verify Token**: Same value as `WHATSAPP_WEBHOOK_VERIFY_TOKEN`
+5. Click **Verify and Save**
+6. Subscribe to **messages** field
+
+### 4. Test webhook
+
+Send a message to your WhatsApp test number. You should see logs in your terminal:
+
+```
+[WhatsAppController] Meta webhook received: object=whatsapp_business_account
+[WhatsAppController] Processing message: id=wamid.xxx, from=+57300****567
+```
+
+### Security Notes
+
+- **App Secret** is required for production - validates webhook signatures
+- Without `WHATSAPP_APP_SECRET`, a warning is logged but requests are allowed (dev only)
+- Always use HTTPS for webhook URL in production
+- Keep your verify token and app secret confidential
+
 ## 🛠️ Available Scripts
 
 | Command | Description |
