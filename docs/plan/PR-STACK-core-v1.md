@@ -82,6 +82,51 @@
   - Provider intercambiable sin cambiar orchestrator
 - **Issue:** #16
 
+<<<<<<< Updated upstream
+=======
+### PR-03.7 — Catalog Management API: Import masivo + CRUD productos 🔴 CRÍTICO
+- **Objetivo:** exponer endpoints HTTP para (a) carga masiva de catálogo por CSV y (b) CRUD básico de productos/variantes, con multi-tenancy por `merchant`.
+- **Depende de:** PR-03.
+- **Incluye:**
+  - Endpoint bulk import CSV (usa `ImportService` existente)
+  - Endpoints CRUD de productos (create/update/delete/list/get) y variantes mínimas
+  - Autenticación por `merchant.apiKey` (header `Authorization: Bearer <apiKey>` o `x-api-key`)
+  - Validaciones DTOs + límites de payload (MVP)
+  - Tests unitarios + e2e básicos (happy path + multi-tenant)
+- **Excluye:** UI/admin dashboard, integraciones externas (POS/ERP), editor avanzado, RAG.
+- **DoD específico:**
+  - Import CSV crea/actualiza por SKU (idempotente) y retorna stats
+  - CRUD no permite acceder/modificar productos de otro merchant
+  - `pnpm test` pasa
+
+### PR-03.8 — Meta WhatsApp Webhook Compliance: GET verify + raw payload + signature guard 🔴 CRÍTICO
+- **Objetivo:** hacer el backend compatible con el flujo real de Meta WhatsApp Cloud API webhooks (verificación, payload crudo, firma).
+- **Depende de:** PR-01 (inbound dedupe), PR-03.5 (outbound sender).
+- **Incluye:**
+  - GET `/webhooks/whatsapp` para verificación (`hub.mode`, `hub.verify_token` → `hub.challenge`)
+  - POST `/webhooks/whatsapp` acepta payload crudo de Meta (`entry/changes/value/messages[]`)
+  - Mapper `whatsapp-webhook.mapper.ts` que convierte payload Meta → `InboundMessageDto` normalizado
+  - Guard `MetaSignatureGuard` para validar `X-Hub-Signature-256` con HMAC SHA-256 (timing-safe)
+  - `rawBody: true` en NestJS bootstrap para cálculo correcto de firma
+  - Manejo de eventos `statuses` con early return (200 OK sin procesar)
+  - Env vars nuevas: `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`
+  - Actualización de `.env.example` y `README.md` con instrucciones de setup
+  - Tests E2E + unitarios (verify, mapper, signature)
+- **Excluye:** media download, templates/botones interactivos, cambios al orchestrator/LLM.
+- **DoD específico:**
+  - GET verify con token correcto → retorna `hub.challenge` (text/plain)
+  - GET verify con token incorrecto → 403
+  - POST mensaje text → procesado por pipeline existente
+  - POST con `statuses` → 200 OK sin procesar
+  - Si `WHATSAPP_APP_SECRET` presente: firma inválida → 401; firma válida → 200
+  - Si `WHATSAPP_APP_SECRET` ausente: log warning, permite request (modo dev)
+  - `pnpm lint` y `pnpm test` pasan
+- **Notas:**
+  - Sin cambios de DB (no hay migraciones)
+  - Referencia: [Meta Webhooks Getting Started](https://developers.facebook.com/docs/graph-api/webhooks/getting-started)
+  - Referencia: [WhatsApp Webhook Components](https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components)
+
+>>>>>>> Stashed changes
 ### PR-04 — Carrito: CRUD conversacional persistido
 - **Objetivo:** crear carrito por customer/merchant, agregar/remover/actualizar qty, y mostrar resumen.
 - **Depende de:** PR-03.5 (PR-03.6 opcional pero recomendado).
