@@ -28,10 +28,10 @@ import {
   UpdateProductDto,
   ProductListQueryDto,
   ImportResponseDto,
+  ImportCsvDto,
 } from './dto/catalog.dto';
 
 /**
-  ImportCsvDto,
  * CatalogManagementController handles merchant catalog operations
  * All endpoints require API key authentication and enforce multi-tenancy
  */

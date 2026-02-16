@@ -39,13 +39,13 @@ export class ApiKeyAuthGuard implements CanActivate {
     const merchant = await this.merchantRepository.findByApiKey(apiKey);
 
     if (!merchant) {
-      this.logger.warn(`Invalid API key attempted: ${apiKey.substring(0, 8)}...`);
+      this.logger.warn('Invalid API key attempted');
       throw new UnauthorizedException('Invalid API key');
     }
 
     // Attach merchant to request for use in controllers
     request.merchant = merchant;
-    this.logger.log(`Authenticated merchant: ${merchant.id} (${merchant.name})`);
+    this.logger.debug(`Authenticated merchant: ${merchant.id} (${merchant.name})`);
 
     return true;
   }

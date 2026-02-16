@@ -9,6 +9,8 @@ import {
   Max,
   ValidateNested,
   MinLength,
+  IsArray,
+  ArrayMinSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -54,6 +56,8 @@ export class CreateProductDto {
   @IsNotEmpty()
   categoryName!: string;
 
+  @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => CreateVariantDto)
   variants!: CreateVariantDto[];

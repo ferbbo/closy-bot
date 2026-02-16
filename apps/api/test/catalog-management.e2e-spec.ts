@@ -246,6 +246,29 @@ Pantalón Negro,Pantalón formal,Ropa,SKU-002,49.99,5`;
       expect(productsB).toHaveLength(2);
       expect(productsA[0].id).not.toBe(productsB[0].id);
     });
+
+    it('should reject CSV with validation errors', async () => {
+      const invalidCsv = `name,description,category,sku,price,stock
+,Missing name,Ropa,SKU-BAD-001,29.99,10`;
+
+      const res = await request(app.getHttpServer())
+        .post('/api/catalog/import')
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .send({ csv: invalidCsv })
+        .expect(200);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.errors.length).toBeGreaterThan(0);
+      expect(res.body.created).toBe(0);
+    });
+
+    it('should reject empty CSV body', async () => {
+      await request(app.getHttpServer())
+        .post('/api/catalog/import')
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .send({ csv: '' })
+        .expect(400);
+    });
   });
 
   describe('GET /api/products', () => {
@@ -384,6 +407,20 @@ Pantalón Negro,Pantalón formal,Ropa,SKU-002,49.99,5`;
       });
 
       expect(category).toBeDefined();
+    });
+
+    it('should reject product without variants', async () => {
+      const dto = {
+        name: 'Producto Sin Variantes',
+        categoryName: 'Ropa',
+        variants: [],
+      };
+
+      await request(app.getHttpServer())
+        .post('/api/products')
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .send(dto)
+        .expect(400);
     });
   });
 
