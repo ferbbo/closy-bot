@@ -82,6 +82,21 @@
   - Provider intercambiable sin cambiar orchestrator
 - **Issue:** #16
 
+### PR-03.7 — Catalog Management API: Import masivo + CRUD productos 🔴 CRÍTICO
+- **Objetivo:** exponer endpoints HTTP para (a) carga masiva de catálogo por CSV y (b) CRUD básico de productos/variantes, con multi-tenancy por `merchant`.
+- **Depende de:** PR-03.
+- **Incluye:**
+  - Endpoint bulk import CSV (usa `ImportService` existente)
+  - Endpoints CRUD de productos (create/update/delete/list/get) y variantes mínimas
+  - Autenticación por `merchant.apiKey` (header `Authorization: Bearer <apiKey>` o `x-api-key`)
+  - Validaciones DTOs + límites de payload (MVP)
+  - Tests unitarios + e2e básicos (happy path + multi-tenant)
+- **Excluye:** UI/admin dashboard, integraciones externas (POS/ERP), editor avanzado, RAG.
+- **DoD específico:**
+  - Import CSV crea/actualiza por SKU (idempotente) y retorna stats
+  - CRUD no permite acceder/modificar productos de otro merchant
+  - `pnpm test` pasa
+
 ### PR-04 — Carrito: CRUD conversacional persistido
 - **Objetivo:** crear carrito por customer/merchant, agregar/remover/actualizar qty, y mostrar resumen.
 - **Depende de:** PR-03.5 (PR-03.6 opcional pero recomendado).
