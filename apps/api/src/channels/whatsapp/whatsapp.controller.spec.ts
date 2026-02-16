@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { WhatsAppController } from './whatsapp.controller';
 import { WhatsAppService } from './whatsapp.service';
 import { WhatsAppOutboundService } from './whatsapp-outbound.service';
 import { ConversationOrchestrator } from '../../orchestrator/conversation.orchestrator';
 import { InboundMessageDto } from './dto/inbound-message.dto';
+import { MetaSignatureGuard } from './guards/meta-signature.guard';
 
 describe('WhatsAppController', () => {
   let controller: WhatsAppController;
@@ -40,6 +42,14 @@ describe('WhatsAppController', () => {
       }),
     };
 
+    const mockConfigService = {
+      get: jest.fn((key: string, defaultValue?: any) => {
+        if (key === 'WHATSAPP_WEBHOOK_VERIFY_TOKEN') return 'test-token';
+        if (key === 'WHATSAPP_APP_SECRET') return 'test-secret';
+        return defaultValue;
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [WhatsAppController],
       providers: [
@@ -55,6 +65,11 @@ describe('WhatsAppController', () => {
           provide: ConversationOrchestrator,
           useValue: mockOrchestrator,
         },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
+        },
+        MetaSignatureGuard,
       ],
     }).compile();
 
@@ -153,7 +168,7 @@ describe('WhatsAppController', () => {
       // Should still return success even if outbound fails (logged)
     });
 
-    it('should return processed=true even when orchestrator throws after message persistence', async () => {
+    it('should throw when orchestrator fails after message persistence (legacy behavior)', async () => {
       service.processInboundMessage.mockResolvedValue({
         messageId: 'wamid.test123',
         channel: 'whatsapp',
@@ -164,13 +179,9 @@ describe('WhatsAppController', () => {
 
       orchestrator.process.mockRejectedValue(new Error('Merchant not found'));
 
-      const result = await controller.handleInbound(validDto);
+      // Legacy endpoint propagates orchestrator errors
+      await expect(controller.handleInbound(validDto)).rejects.toThrow('Merchant not found');
 
-      // Must return processed=true because message was persisted
-      // This prevents duplicate retries from WhatsApp webhook
-      expect(result).toEqual({
-        processed: true,
-      });
       expect(service.processInboundMessage).toHaveBeenCalledWith(validDto);
       expect(orchestrator.process).toHaveBeenCalled();
       expect(outboundService.sendTextMessage).not.toHaveBeenCalled();
