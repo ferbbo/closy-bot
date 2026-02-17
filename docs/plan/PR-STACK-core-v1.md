@@ -161,6 +161,31 @@
 - **Issue:** [#28](https://github.com/ferbbo/closy-bot/issues/28), [#29](https://github.com/ferbbo/closy-bot/issues/29), [#30](https://github.com/ferbbo/closy-bot/issues/30), [#31](https://github.com/ferbbo/closy-bot/issues/31), [#32](https://github.com/ferbbo/closy-bot/issues/32), [#33](https://github.com/ferbbo/closy-bot/issues/33), [#34](https://github.com/ferbbo/closy-bot/issues/34)
 - **Brief:** `docs/plan/pr-briefs/PR-03.10-conversation-memory-retention.md` ✅
 
+### PR-03.11 — Multi-channel per Merchant: Channel model + lookup + dynamic outbound 🔴 CRÍTICO
+- **Objetivo:** permitir que cada Merchant tenga múltiples canales WhatsApp (y preparar Instagram), con resolución automática por `phone_number_id` y credenciales por canal.
+- **Depende de:** PR-02 ✅, PR-03.9 ✅ (ambos MERGED).
+- **Incluye:**
+  - Modelo `Channel` (Prisma): `type`, `externalId`, `merchantId`, `credentials`, `displayName`, `isActive`
+  - Enum `ChannelType { WHATSAPP, INSTAGRAM }`
+  - `ChannelRepository`: `findByTypeAndExternalId()`, `findByMerchantId()`, `findById()`
+  - `MerchantResolverService.resolveByChannel(type, externalId)` → `{ merchant, channel }` real (no `findFirst`)
+  - FKs: `Conversation.channelId`, `OutboxMessage.channelId` (nullable para backwards compat)
+  - `WhatsAppOutboundService.sendTextMessageWithCredentials(to, text, credentials)`
+  - `OutboxDispatcher` usa credentials del channel (fallback a env vars si no hay channelId)
+  - Unknown channel handling: log structured warning + 200 OK (sin crash)
+  - Migración backwards-compatible: crea Channel desde Merchant + env vars existentes
+  - Tests unit + e2e (multi-merchant multi-channel, channel desconocido)
+- **Excluye:** UI admin para CRUD channels, Instagram OAuth completo, encrypt helper real, límites por plan.
+- **DoD específico:**
+  - Migración crea tabla `channels` + FKs en `conversations` y `outbox_messages`
+  - Webhook inbound enruta al merchant correcto por `phone_number_id`
+  - 2+ WhatsApps de diferente merchant funcionan simultáneamente
+  - Channel desconocido → 200 OK + log structured sin crash
+  - Outbound usa credentials del channel (no env vars globales)
+  - Backwards compat: outbox messages sin `channelId` usan env vars
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+- **Brief:** `docs/plan/pr-briefs/PR-03.11-multi-channel-merchant.md`
+
 ### PR-04 — Carrito: CRUD conversacional persistido
 - **Objetivo:** crear carrito por customer/merchant, agregar/remover/actualizar qty, y mostrar resumen.
 - **Depende de:** PR-03.5 (PR-03.6 opcional pero recomendado).

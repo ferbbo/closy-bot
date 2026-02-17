@@ -38,10 +38,26 @@ export class MessageLogCleanupService {
       const deletedCount = await this.messageLogRepository.deleteExpired();
       this.logger.log(`Deleted ${deletedCount} expired message logs`);
 
-      // 2. TODO: Apply cap per conversation
-      // This requires iterating conversations with message count > maxPerConvo
-      // For MVP, we rely on TTL cleanup + manual cap enforcement on write
-      // Future: Add batch processing of conversations with high message count
+      // 2. Apply cap per conversation (REQ-03, AC-03)
+      // Get all conversations with message count > maxPerConvo and apply cap
+      const conversationsWithCounts = await this.messageLogRepository.findConversationsExceedingCap(
+        this.maxPerConvo,
+      );
+
+      let capDeletedTotal = 0;
+      for (const { conversationId } of conversationsWithCounts) {
+        const capDeleted = await this.messageLogRepository.deleteOldestBeyondCap(
+          conversationId,
+          this.maxPerConvo,
+        );
+        capDeletedTotal += capDeleted;
+      }
+
+      if (capDeletedTotal > 0) {
+        this.logger.log(
+          `Deleted ${capDeletedTotal} messages beyond cap (${this.maxPerConvo} per conversation)`,
+        );
+      }
 
       this.logger.log('Cleanup completed successfully');
     } catch (error) {

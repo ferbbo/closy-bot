@@ -160,16 +160,18 @@ export class LlmService {
         timestamp: log.createdAt,
       }));
 
-      // TODO: Fetch summary and facts from Conversation (requires conversation repository enhancement)
-      // For now, we only include recent history
-      // const conversation = await this.conversationRepository.findById(conversationContext.conversationId);
+      // PR-03.10: Fetch summary and facts from Conversation (REQ-05, AC-05)
+      // Import ConversationRepository in constructor when needed
+      // For now, include only what we have available
+      // TODO: Inject ConversationRepository and fetch conversation.summary/memoryFacts/lastIntent
 
       return {
         ...baseContext,
         conversationMemory: {
           recentHistory,
+          // summary and facts will be available once ConversationRepository is injected
           // summary: conversation?.summary,
-          // facts: conversation?.memoryFacts as Record<string, any>,
+          // facts: conversation?.memoryFacts as Record<string, unknown>,
           // lastIntent: conversation?.lastIntent,
         },
       };

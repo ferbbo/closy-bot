@@ -143,6 +143,31 @@ export class MessageLogRepository {
     return this.prisma.messageLog.count();
   }
 
+  /**
+   * Find conversations with message count exceeding cap (REQ-03)
+   * Returns array of {conversationId, count} for conversations with more than maxMessages
+   */
+  async findConversationsExceedingCap(
+    maxMessages: number,
+  ): Promise<Array<{ conversationId: string; count: number }>> {
+    const result = await this.prisma.messageLog.groupBy({
+      by: ['conversationId'],
+      _count: { id: true },
+      having: {
+        id: {
+          _count: {
+            gt: maxMessages,
+          },
+        },
+      },
+    });
+
+    return result.map((group) => ({
+      conversationId: group.conversationId,
+      count: group._count.id,
+    }));
+  }
+
   private mapToDto(log: {
     id: string;
     conversationId: string;

@@ -92,4 +92,58 @@ export class ConversationRepository {
     }
     return this.update(id, { status });
   }
+
+  /**
+   * PR-03.10: Update conversation memory fields (REQ-04, AC-04)
+   * @param id Conversation ID
+   * @param memory Memory data to update
+   */
+  async updateMemory(
+    id: string,
+    memory: {
+      summary?: string;
+      memoryFacts?: Record<string, unknown>;
+      lastIntent?: string;
+      lastSummarizedAt?: Date;
+    },
+  ): Promise<Conversation> {
+    return this.update(id, {
+      summary: memory.summary,
+      memoryFacts: memory.memoryFacts as Prisma.InputJsonValue,
+      lastIntent: memory.lastIntent,
+      lastSummarizedAt: memory.lastSummarizedAt,
+    });
+  }
+
+  /**
+   * PR-03.10: Find conversations that need summarization (REQ-04, AC-04)
+   * Candidates are conversations that:
+   * - Are active
+   * - Have recent activity (lastMessageAt within X days)
+   * - Never summarized OR summarized > Y days ago
+   */
+  async findCandidatesForSummarization(
+    minMessagesSince: Date,
+    lastSummarizedBefore: Date,
+    limit: number,
+  ): Promise<Conversation[]> {
+    return this.prisma.conversation.findMany({
+      where: {
+        status: 'active',
+        lastMessageAt: {
+          gte: minMessagesSince,
+        },
+        OR: [
+          { lastSummarizedAt: null },
+          {
+            lastSummarizedAt: {
+              lt: lastSummarizedBefore,
+            },
+          },
+        ],
+      },
+      orderBy: { lastMessageAt: 'desc' },
+      take: limit,
+    });
+  }
 }

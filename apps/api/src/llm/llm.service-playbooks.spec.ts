@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { LlmService } from './llm.service';
 import { GroqLlmProvider } from './providers/groq-llm.provider';
 import { PlaybookService } from '../services/playbook.service';
+import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 
 describe('LlmService with Playbooks (PR-11)', () => {
   let service: LlmService;
@@ -35,6 +36,12 @@ describe('LlmService with Playbooks (PR-11)', () => {
           provide: GroqLlmProvider,
           useValue: {
             generateResponse: jest.fn(),
+          },
+        },
+        {
+          provide: MessageLogRepository,
+          useValue: {
+            findLastKByConversation: jest.fn().mockResolvedValue([]),
           },
         },
       ],

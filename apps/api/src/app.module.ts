@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule'; // PR-03.10: Centralized scheduler
 import { CommonModule } from './common/common.module';
 import { ChannelsModule } from './channels/channels.module';
 import { DomainModule } from './domain/domain.module';
@@ -14,6 +15,7 @@ import { SummarizationModule } from './workers/summarization/summarization.modul
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(), // PR-03.10: Single scheduler instance for all workers
     CommonModule,
     PersistenceModule,
     ChannelsModule,
