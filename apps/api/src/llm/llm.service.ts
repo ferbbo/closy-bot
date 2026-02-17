@@ -2,9 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LlmProvider, LlmContext } from './interfaces/llm-provider.interface';
 import { GroqLlmProvider } from './providers/groq-llm.provider';
-import { PlaybookPromptBuilder, SystemPromptParams } from './prompts/playbook-prompt-builder';
+import { PlaybookPromptBuilder, type SystemPromptParams } from './prompts/playbook-prompt-builder';
 import { containsSuspiciousPatterns } from './prompts/base-system-prompt';
-import { PlaybookService, MerchantPlaybookData } from '../services/playbook.service';
+import { PlaybookService, type MerchantPlaybookData } from '../services/playbook.service';
+import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 
 /**
  * LLM Service - Facade for LLM operations
@@ -13,6 +14,7 @@ import { PlaybookService, MerchantPlaybookData } from '../services/playbook.serv
  * - System prompt composition (with playbook integration - PR-11)
  * - Fallback to templated responses
  * - Guardrails and validation
+ * - PR-03.10: Context building with message history + conversation memory
  */
 
 export interface ConversationContext {
@@ -32,6 +34,18 @@ export interface ConversationContext {
   }>;
 }
 
+// PR-03.10: Extended context with memory
+export interface ConversationMemory {
+  summary?: string; // 1-5 lines summary of conversation
+  facts?: Record<string, unknown>; // Persistent facts extracted
+  lastIntent?: string; // Last detected intent
+  recentHistory?: Array<{
+    direction: 'IN' | 'OUT';
+    text?: string;
+    timestamp: Date;
+  }>;
+}
+
 @Injectable()
 export class LlmService {
   private readonly logger = new Logger(LlmService.name);
@@ -42,6 +56,7 @@ export class LlmService {
     private readonly configService: ConfigService,
     private readonly groqProvider: GroqLlmProvider,
     private readonly playbookService: PlaybookService,
+    private readonly messageLogRepository: MessageLogRepository, // PR-03.10
   ) {
     this.llmEnabled = this.configService.get<boolean>('LLM_ENABLED', false);
 
@@ -57,6 +72,7 @@ export class LlmService {
   /**
    * Generate conversational response using LLM or fallback
    * PR-11: Now uses PlaybookService for prompt composition
+   * PR-03.10: Enhanced with conversation memory (history + summary + facts)
    *
    * @param params - Request parameters
    * @returns Generated response text
@@ -73,20 +89,25 @@ export class LlmService {
     }
 
     try {
-      // Build system prompt with playbook integration
+      // PR-03.10: Build context with memory if conversation context provided
+      const contextWithMemory = params.conversationContext
+        ? await this.buildContextWithMemory(params.conversationContext)
+        : undefined;
+
+      // Build system prompt with playbook integration + memory
       const systemPrompt = this.buildSystemPromptWithPlaybook({
         merchantName: params.conversationContext?.merchantName || 'Tu tienda',
         industry: params.conversationContext?.industry,
         merchant: params.merchant,
-        context: this.buildLlmContext(params.conversationContext),
+        context: contextWithMemory || this.buildLlmContext(params.conversationContext),
       });
 
       // Call LLM provider
       const response = await this.provider.generateResponse({
         systemPrompt,
         userMessage: params.userMessage,
-        conversationHistory: [], // TODO: CR-03.7 - add history from DB
-        context: this.buildLlmContext(params.conversationContext),
+        conversationHistory: [], // History is now in context
+        context: contextWithMemory || this.buildLlmContext(params.conversationContext),
         maxTokens: this.configService.get<number>('LLM_MAX_TOKENS', 500),
         temperature: this.configService.get<number>('LLM_TEMPERATURE', 0.7),
       });
@@ -108,6 +129,56 @@ export class LlmService {
         error instanceof Error ? error.stack : error,
       );
       return this.getFallbackResponse(params.userMessage);
+    }
+  }
+
+  /**
+   * PR-03.10: Build context with conversation memory (REQ-05, AC-05)
+   * Combines:
+   * - Last K message logs (history)
+   * - Conversation summary (if exists)
+   * - Memory facts (if exist)
+   * - Business state (cart, products, etc.)
+   *
+   * Guardrail: LLM should NOT invent price/stock/policies/ETA (always from backend)
+   */
+  async buildContextWithMemory(conversationContext: ConversationContext): Promise<LlmContext> {
+    const baseContext = this.buildLlmContext(conversationContext);
+
+    try {
+      // Get last K messages from history
+      const lastK = this.configService.get<number>('LLM_CONTEXT_LAST_K', 10);
+      const messageLogs = await this.messageLogRepository.findLastKByConversation(
+        conversationContext.conversationId,
+        lastK,
+      );
+
+      // Map to simple format (no PII logging)
+      const recentHistory = messageLogs.reverse().map((log) => ({
+        direction: log.direction,
+        text: log.text,
+        timestamp: log.createdAt,
+      }));
+
+      // TODO: Fetch summary and facts from Conversation (requires conversation repository enhancement)
+      // For now, we only include recent history
+      // const conversation = await this.conversationRepository.findById(conversationContext.conversationId);
+
+      return {
+        ...baseContext,
+        conversationMemory: {
+          recentHistory,
+          // summary: conversation?.summary,
+          // facts: conversation?.memoryFacts as Record<string, any>,
+          // lastIntent: conversation?.lastIntent,
+        },
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Failed to build context with memory for conversation ${conversationContext.conversationId}, using base context`,
+        error,
+      );
+      return baseContext;
     }
   }
 

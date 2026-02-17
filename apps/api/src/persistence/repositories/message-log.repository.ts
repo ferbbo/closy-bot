@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { MessageDirection, Prisma } from '@prisma/client';
+import { MessageDirection } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface CreateMessageLogDto {
@@ -143,7 +143,17 @@ export class MessageLogRepository {
     return this.prisma.messageLog.count();
   }
 
-  private mapToDto(log: any): MessageLogDto {
+  private mapToDto(log: {
+    id: string;
+    conversationId: string;
+    merchantId: string;
+    direction: MessageDirection;
+    providerMessageId: string | null;
+    text: string | null;
+    mediaType: string | null;
+    expiresAt: Date;
+    createdAt: Date;
+  }): MessageLogDto {
     return {
       id: log.id,
       conversationId: log.conversationId,

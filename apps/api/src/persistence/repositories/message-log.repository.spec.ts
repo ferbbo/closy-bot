@@ -5,7 +5,6 @@ import { MessageLogRepository, CreateMessageLogDto } from './message-log.reposit
 
 describe('MessageLogRepository (AC-02)', () => {
   let repository: MessageLogRepository;
-  let prisma: PrismaService;
 
   const mockPrismaService = {
     messageLog: {
@@ -28,7 +27,6 @@ describe('MessageLogRepository (AC-02)', () => {
     }).compile();
 
     repository = module.get<MessageLogRepository>(MessageLogRepository);
-    prisma = module.get<PrismaService>(PrismaService);
 
     jest.clearAllMocks();
   });

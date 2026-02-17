@@ -43,6 +43,24 @@ export interface LlmContext {
   currentCart?: CartSummary;
   /** Available products matching search */
   availableProducts?: ProductSummary[];
+  /** PR-03.10: Conversation memory (summary + facts + recent history) */
+  conversationMemory?: ConversationMemory;
+}
+
+/** PR-03.10: Conversation memory structure */
+export interface ConversationMemory {
+  /** Conversation summary (1-5 lines) */
+  summary?: string;
+  /** Persistent facts extracted from conversation */
+  facts?: Record<string, unknown>;
+  /** Last detected intent */
+  lastIntent?: string;
+  /** Recent message history (last K messages) */
+  recentHistory?: Array<{
+    direction: 'IN' | 'OUT';
+    text?: string;
+    timestamp: Date;
+  }>;
 }
 
 export interface PlaybookConfig {
