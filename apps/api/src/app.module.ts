@@ -9,6 +9,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { LlmModule } from './llm/llm.module';
 import { CatalogManagementModule } from './catalog-management/catalog-management.module';
 import { OutboxDispatcherModule } from './workers/outbox-dispatcher/outbox-dispatcher.module';
+import { RetentionModule } from './workers/retention/retention.module'; // PR-03.10
+import { SummarizationModule } from './workers/summarization/summarization.module'; // PR-03.10
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { OutboxDispatcherModule } from './workers/outbox-dispatcher/outbox-dispa
     AnalyticsModule,
     CatalogManagementModule,
     OutboxDispatcherModule,
+    RetentionModule, // PR-03.10
+    SummarizationModule, // PR-03.10
   ],
 })
 export class AppModule {}
