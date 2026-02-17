@@ -48,12 +48,14 @@ export class OutboxRepository {
    * @param batchSize Maximum number of messages to claim
    * @param lockId Unique identifier for this worker instance
    * @param lockTtlSeconds TTL for lock (to reclaim stuck messages)
+   * @param maxAttempts Maximum retry attempts (messages with attempts >= maxAttempts are excluded)
    * @returns Array of claimed messages
    */
   async claimBatch(
     batchSize: number,
     lockId: string,
     lockTtlSeconds: number,
+    maxAttempts: number,
   ): Promise<OutboxMessage[]> {
     const now = new Date();
     const lockExpired = new Date(now.getTime() - lockTtlSeconds * 1000);
@@ -69,8 +71,7 @@ export class OutboxRepository {
       WHERE id IN (
         SELECT id FROM outbox_messages
         WHERE (status = 'PENDING'::"OutboxMessageStatus" OR status = 'FAILED'::"OutboxMessageStatus")
-          AND next_retry_at <= ${now}
-          AND (locked_at IS NULL OR locked_at < ${lockExpired})
+          AND next_retry_at <= ${now}          AND attempts < ${maxAttempts}          AND (locked_at IS NULL OR locked_at < ${lockExpired})
         ORDER BY created_at ASC
         LIMIT ${batchSize}
         FOR UPDATE SKIP LOCKED
@@ -133,7 +134,7 @@ export class OutboxRepository {
     return this.prisma.outboxMessage.update({
       where: { id },
       data: {
-        status: shouldRetry ? OutboxMessageStatus.FAILED : OutboxMessageStatus.FAILED, // Could introduce DEAD_LETTER status
+        status: OutboxMessageStatus.FAILED,
         attempts: newAttempts,
         lastError: error.substring(0, 1000), // Truncate to prevent huge logs
         nextRetryAt: shouldRetry ? nextRetryAt : undefined,

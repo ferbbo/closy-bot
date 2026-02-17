@@ -151,7 +151,7 @@ describe('OutboxRepository', () => {
 
       jest.spyOn(prisma, '$queryRaw').mockResolvedValue(mockMessages as OutboxMessage[]);
 
-      const result = await repository.claimBatch(10, 'worker-1', 300);
+      const result = await repository.claimBatch(10, 'worker-1', 300, 5);
 
       expect(result).toEqual(mockMessages);
       expect(prisma.$queryRaw).toHaveBeenCalled();

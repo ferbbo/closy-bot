@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OutboxRepository } from '../repositories/outbox.repository';
 import { OutboxChannel, OutboxMessageType } from '@prisma/client';
+import { maskPhone } from '../../common/utils/pii.util';
 
 export interface EnqueueWhatsAppTextParams {
   merchantId: string;
@@ -30,7 +31,7 @@ export class OutboxService {
   async enqueueWhatsAppText(params: EnqueueWhatsAppTextParams) {
     const { merchantId, to, text, replyToMessageId, dedupeKey, metadata } = params;
 
-    const maskedPhone = this.maskPhone(to);
+    const maskedPhone = maskPhone(to);
 
     // Generate dedupeKey if not provided (using masked phone for PII safety)
     const finalDedupeKey =
@@ -60,13 +61,5 @@ export class OutboxService {
     this.logger.debug(`Enqueued OutboxMessage id=${message.id}, status=${message.status}`);
 
     return message;
-  }
-
-  /**
-   * Mask phone number for PII-safe logging
-   */
-  private maskPhone(phone: string): string {
-    if (phone.length <= 4) return '***';
-    return `***${phone.slice(-4)}`;
   }
 }

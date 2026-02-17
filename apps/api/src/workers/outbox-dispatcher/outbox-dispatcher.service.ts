@@ -4,6 +4,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { OutboxRepository } from '../../persistence/repositories/outbox.repository';
 import { WhatsAppOutboundService } from '../../channels/whatsapp/whatsapp-outbound.service';
 import { OutboxMessage, OutboxMessageType } from '@prisma/client';
+import { maskPhone } from '../../common/utils/pii.util';
 
 /**
  * Dispatcher service for processing outbox messages
@@ -74,6 +75,7 @@ export class OutboxDispatcherService implements OnModuleInit {
       this.batchSize,
       this.lockId,
       this.lockTtlSeconds,
+      this.maxAttempts,
     );
 
     if (messages.length === 0) {
@@ -92,7 +94,7 @@ export class OutboxDispatcherService implements OnModuleInit {
    * Process a single message
    */
   private async processMessage(message: OutboxMessage) {
-    const maskedTo = this.maskPhone(message.to);
+    const maskedTo = maskPhone(message.to);
     this.logger.debug(
       `Processing message id=${message.id}, type=${message.type}, to=${maskedTo}, attempt=${message.attempts + 1}`,
     );
@@ -139,7 +141,7 @@ export class OutboxDispatcherService implements OnModuleInit {
    */
   private async handleError(message: OutboxMessage, error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const maskedTo = this.maskPhone(message.to);
+    const maskedTo = maskPhone(message.to);
 
     this.logger.error(
       `Failed to process message id=${message.id}, to=${maskedTo}: ${errorMessage}`,
@@ -147,13 +149,5 @@ export class OutboxDispatcherService implements OnModuleInit {
 
     // Mark as failed and schedule retry
     await this.outboxRepo.markFailed(message.id, errorMessage, this.maxAttempts);
-  }
-
-  /**
-   * Mask phone number for PII-safe logging
-   */
-  private maskPhone(phone: string): string {
-    if (phone.length <= 4) return '***';
-    return `***${phone.slice(-4)}`;
   }
 }

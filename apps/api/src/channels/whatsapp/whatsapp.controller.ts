@@ -22,6 +22,7 @@ import { MetaWebhookPayload } from './dto/meta-webhook.dto';
 import { MetaSignatureGuard } from './guards/meta-signature.guard';
 import { mapMetaWebhookToInboundMessages, isStatusOnlyPayload } from './whatsapp-webhook.mapper';
 import { OutboxService } from '../../persistence/outbox/outbox.service';
+import { maskPhone } from '../../common/utils/pii.util';
 
 /**
  * Controller for WhatsApp webhooks (Meta WhatsApp Cloud API)
@@ -141,7 +142,7 @@ export class WhatsAppController {
   @Post('inbound')
   @HttpCode(HttpStatus.OK)
   async handleInbound(@Body() dto: InboundMessageDto): Promise<InboundMessageResponseDto> {
-    const maskedPhone = this.maskPhone(dto.from);
+    const maskedPhone = maskPhone(dto.from, 'long');
     this.logger.log(
       `[LEGACY] Inbound webhook received: message_id=${dto.message_id}, from=${maskedPhone}`,
     );
@@ -198,7 +199,7 @@ export class WhatsAppController {
    * Handles idempotency, orchestration, and outbound sending
    */
   private async processMessage(dto: InboundMessageDto): Promise<void> {
-    const maskedPhone = this.maskPhone(dto.from);
+    const maskedPhone = maskPhone(dto.from, 'long');
     this.logger.log(`Processing message: id=${dto.message_id}, from=${maskedPhone}`);
 
     try {
@@ -250,14 +251,5 @@ export class WhatsAppController {
         error instanceof Error ? error.stack : error,
       );
     }
-  }
-
-  /**
-   * Mask phone number for PII protection in logs
-   * Example: +573001234567 -> +57300****567
-   */
-  private maskPhone(phone: string): string {
-    if (phone.length <= 6) return '****';
-    return phone.slice(0, 6) + '****' + phone.slice(-3);
   }
 }

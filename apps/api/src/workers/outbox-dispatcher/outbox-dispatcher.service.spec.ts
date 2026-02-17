@@ -107,7 +107,7 @@ describe('OutboxDispatcherService', () => {
 
       await service.processOutbox();
 
-      expect(repository.claimBatch).toHaveBeenCalledWith(10, expect.any(String), 300);
+      expect(repository.claimBatch).toHaveBeenCalledWith(10, expect.any(String), 300, 5);
       expect(whatsappOutbound.sendTextMessage).toHaveBeenCalledWith('+573001234567', 'Hello');
       expect(repository.markSent).toHaveBeenCalledWith('msg-1', 'whatsapp-123');
     });
