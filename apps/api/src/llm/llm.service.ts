@@ -59,6 +59,7 @@ export class LlmService {
     private readonly playbookService: PlaybookService,
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
     private readonly conversationRepository: ConversationRepository, // PR-03.10
+    private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
   ) {
     this.llmEnabled = this.configService.get<boolean>('LLM_ENABLED', false);
 
@@ -93,7 +94,10 @@ export class LlmService {
     try {
       // PR-03.10: Build context with memory if conversation context provided
       const contextWithMemory = params.conversationContext
-        ? await this.buildContextWithMemory(params.conversationContext)
+        ? await this.buildContextWithMemory(
+            params.conversationContext,
+            params.merchant?.playbookConfig,
+          )
         : undefined;
 
       // Build system prompt with playbook integration + memory
@@ -144,12 +148,15 @@ export class LlmService {
    *
    * Guardrail: LLM should NOT invent price/stock/policies/ETA (always from backend)
    */
-  async buildContextWithMemory(conversationContext: ConversationContext): Promise<LlmContext> {
+  async buildContextWithMemory(
+    conversationContext: ConversationContext,
+    merchantPlaybookConfig?: unknown,
+  ): Promise<LlmContext> {
     const baseContext = this.buildLlmContext(conversationContext);
 
     try {
-      // Get last K messages from history
-      const lastK = this.configService.get<number>('LLM_CONTEXT_LAST_K', 10);
+      // AC-06: Get last K messages with merchant override
+      const lastK = this.memoryConfigService.getLlmContextLastK(merchantPlaybookConfig);
       const messageLogs = await this.messageLogRepository.findLastKByConversation(
         conversationContext.conversationId,
         lastK,

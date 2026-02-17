@@ -11,6 +11,7 @@ import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
 import { LlmService } from '../llm/llm.service';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
+import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10 AC-06
 
 export interface OrchestratorInput {
   messageId: string;
@@ -43,7 +44,6 @@ export interface OrchestratorResult {
 export class ConversationOrchestrator {
   private readonly logger = new Logger(ConversationOrchestrator.name);
   private readonly llmEnabled: boolean;
-  private readonly messageHistoryDays: number; // PR-03.10
 
   constructor(
     private readonly configService: ConfigService,
@@ -56,9 +56,9 @@ export class ConversationOrchestrator {
     private readonly helpFlow: HelpFlow,
     private readonly llmService: LlmService,
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
+    private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
   ) {
     this.llmEnabled = this.configService.get<boolean>('LLM_ENABLED', false);
-    this.messageHistoryDays = this.configService.get<number>('MESSAGE_HISTORY_DAYS', 30); // PR-03.10
   }
 
   /**
@@ -89,7 +89,11 @@ export class ConversationOrchestrator {
 
     // 4. PR-03.10: Log inbound message (REQ-07, AC-07)
     try {
-      const expiresAt = new Date(Date.now() + this.messageHistoryDays * 24 * 60 * 60 * 1000);
+      // AC-06: Use merchant override for message history TTL
+      const messageHistoryDays = this.memoryConfigService.getMessageHistoryDays(
+        merchant.playbookConfig,
+      );
+      const expiresAt = new Date(Date.now() + messageHistoryDays * 24 * 60 * 60 * 1000);
       await this.messageLogRepository.create({
         conversationId: conversation.id,
         merchantId: merchant.id,

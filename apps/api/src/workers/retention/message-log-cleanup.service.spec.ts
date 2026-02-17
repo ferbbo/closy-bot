@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { MessageLogCleanupService } from './message-log-cleanup.service';
 import { MessageLogRepository } from '../../persistence/repositories/message-log.repository';
+import { MemoryConfigService } from '../../common/config/memory-config.service'; // PR-03.10 AC-06
 
 describe('MessageLogCleanupService (AC-03)', () => {
   let service: MessageLogCleanupService;
@@ -20,6 +21,10 @@ describe('MessageLogCleanupService (AC-03)', () => {
     deleteOldestBeyondCap: jest.fn(),
   };
 
+  const mockMemoryConfigService = {
+    getMessageHistoryMaxPerConvo: jest.fn().mockReturnValue(50),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -31,6 +36,10 @@ describe('MessageLogCleanupService (AC-03)', () => {
         {
           provide: MessageLogRepository,
           useValue: mockMessageLogRepository,
+        },
+        {
+          provide: MemoryConfigService,
+          useValue: mockMemoryConfigService,
         },
       ],
     }).compile();

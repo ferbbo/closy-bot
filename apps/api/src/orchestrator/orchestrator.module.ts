@@ -6,6 +6,8 @@ import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
 import { ServicesModule } from '../services/services.module';
 import { LlmModule } from '../llm/llm.module';
+import { PersistenceModule } from '../persistence/persistence.module'; // PR-03.10
+import { CommonModule } from '../common/common.module'; // PR-03.10 AC-06
 
 /**
  * Orchestrator Module
@@ -20,9 +22,10 @@ import { LlmModule } from '../llm/llm.module';
  * - LLM-powered responses (when enabled)
  *
  * PR-11: Removed PlaybookService (now imported via ServicesModule in P2 fix)
+ * PR-03.10: Imports PersistenceModule and CommonModule for conversation memory
  */
 @Module({
-  imports: [ServicesModule, LlmModule],
+  imports: [ServicesModule, LlmModule, PersistenceModule, CommonModule],
   providers: [
     ConversationOrchestrator,
     IntentRouterService,

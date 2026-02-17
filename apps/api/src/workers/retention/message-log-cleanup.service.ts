@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { MessageLogRepository } from '../../persistence/repositories/message-log.repository';
+import { MemoryConfigService } from '../../common/config/memory-config.service'; // PR-03.10 AC-06
 
 /**
  * Message Log Cleanup Service (PR-03.10 REQ-03)
@@ -15,14 +16,12 @@ import { MessageLogRepository } from '../../persistence/repositories/message-log
 @Injectable()
 export class MessageLogCleanupService {
   private readonly logger = new Logger(MessageLogCleanupService.name);
-  private readonly maxPerConvo: number;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly messageLogRepository: MessageLogRepository,
-  ) {
-    this.maxPerConvo = this.configService.get<number>('MESSAGE_HISTORY_MAX_PER_CONVO', 50);
-  }
+    private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
+  ) {}
 
   /**
    * Cron job: Cleanup expired messages
@@ -39,23 +38,23 @@ export class MessageLogCleanupService {
       this.logger.log(`Deleted ${deletedCount} expired message logs`);
 
       // 2. Apply cap per conversation (REQ-03, AC-03)
-      // Get all conversations with message count > maxPerConvo and apply cap
-      const conversationsWithCounts = await this.messageLogRepository.findConversationsExceedingCap(
-        this.maxPerConvo,
-      );
+      // AC-06: Use default cap (per-merchant cap would require iterating merchants)
+      const maxPerConvo = this.memoryConfigService.getMessageHistoryMaxPerConvo();
+      const conversationsWithCounts =
+        await this.messageLogRepository.findConversationsExceedingCap(maxPerConvo);
 
       let capDeletedTotal = 0;
       for (const { conversationId } of conversationsWithCounts) {
         const capDeleted = await this.messageLogRepository.deleteOldestBeyondCap(
           conversationId,
-          this.maxPerConvo,
+          maxPerConvo,
         );
         capDeletedTotal += capDeleted;
       }
 
       if (capDeletedTotal > 0) {
         this.logger.log(
-          `Deleted ${capDeletedTotal} messages beyond cap (${this.maxPerConvo} per conversation)`,
+          `Deleted ${capDeletedTotal} messages beyond cap (${maxPerConvo} per conversation)`,
         );
       }
 
