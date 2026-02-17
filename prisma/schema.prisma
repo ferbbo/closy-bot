@@ -96,17 +96,53 @@ model Conversation {
   channel       String    // whatsapp, webchat, instagram
   status        String    @default("active") // active, closed, handoff
   lastMessageAt DateTime? @map("last_message_at")
+  // PR-03.10: Memory fields for conversational continuity
+  summary           String?   @db.Text // Conversational summary (max 1000 chars)
+  memoryFacts       Json?     @map("memory_facts") // Persistent facts extracted from conversation
+  lastIntent        String?   @map("last_intent") // Last detected intent
+  lastSummarizedAt  DateTime? @map("last_summarized_at") // Last time summary was generated
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  customer Customer @relation(fields: [customerId], references: [id])
-  merchant Merchant @relation(fields: [merchantId], references: [id])
+  customer    Customer     @relation(fields: [customerId], references: [id])
+  merchant    Merchant     @relation(fields: [merchantId], references: [id])
+  messageLogs MessageLog[] // PR-03.10: Message history
 
   @@map("conversations")
   @@index([customerId])
   @@index([merchantId])
   @@index([customerId, channel])
   @@index([status])
+}
+
+// ============================================================================
+// PR-03.10: Message Logs (conversational memory with TTL)
+// ============================================================================
+
+/// Direction enum for message logs
+enum MessageDirection {
+  IN  // Inbound from user
+  OUT // Outbound from bot
+}
+
+/// MessageLog stores conversation history with TTL for memory retention
+model MessageLog {
+  id                 String           @id @default(cuid())
+  conversationId     String           @map("conversation_id")
+  merchantId         String           @map("merchant_id") // Denormalized for multi-tenant queries
+  direction          MessageDirection // IN or OUT
+  providerMessageId  String?          @map("provider_message_id") // Provider ID for traceability (not used for dedupe)
+  text               String?          @db.Text // Message text content
+  mediaType          String?          @map("media_type") // image, document, audio, video
+  expiresAt          DateTime         @map("expires_at") // TTL for automatic cleanup
+  createdAt          DateTime         @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("message_logs")
+  @@index([conversationId, createdAt]) // For ordered queries (last K messages)
+  @@index([expiresAt]) // For cleanup job
+  @@index([merchantId]) // For multi-tenant queries
 }
 
 // ============================================================================
