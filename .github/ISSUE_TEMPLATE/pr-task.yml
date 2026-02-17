@@ -1,55 +1,66 @@
-name: "PR Task"
-description: "Tarea para implementar un PR pequeño y mergeable (Core V1 MVP) usando PR Stack + PR Brief."
-title: "PR-XX: <título corto>"
+name: "PR Task (SDD)"
+description: "Tarea derivada de un brief.md aprobado. Mapea a un REQ-ID + AC-ID del brief."
+title: "PR-XX REQ-NN: <descripcion corta>"
 labels:
   - pr-task
 body:
   - type: markdown
     attributes:
       value: |
-        Usa este issue para preparar un PR del stack.
-
-        Artefactos:
-        - Stack: `docs/plan/PR-STACK-core-v1.md`
-        - PR Brief: `docs/plan/pr-briefs/PR-XX-<slug>.md` (requerido antes de codear)
+        Cada issue mapea a exactamente 1 requisito (REQ-ID) del brief.
+        El brief debe tener status APPROVED antes de crear issues.
 
   - type: input
     id: pr_id
     attributes:
       label: "PR ID"
-      description: "Ej: PR-01, PR-06"
-      placeholder: "PR-01"
+      description: "Ej: PR-04, PR-06"
+      placeholder: "PR-04"
+    validations:
+      required: true
+
+  - type: input
+    id: req_id
+    attributes:
+      label: "REQ-ID (del brief)"
+      description: "Ej: REQ-01, REQ-02"
+      placeholder: "REQ-01"
     validations:
       required: true
 
   - type: input
     id: brief_path
     attributes:
-      label: "PR Brief (ruta)"
-      description: "Ruta al brief (debe existir antes de implementar)."
-      placeholder: "docs/plan/pr-briefs/PR-01-whatsapp-inbound-dedupe.md"
+      label: "Brief (ruta)"
+      description: "Ruta al brief aprobado."
+      placeholder: "docs/plan/pr-briefs/PR-04-carrito-crud.md"
+    validations:
+      required: true
+
+  - type: input
+    id: brief_status
+    attributes:
+      label: "Status del brief"
+      description: "Debe ser APPROVED o AMENDED."
+      placeholder: "APPROVED"
     validations:
       required: true
 
   - type: textarea
-    id: objetivo
+    id: requisito
     attributes:
-      label: "Objetivo"
-      description: "1–2 frases. Qué cambia y para qué."
+      label: "Requisito (del brief)"
+      description: "Copia textual del REQ del brief."
     validations:
       required: true
 
   - type: textarea
-    id: scope
+    id: acceptance_criteria
     attributes:
-      label: "Scope fence"
-      description: "Define included/excluded para evitar scope creep."
-      value: |
-        ✅ Included
-        -
-
-        ❌ Excluded
-        -
+      label: "Acceptance Criteria (AC-ID del brief)"
+      description: "Criterios verificables asociados a este REQ."
+      placeholder: |
+        - [ ] AC-01: ...
     validations:
       required: true
 
@@ -57,22 +68,20 @@ body:
     id: paths
     attributes:
       label: "Paths a tocar"
-      description: "Lista concreta de archivos/carpetas (idealmente 5–15)."
+      description: "Archivos/carpetas relevantes para este requisito."
       placeholder: |
-        - apps/api/src/channels/...
+        - apps/api/src/domain/...
         - prisma/schema.prisma
     validations:
       required: true
 
   - type: textarea
-    id: contracts
+    id: evidencia
     attributes:
-      label: "Contratos / Interfaces"
-      description: "Endpoints, DTOs, eventos, modelos Prisma y claves de idempotencia (si aplica)."
+      label: "Evidencia esperada"
+      description: "Como se demuestra que el AC se cumple (test name, log, screenshot)."
       placeholder: |
-        - POST /webhooks/whatsapp
-        - InboundMessageDto
-        - Idempotency key: message_id (unique)
+        - test: `describe('CartService', () => it('should add item'))`
     validations:
       required: true
 
@@ -82,49 +91,27 @@ body:
       label: "DoD (Core V1)"
       description: "Debe cumplirse antes de cerrar el issue."
       options:
-        - label: "Idempotencia implementada y testeada (message_id / payment_intent_id) donde aplique"
+        - label: "Idempotencia implementada y testeada (si aplica)"
           required: true
-        - label: "Estado persistido en Postgres (sin lógica solo en memoria)"
+        - label: "Estado persistido en Postgres (sin logica solo en memoria)"
           required: true
-        - label: "Guardrails: no inventa precio/stock/políticas/ETA (confirmaciones desde servicios)"
+        - label: "Guardrails: no inventa precio/stock/politicas/ETA"
           required: true
         - label: "PII minimizada y sin logs de datos sensibles"
           required: true
-        - label: "Tests unit/integration relevantes agregados/actualizados"
+        - label: "Tests relevantes agregados/actualizados"
           required: true
-        - label: "`pnpm lint` y `pnpm test` pasan"
+        - label: "pnpm lint y pnpm test pasan"
           required: true
-
-  - type: textarea
-    id: acceptance
-    attributes:
-      label: "Acceptance criteria (verificables)"
-      description: "Checklist de criterios que se pueden validar con tests/comandos."
-      placeholder: |
-        - [ ] Webhook duplicado (mismo message_id) se procesa 1 vez
-        - [ ] Reintentos no duplican órdenes/pagos
-    validations:
-      required: true
 
   - type: textarea
     id: comandos
     attributes:
       label: "Comandos para validar"
-      description: "Qué correr para verificar."
+      description: "Que correr para verificar."
       value: |
         - pnpm lint
         - pnpm test
         - (si aplica) pnpm db:migrate
     validations:
       required: true
-
-  - type: textarea
-    id: risks
-    attributes:
-      label: "Riesgos / mitigaciones"
-      description: "Riesgos técnicos y cómo mitigarlos."
-      placeholder: |
-        - Riesgo: doble procesamiento por reintentos
-          Mitigación: unique constraint + transacción
-    validations:
-      required: false

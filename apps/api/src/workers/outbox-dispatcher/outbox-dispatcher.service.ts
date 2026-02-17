@@ -3,8 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { OutboxRepository } from '../../persistence/repositories/outbox.repository';
 import { WhatsAppOutboundService } from '../../channels/whatsapp/whatsapp-outbound.service';
-import { OutboxMessage, OutboxMessageType } from '@prisma/client';
+import { OutboxMessage, OutboxMessageType, MessageDirection } from '@prisma/client';
 import { maskPhone } from '../../common/utils/pii.util';
+import { MessageLogRepository } from '../../persistence/repositories/message-log.repository'; // PR-03.10
 
 /**
  * Dispatcher service for processing outbox messages
@@ -24,6 +25,7 @@ export class OutboxDispatcherService implements OnModuleInit {
     private readonly outboxRepo: OutboxRepository,
     private readonly whatsappOutbound: WhatsAppOutboundService,
     private readonly configService: ConfigService,
+    private readonly messageLogRepository: MessageLogRepository, // PR-03.10
   ) {
     this.lockId = `dispatcher-${process.pid}-${Date.now()}`;
     this.batchSize = this.configService.get<number>('OUTBOX_BATCH_SIZE', 10);
@@ -134,6 +136,29 @@ export class OutboxDispatcherService implements OnModuleInit {
     this.logger.log(
       `Message sent successfully: id=${message.id}, providerMessageId=${result.messageId}`,
     );
+
+    // PR-03.10: Log outbound message (REQ-01, AC-02, REQ-07)
+    if (message.conversationId) {
+      try {
+        const messageHistoryDays = this.configService.get<number>('MESSAGE_HISTORY_DAYS', 30);
+        const expiresAt = new Date(Date.now() + messageHistoryDays * 24 * 60 * 60 * 1000);
+
+        await this.messageLogRepository.create({
+          conversationId: message.conversationId,
+          merchantId: message.merchantId,
+          direction: MessageDirection.OUT,
+          providerMessageId: result.messageId,
+          text: payload.text,
+          expiresAt,
+        });
+      } catch (error) {
+        // Don't fail outbound if logging fails
+        this.logger.warn(
+          `Failed to log outbound message for conversation ${message.conversationId}`,
+          error,
+        );
+      }
+    }
   }
 
   /**

@@ -1,16 +1,17 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 import { OutboxDispatcherService } from './outbox-dispatcher.service';
 import { ChannelsModule } from '../../channels/channels.module';
+import { PersistenceModule } from '../../persistence/persistence.module';
 
 /**
  * Module for outbox dispatcher worker
  * Processes pending outbound messages via scheduled cron jobs
+ * Note: ScheduleModule.forRoot() is imported in AppModule (single instance)
  */
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
     ChannelsModule, // For WhatsAppOutboundService
+    PersistenceModule, // For MessageLogRepository
   ],
   providers: [OutboxDispatcherService],
   exports: [OutboxDispatcherService],

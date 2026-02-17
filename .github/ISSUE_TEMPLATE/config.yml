@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: "PR Stack + PR Brief (workflow)"
-    url: "https://github.com/ferbbo/closy-bot/blob/main/docs/plan/WORKFLOW-pr-stack.md"
-    about: "Lee el flujo y crea un issue 'PR Task' antes de codear."
+  - name: "SDD Flow + PR Stack (workflow)"
+    url: "https://github.com/ferbbo/closy-bot/blob/main/docs/plan/SDD-FLOW.md"
+    about: "Lee el flujo SDD. El brief.md debe estar APPROVED antes de codear."
+  - name: "PR Brief template"
+    url: "https://github.com/ferbbo/closy-bot/blob/main/docs/plan/PR-BRIEF-template.md"
+    about: "Template para crear un brief.md por PR."

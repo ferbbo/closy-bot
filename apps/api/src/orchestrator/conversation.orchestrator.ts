@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { MessageDirection } from '@prisma/client'; // PR-03.10
 import { IntentRouterService, IntentType } from './intent/intent-router.service';
 import { CustomerService } from '../services/customer.service';
 import { ConversationService } from '../services/conversation.service';
@@ -9,6 +10,8 @@ import { SearchCatalogFlow } from './flows/search-catalog.flow';
 import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
 import { LlmService } from '../llm/llm.service';
+import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
+import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10 AC-06
 
 export interface OrchestratorInput {
   messageId: string;
@@ -32,9 +35,10 @@ export interface OrchestratorResult {
  * 1. Resolve merchant
  * 2. Resolve/create customer
  * 3. Resolve/create conversation
- * 4. Classify intent
- * 5. Execute flow (using LLM if enabled, or templated flow)
- * 6. Return response
+ * 4. PR-03.10: Log inbound message (REQ-07, AC-07)
+ * 5. Classify intent
+ * 6. Execute flow (using LLM if enabled, or templated flow)
+ * 7. Return response
  */
 @Injectable()
 export class ConversationOrchestrator {
@@ -51,6 +55,8 @@ export class ConversationOrchestrator {
     private readonly greetingFlow: GreetingFlow,
     private readonly helpFlow: HelpFlow,
     private readonly llmService: LlmService,
+    private readonly messageLogRepository: MessageLogRepository, // PR-03.10
+    private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
   ) {
     this.llmEnabled = this.configService.get<boolean>('LLM_ENABLED', false);
   }
@@ -81,13 +87,34 @@ export class ConversationOrchestrator {
     );
     this.logger.debug(`Conversation resolved: ${conversation.id}`);
 
-    // 4. Classify intent
+    // 4. PR-03.10: Log inbound message (REQ-07, AC-07)
+    try {
+      // AC-06: Use merchant override for message history TTL
+      const messageHistoryDays = this.memoryConfigService.getMessageHistoryDays(
+        merchant.playbookConfig,
+      );
+      const expiresAt = new Date(Date.now() + messageHistoryDays * 24 * 60 * 60 * 1000);
+      await this.messageLogRepository.create({
+        conversationId: conversation.id,
+        merchantId: merchant.id,
+        direction: MessageDirection.IN,
+        providerMessageId: input.messageId,
+        text: input.text,
+        expiresAt,
+      });
+      // Note: No logging of text content for PII safety (AC-08)
+    } catch (error) {
+      // Don't fail orchestration if logging fails
+      this.logger.warn(`Failed to log inbound message for conversation ${conversation.id}`, error);
+    }
+
+    // 5. Classify intent
     const intentResult = this.intentRouter.classify(input.text);
     this.logger.log(
       `Intent classified: ${intentResult.intent} (confidence: ${intentResult.confidence})`,
     );
 
-    // 5. Execute flow handler
+    // 6. Execute flow handler
     let response: string;
 
     // PR-11: Build merchant playbook data for downstream components

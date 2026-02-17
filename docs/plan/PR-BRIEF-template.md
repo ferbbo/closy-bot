@@ -1,8 +1,8 @@
-# PR Brief — PR-XX — <Título>
+# Brief — PR-XX — <Título>
 
-> Archivo: `docs/plan/pr-briefs/PR-XX-<slug>.md`
-> 
-> Regla: 1 página. Machine-actionable. Sin scope extra.
+> **Status**: `DRAFT` | `APPROVED` | `AMENDED`
+> **Archivo**: `docs/plan/pr-briefs/PR-XX-<slug>.md`
+> **Regla**: Máx 2 páginas. Spec-locked. Sin scope extra.
 
 ## Objetivo
 
@@ -18,6 +18,13 @@
 
 - 
 
+## Requisitos numerados
+
+| ID | Requisito | Issue | AC |
+|--------|-----------|-------|------|
+| REQ-01 | | #NN | AC-01 |
+| REQ-02 | | #NN | AC-02 |
+
 ## Paths a tocar (concretos)
 
 - 
@@ -31,7 +38,7 @@
 - Persistencia (Prisma/models):
   - 
 - Idempotencia (si aplica):
-  - Key: 
+  - Key:
   - Constraint unique / estrategia:
 
 ## Comportamiento
@@ -43,22 +50,44 @@
   - Reintentos
   - Out-of-order (si aplica)
 
-## Acceptance criteria (verificables)
+## Acceptance Criteria (verificables)
 
-- [ ] 
-- [ ] 
+| ID | Criterio | Evidencia |
+|--------|----------|-----------|
+| AC-01 | | test: `describe(...)` / log / screenshot |
+| AC-02 | | |
 
-## Comandos para validar
+## Plan de pruebas
 
-- `pnpm lint`
-- `pnpm test`
-- (si aplica) `pnpm db:migrate`
+- Unit:
+  - 
+- Integration:
+  - 
+- Manual (si aplica):
+  - 
+
+## DoD
+
+- [ ] Todos los AC tienen evidencia
+- [ ] Sin scope creep (solo lo del brief)
+- [ ] Estado persistido en Postgres (sin lógica solo en memoria)
+- [ ] Idempotencia implementada y testeada (si aplica)
+- [ ] Guardrails: bot NO inventa precio/stock/políticas/ETA
+- [ ] PII minimizada y sin logs de datos sensibles
+- [ ] `pnpm lint` y `pnpm test` pasan
+- [ ] DB: migrations incluidas (si aplica)
+
+## Constraints
+
+- Guardrails: el bot NO inventa precio/stock/políticas/ETA.
+- PII: minimizar y evitar logs con datos sensibles.
 
 ## Riesgos y mitigaciones
 
 - 
 
-## Notas
+## Spec Change Log
 
-- Guardrails: el bot NO inventa precio/stock/políticas/ETA.
-- PII: minimizar y evitar logs con datos sensibles.
+| Fecha | Cambio | Motivo |
+|-------|--------|--------|
+| | | |

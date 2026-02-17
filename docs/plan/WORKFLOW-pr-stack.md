@@ -1,35 +1,57 @@
-# Workflow — PR Stack + PR Brief (Core V1)
+# Workflow — SDD + PR Stack (Core V1)
 
-Este repo usa un flujo híbrido:
+> Flujo Spec-Driven Development con PR stacks.
+> Detalle completo: `docs/plan/SDD-FLOW.md`
 
-- **PR Stack global**: define el roadmap (8–15 PRs) con dependencias.
-- **PR Brief por PR**: especificación “1 página” antes de escribir código.
+## Principio
+
+**La spec (brief.md) es la fuente de verdad. Todo se verifica contra ella.**
 
 ## Artefactos
 
+- Flujo SDD: `docs/plan/SDD-FLOW.md`
 - Stack: `docs/plan/PR-STACK-core-v1.md`
 - Briefs: `docs/plan/pr-briefs/PR-XX-<slug>.md`
 - Template: `docs/plan/PR-BRIEF-template.md`
 
-## Secuencia (determinística)
+## Secuencia (spec-locked)
 
-1) **Planner**
-   - Si no existe: genera/actualiza el Stack global.
-   - Antes de cada PR: genera el Brief (objetivo, scope fence, paths, contratos, acceptance, comandos).
+### Fase 1: Spec (antes de codear)
 
-2) **Builder**
-   - Implementa estrictamente lo definido en el Brief.
-   - Agrega migraciones/tests según DoD.
-   - Si descubre una diferencia con el Brief, NO “inventar” scope: documenta el gap y pide al Planner actualizar Brief/Stack.
+1. **Architect** — tech design + entrada en PR-STACK
+2. **Planner** — genera brief.md con status `DRAFT`
+3. **BRIEF GATE** — Humano aprueba brief — status `APPROVED`
 
-3) **Reviewer**
-   - Revisa contra: (a) Brief, (b) reglas del repo (`AGENTS.md`, `.github/copilot-instructions.md`).
-   - Devuelve must-fix y tests faltantes.
+### Fase 2: Setup (post-aprobacion)
 
-4) **Planner**
-   - Actualiza el Stack si hubo cambios reales (dependencias, split/merge de PRs, riesgos).
+4. **Planner** — crea issues (1:1 con REQs del brief) + branch + sync
+
+### Fase 3: Build (spec-locked)
+
+5. **Builder** — implementa SOLO lo del brief
+6. Si falta info — **Spec Change Request** — Planner actualiza — Humano re-aprueba
+7. **Builder <> Reviewer** — iteracion hasta LGTM
+
+### Fase 4: Ship (merge)
+
+8. **Builder** — push + crea PR con checklist AC/DoD
+9. **VERIFICATION GATE** — Humano verifica evidencia por AC — merge
+
+## Gates
+
+| Gate | Quien aprueba | Que bloquea |
+|------|---------------|-------------|
+| BRIEF GATE | Humano | No branch, no issues, no codigo sin brief APPROVED |
+| VERIFICATION GATE | Humano | No merge sin evidencia completa por AC + DoD |
 
 ## Scope control
 
-- El Brief debe incluir **✅ Included / ❌ Excluded** y **paths exactos** a tocar.
-- Si algo no cabe en el PR actual, se empuja al siguiente PR del stack o se crea uno nuevo (y se registra en el Stack).
+- Brief incluye **Included / Excluded**, **REQs numerados** y **paths exactos**.
+- Si algo no cabe — nuevo PR en el stack (y se registra).
+- Si algo falta — Spec Change Request (no se improvisa).
+
+## Trazabilidad
+
+```
+brief.md (REQ-01) -> Issue (#NN) -> PR AC checklist -> Evidencia (test)
+```

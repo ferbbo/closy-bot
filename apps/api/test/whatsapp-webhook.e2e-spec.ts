@@ -50,6 +50,14 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
         },
       },
     });
+    // PR-03.10: Clean up message logs
+    await prisma.messageLog.deleteMany({
+      where: {
+        providerMessageId: {
+          startsWith: 'test-',
+        },
+      },
+    });
   });
 
   describe('POST /webhooks/whatsapp/inbound', () => {
@@ -100,6 +108,31 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
       });
 
       expect(messages).toHaveLength(1);
+    });
+
+    it('should not create duplicate MessageLog when message_id is duplicated (AC-07)', async () => {
+      // Arrange & Act: First request creates MessageLog
+      await request(app.getHttpServer())
+        .post('/webhooks/whatsapp/inbound')
+        .send(validPayload)
+        .expect(200);
+
+      // Act: Second request with same message_id should not create another MessageLog
+      await request(app.getHttpServer())
+        .post('/webhooks/whatsapp/inbound')
+        .send(validPayload)
+        .expect(200);
+
+      // Assert: Only one MessageLog should exist
+      const messageLogs = await prisma.messageLog.findMany({
+        where: {
+          providerMessageId: validPayload.message_id,
+          direction: 'IN',
+        },
+      });
+
+      expect(messageLogs).toHaveLength(1);
+      expect(messageLogs[0].providerMessageId).toBe(validPayload.message_id);
     });
 
     it('should reject invalid payload with 400', () => {

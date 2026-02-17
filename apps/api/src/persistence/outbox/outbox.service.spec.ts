@@ -169,8 +169,9 @@ describe('OutboxService', () => {
       expect(logSpy).not.toHaveBeenCalledWith(expect.stringContaining('+573001234567'));
     });
 
-    it('should truncate text in logs', async () => {
+    it('should not include message text in INFO logs (AC-08 PII-safe)', async () => {
       const logSpy = jest.spyOn(service['logger'], 'log');
+      const debugSpy = jest.spyOn(service['logger'], 'debug');
 
       const longText = 'A'.repeat(100);
       const params = {
@@ -183,8 +184,12 @@ describe('OutboxService', () => {
 
       await service.enqueueWhatsAppText(params);
 
-      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('A'.repeat(50) + '...'));
-      expect(logSpy).not.toHaveBeenCalledWith(expect.stringContaining(longText));
+      // AC-08: INFO level should show length, not text content
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('length=100 chars'));
+      expect(logSpy).not.toHaveBeenCalledWith(expect.stringContaining('AAAA'));
+
+      // DEBUG level may include truncated text for development
+      expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('A'.repeat(50) + '...'));
     });
   });
 });

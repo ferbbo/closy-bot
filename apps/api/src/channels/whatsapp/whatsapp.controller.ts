@@ -168,6 +168,7 @@ export class WhatsAppController {
       if (result.shouldSend) {
         await this.outboxService.enqueueWhatsAppText({
           merchantId: result.merchantId,
+          conversationId: result.conversationId, // PR-03.10
           to: dto.from,
           text: result.response,
           dedupeKey: `legacy-reply:${dto.message_id}`,
@@ -224,6 +225,7 @@ export class WhatsAppController {
         if (result.shouldSend) {
           await this.outboxService.enqueueWhatsAppText({
             merchantId: result.merchantId,
+            conversationId: result.conversationId, // PR-03.10
             to: dto.from,
             text: result.response,
             dedupeKey: `reply:${dto.message_id}`,

@@ -59,7 +59,7 @@ export class IntentRouterService {
   classify(text: string): IntentResult {
     const normalizedText = text.toLowerCase().trim();
 
-    this.logger.debug(`Classifying text: "${text}"`);
+    this.logger.debug(`Classifying intent for message (${text.length} chars)`);
 
     // Check GREETING
     if (this.matchesKeywords(normalizedText, this.keywords.GREETING)) {

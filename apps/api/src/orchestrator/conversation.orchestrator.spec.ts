@@ -10,6 +10,8 @@ import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
 import { LlmService } from '../llm/llm.service';
 import { Customer, Merchant, Conversation } from '@prisma/client';
+import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
+import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10
 
 describe('ConversationOrchestrator', () => {
   let orchestrator: ConversationOrchestrator;
@@ -111,6 +113,21 @@ describe('ConversationOrchestrator', () => {
           provide: LlmService,
           useValue: {
             generateConversationalResponse: jest.fn(),
+          },
+        },
+        {
+          provide: MessageLogRepository,
+          useValue: {
+            create: jest.fn().mockResolvedValue({ id: 'log-1' }),
+            findLastKByConversation: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: MemoryConfigService,
+          useValue: {
+            getMessageHistoryDays: jest.fn().mockReturnValue(30),
+            getMessageHistoryMaxPerConvo: jest.fn().mockReturnValue(50),
+            getLlmContextLastK: jest.fn().mockReturnValue(10),
           },
         },
       ],
