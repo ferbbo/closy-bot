@@ -8,6 +8,7 @@ import { OrchestratorModule } from './orchestrator/orchestrator.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { LlmModule } from './llm/llm.module';
 import { CatalogManagementModule } from './catalog-management/catalog-management.module';
+import { OutboxDispatcherModule } from './workers/outbox-dispatcher/outbox-dispatcher.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { CatalogManagementModule } from './catalog-management/catalog-management
     OrchestratorModule,
     AnalyticsModule,
     CatalogManagementModule,
+    OutboxDispatcherModule,
   ],
 })
 export class AppModule {}

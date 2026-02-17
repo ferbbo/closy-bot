@@ -21,6 +21,8 @@ import { InboundMessageDto, InboundMessageResponseDto } from './dto/inbound-mess
 import { MetaWebhookPayload } from './dto/meta-webhook.dto';
 import { MetaSignatureGuard } from './guards/meta-signature.guard';
 import { mapMetaWebhookToInboundMessages, isStatusOnlyPayload } from './whatsapp-webhook.mapper';
+import { OutboxService } from '../../persistence/outbox/outbox.service';
+import { maskPhone } from '../../common/utils/pii.util';
 
 /**
  * Controller for WhatsApp webhooks (Meta WhatsApp Cloud API)
@@ -38,6 +40,7 @@ export class WhatsAppController {
     private readonly outboundService: WhatsAppOutboundService,
     private readonly orchestrator: ConversationOrchestrator,
     private readonly configService: ConfigService,
+    private readonly outboxService: OutboxService,
   ) {
     this.verifyToken = this.configService.get<string>('WHATSAPP_WEBHOOK_VERIFY_TOKEN', '');
     if (!this.verifyToken) {
@@ -139,7 +142,7 @@ export class WhatsAppController {
   @Post('inbound')
   @HttpCode(HttpStatus.OK)
   async handleInbound(@Body() dto: InboundMessageDto): Promise<InboundMessageResponseDto> {
-    const maskedPhone = this.maskPhone(dto.from);
+    const maskedPhone = maskPhone(dto.from, 'long');
     this.logger.log(
       `[LEGACY] Inbound webhook received: message_id=${dto.message_id}, from=${maskedPhone}`,
     );
@@ -161,15 +164,16 @@ export class WhatsAppController {
         `Orchestration complete: intent=${result.intent}, conversation=${result.conversationId}`,
       );
 
-      // Send response if needed
+      // Enqueue response via outbox (transactional pattern)
       if (result.shouldSend) {
-        const sendResult = await this.outboundService.sendTextMessage(dto.from, result.response);
+        await this.outboxService.enqueueWhatsAppText({
+          merchantId: result.merchantId,
+          to: dto.from,
+          text: result.response,
+          dedupeKey: `legacy-reply:${dto.message_id}`,
+        });
 
-        if (sendResult.success) {
-          this.logger.log(`Response sent successfully: ${sendResult.messageId}`);
-        } else {
-          this.logger.error(`Failed to send response: ${sendResult.error}`);
-        }
+        this.logger.log(`Response enqueued for eventual delivery`);
       }
 
       return {
@@ -195,7 +199,7 @@ export class WhatsAppController {
    * Handles idempotency, orchestration, and outbound sending
    */
   private async processMessage(dto: InboundMessageDto): Promise<void> {
-    const maskedPhone = this.maskPhone(dto.from);
+    const maskedPhone = maskPhone(dto.from, 'long');
     this.logger.log(`Processing message: id=${dto.message_id}, from=${maskedPhone}`);
 
     try {
@@ -216,15 +220,16 @@ export class WhatsAppController {
           `Orchestration complete: intent=${result.intent}, conversation=${result.conversationId}`,
         );
 
-        // 3. Send response if needed
+        // 3. Enqueue response via outbox (transactional pattern)
         if (result.shouldSend) {
-          const sendResult = await this.outboundService.sendTextMessage(dto.from, result.response);
+          await this.outboxService.enqueueWhatsAppText({
+            merchantId: result.merchantId,
+            to: dto.from,
+            text: result.response,
+            dedupeKey: `reply:${dto.message_id}`,
+          });
 
-          if (sendResult.success) {
-            this.logger.log(`Response sent successfully: ${sendResult.messageId}`);
-          } else {
-            this.logger.error(`Failed to send response: ${sendResult.error}`);
-          }
+          this.logger.log(`Response enqueued for eventual delivery`);
         }
       } catch (orchError) {
         this.logger.error(
@@ -246,14 +251,5 @@ export class WhatsAppController {
         error instanceof Error ? error.stack : error,
       );
     }
-  }
-
-  /**
-   * Mask phone number for PII protection in logs
-   * Example: +573001234567 -> +57300****567
-   */
-  private maskPhone(phone: string): string {
-    if (phone.length <= 6) return '****';
-    return phone.slice(0, 6) + '****' + phone.slice(-3);
   }
 }

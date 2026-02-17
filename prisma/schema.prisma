@@ -59,9 +59,10 @@ model Merchant {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  conversations Conversation[]
-  categories    Category[]
-  products      Product[]
+  conversations  Conversation[]
+  categories     Category[]
+  products       Product[]
+  outboxMessages OutboxMessage[]
 
   @@map("merchants")
 }
@@ -168,6 +169,56 @@ model ProductVariant {
   @@unique([productId, sku]) // Ensure SKU is unique per product
   @@index([productId])
   @@index([isActive])
+}
+
+// ============================================================================
+// PR-03.9: Transactional Outbox (Outbound WhatsApp)
+// ============================================================================
+
+enum OutboxChannel {
+  WHATSAPP
+}
+
+enum OutboxMessageType {
+  SEND_TEXT
+}
+
+enum OutboxMessageStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+}
+
+/// Transactional outbox for reliable WhatsApp outbound messaging
+/// Guarantees eventual delivery without dual-write race conditions
+model OutboxMessage {
+  id          String              @id @default(cuid())
+  merchantId  String              @map("merchant_id")
+  channel     OutboxChannel
+  type        OutboxMessageType
+  to          String
+  payloadJson Json                @map("payload_json")
+  dedupeKey   String?             @map("dedupe_key")
+
+  status      OutboxMessageStatus @default(PENDING)
+  attempts    Int                 @default(0)
+  nextRetryAt DateTime            @default(now()) @map("next_retry_at")
+  lockedAt    DateTime?           @map("locked_at")
+  lockedBy    String?             @map("locked_by")
+  lastError   String?             @map("last_error")
+
+  providerMessageId String?       @map("provider_message_id")
+  sentAt            DateTime?     @map("sent_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id])
+
+  @@map("outbox_messages")
+  @@index([merchantId])
+  @@index([status, nextRetryAt])
+  @@unique([merchantId, dedupeKey])
 }
 
 // ============================================================================

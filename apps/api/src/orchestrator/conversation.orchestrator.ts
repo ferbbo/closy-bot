@@ -22,6 +22,7 @@ export interface OrchestratorResult {
   response: string;
   shouldSend: boolean;
   conversationId: string;
+  merchantId: string;
   intent: IntentType;
 }
 
@@ -144,6 +145,7 @@ export class ConversationOrchestrator {
       response,
       shouldSend: true,
       conversationId: conversation.id,
+      merchantId: merchant.id,
       intent: intentResult.intent,
     };
   }

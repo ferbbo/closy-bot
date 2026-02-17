@@ -15,7 +15,7 @@ async function main() {
     update: {},
     create: {
       name: 'Dev Test Store',
-      whatsappNumber: '+573001111111',
+      whatsappNumber: '+573133898468',
       apiKey: 'sk_test_dev_merchant_001',
     },
   });
@@ -52,28 +52,28 @@ async function main() {
     },
   });
 
-  // Create test conversations
-  const conv1 = await prisma.conversation.create({
-    data: {
-      customerId: customer1.id,
-      merchantId: merchant.id,
-      channel: 'whatsapp',
-      status: 'active',
-      lastMessageAt: new Date(),
-    },
-  });
-  console.log('✅ Created conversation 1:', conv1.id);
+  // // Create test conversations
+  // const conv1 = await prisma.conversation.create({
+  //   data: {
+  //     customerId: customer1.id,
+  //     merchantId: merchant.id,
+  //     channel: 'whatsapp',
+  //     status: 'active',
+  //     lastMessageAt: new Date(),
+  //   },
+  // });
+  // console.log('✅ Created conversation 1:', conv1.id);
 
-  const conv2 = await prisma.conversation.create({
-    data: {
-      customerId: customer2.id,
-      merchantId: merchant.id,
-      channel: 'whatsapp',
-      status: 'active',
-      lastMessageAt: new Date(),
-    },
-  });
-  console.log('✅ Created conversation 2:', conv2.id);
+  // const conv2 = await prisma.conversation.create({
+  //   data: {
+  //     customerId: customer2.id,
+  //     merchantId: merchant.id,
+  //     channel: 'whatsapp',
+  //     status: 'active',
+  //     lastMessageAt: new Date(),
+  //   },
+  // });
+  // console.log('✅ Created conversation 2:', conv2.id);
 
   // PR-03: Create catalog test data
   console.log('\n📦 Creating catalog test data...');
