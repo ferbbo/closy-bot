@@ -138,6 +138,28 @@
   - Webhook ACK rápido (no bloquea por envío)
   - 2 instancias worker sin doble-procesamiento por `SKIP LOCKED`
   - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+### PR-03.10 — Conversation Memory: historial corto + summary + retención 🟡 ENHANCEMENT
+- **Objetivo:** habilitar continuidad conversacional "humana" con historial corto acotado (TTL) y resumen+facts long-lived, más jobs de cleanup/sumarización.
+- **Depende de:** PR-03.5 (orchestrator), PR-03.6 (LLM adapter). Opcional: PR-03.9 (patrón scheduler similar).
+- **Incluye:**
+  - Modelo `MessageLog` (IN + OUT) con `expiresAt` para TTL
+  - Campos en `Conversation`: `summary`, `memoryFacts`, `lastIntent`, `lastSummarizedAt`
+  - Jobs `@nestjs/schedule`:
+    - `message-log-cleanup.service.ts`: elimina logs expirados + cap por conversación
+    - `conversation-summarization.service.ts`: actualiza summary + facts periódicamente
+  - Context builder extendido: últimos K logs + summary+facts + estado de negocio
+  - Config por env + override por merchant en `playbookConfig.memory`
+  - Observabilidad PII-safe
+- **Excluye:** archiving S3, partitioning, anonimización masiva, búsqueda CRM.
+- **DoD específico:**
+  - Migración crea `message_logs` + nuevos campos en `conversations`
+  - Logs acotados por TTL + cap (job cleanup funcional)
+  - Summary/facts se actualizan periódicamente (job summarization funcional)
+  - LLM context usa últimos K + summary sin romper guardrails
+  - Webhook dedupe existente no se rompe
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+- **Issue:** [#28](https://github.com/ferbbo/closy-bot/issues/28), [#29](https://github.com/ferbbo/closy-bot/issues/29), [#30](https://github.com/ferbbo/closy-bot/issues/30), [#31](https://github.com/ferbbo/closy-bot/issues/31), [#32](https://github.com/ferbbo/closy-bot/issues/32), [#33](https://github.com/ferbbo/closy-bot/issues/33), [#34](https://github.com/ferbbo/closy-bot/issues/34)
+- **Brief:** `docs/plan/pr-briefs/PR-03.10-conversation-memory-retention.md` ✅
 
 ### PR-04 — Carrito: CRUD conversacional persistido
 - **Objetivo:** crear carrito por customer/merchant, agregar/remover/actualizar qty, y mostrar resumen.
