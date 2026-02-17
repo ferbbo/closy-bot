@@ -1,10 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { Conversation, MessageDirection } from '@prisma/client';
 import { LlmService } from './llm.service';
 import { GroqLlmProvider } from './providers/groq-llm.provider';
 import { LlmProviderError } from './interfaces/llm-provider.interface';
 import { PlaybookService } from '../services/playbook.service';
-import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
+import {
+  MessageLogRepository,
+  MessageLogDto,
+} from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { ConversationRepository } from '../persistence/repositories/conversation.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10 AC-06
 
@@ -366,6 +370,191 @@ describe('LlmService', () => {
 
       expect(result).toContain('Minimarket');
       expect(result).toContain('Conveniencia');
+    });
+  });
+
+  describe('buildContextWithMemory (AC-05)', () => {
+    let service: LlmService;
+    let mockMessageLogRepo: jest.Mocked<MessageLogRepository>;
+    let mockConversationRepo: jest.Mocked<ConversationRepository>;
+    let mockMemoryConfigService: jest.Mocked<MemoryConfigService>;
+
+    beforeEach(async () => {
+      mockMessageLogRepo = {
+        findLastKByConversation: jest.fn(),
+      } as unknown as jest.Mocked<MessageLogRepository>;
+
+      mockConversationRepo = {
+        findById: jest.fn(),
+      } as unknown as jest.Mocked<ConversationRepository>;
+
+      mockMemoryConfigService = {
+        getLlmContextLastK: jest.fn(),
+      } as unknown as jest.Mocked<MemoryConfigService>;
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          LlmService,
+          PlaybookService,
+          {
+            provide: ConfigService,
+            useValue: {
+              get: jest.fn().mockReturnValue(false),
+            },
+          },
+          {
+            provide: GroqLlmProvider,
+            useValue: {},
+          },
+          {
+            provide: MessageLogRepository,
+            useValue: mockMessageLogRepo,
+          },
+          {
+            provide: ConversationRepository,
+            useValue: mockConversationRepo,
+          },
+          {
+            provide: MemoryConfigService,
+            useValue: mockMemoryConfigService,
+          },
+        ],
+      }).compile();
+
+      service = module.get<LlmService>(LlmService);
+    });
+
+    it('should build context with recent message history (AC-05)', async () => {
+      // Arrange
+      const conversationContext = {
+        conversationId: 'conv-123',
+        merchantName: 'Test Store',
+      };
+
+      const mockLogs: MessageLogDto[] = [
+        {
+          id: 'log-3',
+          conversationId: 'conv-123',
+          merchantId: 'merchant-1',
+          direction: MessageDirection.OUT,
+          text: 'Response 2',
+          expiresAt: new Date('2026-03-19T14:00:00Z'),
+          createdAt: new Date('2026-02-17T14:00:00Z'),
+        },
+        {
+          id: 'log-2',
+          conversationId: 'conv-123',
+          merchantId: 'merchant-1',
+          direction: MessageDirection.IN,
+          text: 'Message 2',
+          expiresAt: new Date('2026-03-19T13:30:00Z'),
+          createdAt: new Date('2026-02-17T13:30:00Z'),
+        },
+      ];
+
+      mockMemoryConfigService.getLlmContextLastK.mockReturnValue(10);
+      mockMessageLogRepo.findLastKByConversation.mockResolvedValue(mockLogs);
+      mockConversationRepo.findById.mockResolvedValue(null);
+
+      // Act
+      const result = await service.buildContextWithMemory(conversationContext);
+
+      // Assert
+      expect(result.conversationMemory).toBeDefined();
+      expect(result.conversationMemory?.recentHistory).toHaveLength(2);
+      // After reverse(), oldest message (IN) comes first
+      expect(result.conversationMemory?.recentHistory[0]).toMatchObject({
+        direction: MessageDirection.IN,
+        text: 'Message 2',
+      });
+      expect(result.conversationMemory?.recentHistory[1]).toMatchObject({
+        direction: MessageDirection.OUT,
+        text: 'Response 2',
+      });
+      expect(mockMessageLogRepo.findLastKByConversation).toHaveBeenCalledWith('conv-123', 10);
+    });
+
+    it('should include summary and facts when available (AC-05)', async () => {
+      // Arrange
+      const conversationContext = {
+        conversationId: 'conv-456',
+        merchantName: 'Fashion Store',
+      };
+
+      const mockConversation: Conversation = {
+        id: 'conv-456',
+        customerId: 'cust-123',
+        merchantId: 'merchant-1',
+        channel: 'whatsapp',
+        status: 'active',
+        lastMessageAt: new Date(),
+        createdAt: new Date(),
+        summary: 'Customer is looking for blue shirts in size M',
+        memoryFacts: { preferredSize: 'M', preferredColor: 'blue' },
+        lastIntent: 'SEARCH',
+        lastSummarizedAt: new Date(),
+      };
+
+      mockMemoryConfigService.getLlmContextLastK.mockReturnValue(5);
+      mockMessageLogRepo.findLastKByConversation.mockResolvedValue([]);
+      mockConversationRepo.findById.mockResolvedValue(mockConversation);
+
+      // Act
+      const result = await service.buildContextWithMemory(conversationContext);
+
+      // Assert
+      expect(result.conversationMemory?.summary).toBe(
+        'Customer is looking for blue shirts in size M',
+      );
+      expect(result.conversationMemory?.facts).toEqual({
+        preferredSize: 'M',
+        preferredColor: 'blue',
+      });
+      expect(result.conversationMemory?.lastIntent).toBe('SEARCH');
+    });
+
+    it('should respect merchant config override for lastK (AC-06)', async () => {
+      // Arrange
+      const conversationContext = {
+        conversationId: 'conv-789',
+        merchantName: 'Custom Store',
+      };
+
+      const merchantConfig = {
+        memory: {
+          llmContextLastK: 20,
+        },
+      };
+
+      mockMemoryConfigService.getLlmContextLastK.mockReturnValue(20);
+      mockMessageLogRepo.findLastKByConversation.mockResolvedValue([]);
+      mockConversationRepo.findById.mockResolvedValue(null);
+
+      // Act
+      await service.buildContextWithMemory(conversationContext, merchantConfig);
+
+      // Assert
+      expect(mockMemoryConfigService.getLlmContextLastK).toHaveBeenCalledWith(merchantConfig);
+      expect(mockMessageLogRepo.findLastKByConversation).toHaveBeenCalledWith('conv-789', 20);
+    });
+
+    it('should return base context on error (graceful degradation)', async () => {
+      // Arrange
+      const conversationContext = {
+        conversationId: 'conv-error',
+        merchantName: 'Test Store',
+      };
+
+      mockMemoryConfigService.getLlmContextLastK.mockReturnValue(10);
+      mockMessageLogRepo.findLastKByConversation.mockRejectedValue(new Error('DB error'));
+
+      // Act
+      const result = await service.buildContextWithMemory(conversationContext);
+
+      // Assert
+      expect(result).toBeDefined();
+      expect(result.merchantName).toBe('Test Store');
+      expect(result.conversationMemory).toBeUndefined();
     });
   });
 });

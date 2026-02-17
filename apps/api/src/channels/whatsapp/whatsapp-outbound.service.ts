@@ -46,7 +46,7 @@ export class WhatsAppOutboundService {
     const sanitizedTo = to.replace(/[+\s]/g, '');
     const maskedTo = this.maskPhone(sanitizedTo);
 
-    this.logger.log(`Sending text message to ${maskedTo}: "${text.substring(0, 50)}..."`);
+    this.logger.log(`Sending text message to ${maskedTo} (${text.length} chars)`);
 
     // Dry run mode for tests
     if (this.dryRun || !this.accessToken || !this.phoneNumberId) {
