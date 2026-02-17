@@ -1,0 +1,85 @@
+name: "Spec Change Request (SCR)"
+description: "Gap detectado en brief.md durante implementacion. Requiere actualizacion de spec antes de continuar."
+title: "SCR: PR-XX - <descripcion del gap>"
+labels:
+  - spec-change-request
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Un SCR se abre cuando el Builder detecta que el brief esta incompleto,
+        ambiguo o contradice el codigo existente.
+
+        **Flujo**: Builder abre SCR -> Planner actualiza brief -> Humano re-aprueba -> Builder retoma.
+
+  - type: input
+    id: pr_id
+    attributes:
+      label: "PR afectado"
+      description: "Ej: PR-04"
+      placeholder: "PR-04"
+    validations:
+      required: true
+
+  - type: input
+    id: brief_path
+    attributes:
+      label: "Brief afectado (ruta)"
+      placeholder: "docs/plan/pr-briefs/PR-04-carrito-crud.md"
+    validations:
+      required: true
+
+  - type: textarea
+    id: gap
+    attributes:
+      label: "Gap detectado"
+      description: "Que falta, es ambiguo o contradice el codigo."
+      placeholder: |
+        REQ-03 dice "validar stock" pero no especifica:
+        - Que pasa si stock = 0 al momento del checkout
+        - Si se reserva stock o solo se valida
+    validations:
+      required: true
+
+  - type: textarea
+    id: req_ac_afectados
+    attributes:
+      label: "REQ/AC afectados"
+      description: "IDs de los requisitos o AC del brief que necesitan cambio."
+      placeholder: |
+        - REQ-03: necesita clarificar manejo de stock = 0
+        - AC-03: agregar caso edge "checkout sin stock"
+    validations:
+      required: true
+
+  - type: textarea
+    id: propuesta
+    attributes:
+      label: "Propuesta de cambio (opcional)"
+      description: "Si tienes una propuesta concreta, descríbela."
+      placeholder: |
+        Agregar REQ-03b: "Si stock = 0, responder al usuario que el producto no esta disponible y no agregar al carrito."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: impacto
+    attributes:
+      label: "Impacto"
+      description: "Que tan grande es el cambio necesario."
+      options:
+        - "Bajo: agregar/clarificar 1-2 lineas del brief"
+        - "Medio: nuevo REQ o AC"
+        - "Alto: cambio de scope significativo"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmacion
+    attributes:
+      label: "Confirmacion"
+      options:
+        - label: "Builder ha PARADO la implementacion relacionada a este gap"
+          required: true
+        - label: "Este SCR NO es para agregar features nuevas fuera del scope V1"
+          required: true

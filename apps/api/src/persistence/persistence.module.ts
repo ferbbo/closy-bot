@@ -8,6 +8,7 @@ import { CategoryRepository } from './repositories/category.repository';
 import { ProductRepository } from './repositories/product.repository';
 import { OutboxRepository } from './repositories/outbox.repository';
 import { OutboxService } from './outbox/outbox.service';
+import { MessageLogRepository } from './repositories/message-log.repository'; // PR-03.10
 
 @Global()
 @Module({
@@ -21,6 +22,7 @@ import { OutboxService } from './outbox/outbox.service';
     ProductRepository,
     OutboxRepository,
     OutboxService,
+    MessageLogRepository, // PR-03.10
   ],
   exports: [
     PrismaService,
@@ -32,6 +34,7 @@ import { OutboxService } from './outbox/outbox.service';
     ProductRepository,
     OutboxRepository,
     OutboxService,
+    MessageLogRepository, // PR-03.10
   ],
 })
 export class PersistenceModule {}

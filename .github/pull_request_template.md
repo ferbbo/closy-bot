@@ -1,18 +1,21 @@
 # Resumen
 
-(2–5 líneas: qué cambia y por qué.)
+(2-5 lineas: que cambia y por que.)
 
-## PR Brief
+## Brief (OBLIGATORIO)
 
-- Link/ruta al brief: `docs/plan/pr-briefs/PR-XX-<slug>.md`
+- **Link/ruta al brief**: `docs/plan/pr-briefs/PR-XX-<slug>.md`
+- **Status del brief**: `APPROVED` / `AMENDED`
+
+> Sin link a brief APPROVED = NO merge.
 
 ## Scope fence
 
-### ✅ Included
+### Included
 
 - 
 
-### ❌ Excluded
+### Excluded
 
 - 
 
@@ -20,29 +23,50 @@
 
 - 
 
-## Evidencia / Cómo probar
+## Trazabilidad: Requisitos -> AC -> Evidencia
 
-- Comandos:
-  - `pnpm lint`
-  - `pnpm test`
-  - (si aplica) `pnpm db:migrate`
+| REQ-ID | AC-ID | Descripcion | Evidencia (test/log/screenshot) |
+|--------|-------|-------------|-------------------------------|
+| REQ-01 | AC-01 | | test: `describe(...)` |
+| REQ-02 | AC-02 | | |
 
-## DoD / Checklist (Core V1)
+## AC Checklist (del brief)
 
-- [ ] Sin scope creep (solo lo del PR Brief)
-- [ ] Estado persistido en Postgres (sin lógica solo en memoria)
+- [ ] AC-01: 
+- [ ] AC-02: 
+
+## DoD Checklist (Core V1)
+
+- [ ] Sin scope creep (solo lo del brief)
+- [ ] Todos los AC tienen evidencia documentada arriba
+- [ ] Estado persistido en Postgres (sin logica solo en memoria)
 - [ ] Idempotencia:
   - [ ] Inbound messages dedupe por `message_id` (si aplica)
   - [ ] Payment callbacks idempotentes por `payment_intent_id` (si aplica)
-- [ ] Guardrails: el bot NO inventa precio/stock/políticas/ETA; confirmaciones transaccionales desde servicios
+- [ ] Guardrails: el bot NO inventa precio/stock/politicas/ETA
 - [ ] Seguridad/PII: no logs con PII crudo; secrets fuera del repo; inputs validados
-- [ ] DB: constraints/índices/migraciones incluidas cuando aplique
+- [ ] DB: constraints/indices/migraciones incluidas (si aplica)
 - [ ] Tests:
-  - [ ] Unit tests para lógica crítica
-  - [ ] Integration/E2E para duplicados/reintentos donde aplique
-- [ ] Observabilidad mínima: logs estructurados con `conversation_id`/`order_id` cuando aplique
+  - [ ] Unit tests para logica critica
+  - [ ] Integration/E2E para duplicados/reintentos (si aplica)
+- [ ] Observabilidad minima: logs estructurados con `conversation_id`/`order_id` (si aplica)
+- [ ] `.env.example` actualizado (si hay config nueva)
 
-## Notas de riesgo
+## Comandos para validar
+
+```bash
+pnpm lint
+pnpm test
+# (si aplica) pnpm db:migrate
+```
+
+## Spec Change Log (si hubo cambios post-aprobacion)
+
+| Fecha | REQ/AC afectado | Cambio | SCR Issue |
+|-------|-----------------|--------|-----------|
+| | | | |
+
+## Riesgos
 
 - 
 

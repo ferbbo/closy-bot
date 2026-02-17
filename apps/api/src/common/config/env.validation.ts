@@ -24,4 +24,9 @@ export const envValidationSchema = Joi.object({
   LLM_TIMEOUT_MS: Joi.number().default(30000),
   LLM_MAX_TOKENS: Joi.number().default(500),
   LLM_TEMPERATURE: Joi.number().min(0).max(2).default(0.7),
+
+  // PR-03.10: Message retention configuration
+  MESSAGE_HISTORY_DAYS: Joi.number().min(1).max(365).default(30),
+  MESSAGE_HISTORY_MAX_PER_CONVO: Joi.number().min(10).max(500).default(50),
+  LLM_CONTEXT_LAST_K: Joi.number().min(1).max(50).default(10),
 });
