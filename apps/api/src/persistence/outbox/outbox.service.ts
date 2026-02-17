@@ -44,11 +44,13 @@ export class OutboxService {
       metadata,
     };
 
-    const truncatedText = text.substring(0, 50);
-
+    // AC-08: INFO level does not log message text (PII-safe)
     this.logger.log(
-      `Enqueueing WhatsApp text: to=${maskedPhone}, text="${truncatedText}...", dedupeKey=${finalDedupeKey}`,
+      `Enqueueing WhatsApp text: to=${maskedPhone}, length=${text.length} chars, dedupeKey=${finalDedupeKey}`,
     );
+
+    // DEBUG level may include truncated text for development
+    this.logger.debug(`Message content preview: "${text.substring(0, 50)}..."`);
 
     const message = await this.outboxRepo.create({
       merchant: { connect: { id: merchantId } },
