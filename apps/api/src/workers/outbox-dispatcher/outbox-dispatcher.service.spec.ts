@@ -4,6 +4,7 @@ import { OutboxDispatcherService } from './outbox-dispatcher.service';
 import { OutboxRepository } from '../../persistence/repositories/outbox.repository';
 import { WhatsAppOutboundService } from '../../channels/whatsapp/whatsapp-outbound.service';
 import { OutboxMessageType, OutboxMessage } from '@prisma/client';
+import { MessageLogRepository } from '../../persistence/repositories/message-log.repository'; // PR-03.10
 
 describe('OutboxDispatcherService', () => {
   let service: OutboxDispatcherService;
@@ -43,6 +44,12 @@ describe('OutboxDispatcherService', () => {
             }),
           },
         },
+        {
+          provide: MessageLogRepository,
+          useValue: {
+            create: jest.fn().mockResolvedValue({ id: 'log-1' }),
+          },
+        },
       ],
     }).compile();
 
@@ -78,6 +85,12 @@ describe('OutboxDispatcherService', () => {
           { provide: OutboxRepository, useValue: repository },
           { provide: WhatsAppOutboundService, useValue: whatsappOutbound },
           { provide: ConfigService, useValue: configService },
+          {
+            provide: MessageLogRepository,
+            useValue: {
+              create: jest.fn().mockResolvedValue({ id: 'log-1' }),
+            },
+          },
         ],
       }).compile();
 

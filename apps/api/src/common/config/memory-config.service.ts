@@ -23,7 +23,11 @@ export class MemoryConfigService {
       const memory = config.memory as Record<string, unknown> | undefined;
 
       if (memory && typeof memory.messageHistoryDays === 'number') {
-        return memory.messageHistoryDays;
+        const override = memory.messageHistoryDays;
+        // Validate override is positive number
+        if (override > 0) {
+          return override;
+        }
       }
     }
 
@@ -42,7 +46,11 @@ export class MemoryConfigService {
       const memory = config.memory as Record<string, unknown> | undefined;
 
       if (memory && typeof memory.messageHistoryMaxPerConvo === 'number') {
-        return memory.messageHistoryMaxPerConvo;
+        const override = memory.messageHistoryMaxPerConvo;
+        // Validate override is positive number
+        if (override > 0) {
+          return override;
+        }
       }
     }
 
@@ -61,7 +69,11 @@ export class MemoryConfigService {
       const memory = config.memory as Record<string, unknown> | undefined;
 
       if (memory && typeof memory.llmContextLastK === 'number') {
-        return memory.llmContextLastK;
+        const override = memory.llmContextLastK;
+        // Validate override is positive number
+        if (override > 0) {
+          return override;
+        }
       }
     }
 

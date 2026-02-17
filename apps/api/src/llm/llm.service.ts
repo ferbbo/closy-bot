@@ -7,6 +7,7 @@ import { containsSuspiciousPatterns } from './prompts/base-system-prompt';
 import { PlaybookService, type MerchantPlaybookData } from '../services/playbook.service';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { ConversationRepository } from '../persistence/repositories/conversation.repository'; // PR-03.10
+import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10 AC-06
 
 /**
  * LLM Service - Facade for LLM operations
