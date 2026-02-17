@@ -1,0 +1,12 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd apps/api && npx tsc --noEmit src/channels/whatsapp/whatsapp\\.controller\\.spec\\.ts 2>&1 \\| head -20$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^pnpm db:migrate \\|\\| pnpm prisma migrate deploy$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

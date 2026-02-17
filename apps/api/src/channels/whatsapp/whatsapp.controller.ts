@@ -21,6 +21,7 @@ import { InboundMessageDto, InboundMessageResponseDto } from './dto/inbound-mess
 import { MetaWebhookPayload } from './dto/meta-webhook.dto';
 import { MetaSignatureGuard } from './guards/meta-signature.guard';
 import { mapMetaWebhookToInboundMessages, isStatusOnlyPayload } from './whatsapp-webhook.mapper';
+import { OutboxService } from '../../persistence/outbox/outbox.service';
 
 /**
  * Controller for WhatsApp webhooks (Meta WhatsApp Cloud API)
@@ -38,6 +39,7 @@ export class WhatsAppController {
     private readonly outboundService: WhatsAppOutboundService,
     private readonly orchestrator: ConversationOrchestrator,
     private readonly configService: ConfigService,
+    private readonly outboxService: OutboxService,
   ) {
     this.verifyToken = this.configService.get<string>('WHATSAPP_WEBHOOK_VERIFY_TOKEN', '');
     if (!this.verifyToken) {
@@ -161,15 +163,16 @@ export class WhatsAppController {
         `Orchestration complete: intent=${result.intent}, conversation=${result.conversationId}`,
       );
 
-      // Send response if needed
+      // Enqueue response via outbox (transactional pattern)
       if (result.shouldSend) {
-        const sendResult = await this.outboundService.sendTextMessage(dto.from, result.response);
+        await this.outboxService.enqueueWhatsAppText({
+          merchantId: result.merchantId,
+          to: dto.from,
+          text: result.response,
+          dedupeKey: `legacy-reply:${dto.message_id}`,
+        });
 
-        if (sendResult.success) {
-          this.logger.log(`Response sent successfully: ${sendResult.messageId}`);
-        } else {
-          this.logger.error(`Failed to send response: ${sendResult.error}`);
-        }
+        this.logger.log(`Response enqueued for eventual delivery`);
       }
 
       return {
@@ -216,15 +219,16 @@ export class WhatsAppController {
           `Orchestration complete: intent=${result.intent}, conversation=${result.conversationId}`,
         );
 
-        // 3. Send response if needed
+        // 3. Enqueue response via outbox (transactional pattern)
         if (result.shouldSend) {
-          const sendResult = await this.outboundService.sendTextMessage(dto.from, result.response);
+          await this.outboxService.enqueueWhatsAppText({
+            merchantId: result.merchantId,
+            to: dto.from,
+            text: result.response,
+            dedupeKey: `reply:${dto.message_id}`,
+          });
 
-          if (sendResult.success) {
-            this.logger.log(`Response sent successfully: ${sendResult.messageId}`);
-          } else {
-            this.logger.error(`Failed to send response: ${sendResult.error}`);
-          }
+          this.logger.log(`Response enqueued for eventual delivery`);
         }
       } catch (orchError) {
         this.logger.error(
