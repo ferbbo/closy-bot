@@ -82,9 +82,7 @@
   - Provider intercambiable sin cambiar orchestrator
 - **Issue:** #16
 
-<<<<<<< Updated upstream
-=======
-### PR-03.7 — Catalog Management API: Import masivo + CRUD productos 🔴 CRÍTICO
+### PR-03.7 — Catalog Management API: Import masivo + CRUD productos ✅ MERGED
 - **Objetivo:** exponer endpoints HTTP para (a) carga masiva de catálogo por CSV y (b) CRUD básico de productos/variantes, con multi-tenancy por `merchant`.
 - **Depende de:** PR-03.
 - **Incluye:**
@@ -99,7 +97,7 @@
   - CRUD no permite acceder/modificar productos de otro merchant
   - `pnpm test` pasa
 
-### PR-03.8 — Meta WhatsApp Webhook Compliance: GET verify + raw payload + signature guard 🔴 CRÍTICO
+### PR-03.8 — Meta WhatsApp Webhook Compliance: GET verify + raw payload + signature guard ✅ MERGED
 - **Objetivo:** hacer el backend compatible con el flujo real de Meta WhatsApp Cloud API webhooks (verificación, payload crudo, firma).
 - **Depende de:** PR-01 (inbound dedupe), PR-03.5 (outbound sender).
 - **Incluye:**
@@ -126,7 +124,21 @@
   - Referencia: [Meta Webhooks Getting Started](https://developers.facebook.com/docs/graph-api/webhooks/getting-started)
   - Referencia: [WhatsApp Webhook Components](https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components)
 
->>>>>>> Stashed changes
+### PR-03.9 — Transactional Outbox: WhatsApp outbound confiable 🔴 CRÍTICO
+- **Objetivo:** evitar dual-write y garantizar envío eventual de outbound WhatsApp si el commit DB ocurrió (enqueue en outbox + dispatcher async).
+- **Depende de:** PR-03.5 (outbound sender) y PR-03.8 (webhook compliance). (PR-02 recomendado por multi-tenancy/merchantId)
+- **Incluye:**
+  - Tabla `OutboxMessage` (Prisma) + índices + dedupeKey
+  - `OutboxService.enqueueWhatsAppText(...)` (reemplaza envíos directos)
+  - Worker scheduler con `FOR UPDATE SKIP LOCKED`, retries + backoff
+  - Logs PII-safe + config flags
+  - Tests unitarios (enqueue + dispatcher success/failure)
+- **Excluye:** Kafka/SQS/Redis, CDC/Debezium, nuevos canales.
+- **DoD específico:**
+  - Webhook ACK rápido (no bloquea por envío)
+  - 2 instancias worker sin doble-procesamiento por `SKIP LOCKED`
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+
 ### PR-04 — Carrito: CRUD conversacional persistido
 - **Objetivo:** crear carrito por customer/merchant, agregar/remover/actualizar qty, y mostrar resumen.
 - **Depende de:** PR-03.5 (PR-03.6 opcional pero recomendado).
