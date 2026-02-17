@@ -7,12 +7,14 @@ import { WhatsAppOutboundService } from './whatsapp-outbound.service';
 import { ConversationOrchestrator } from '../../orchestrator/conversation.orchestrator';
 import { InboundMessageDto } from './dto/inbound-message.dto';
 import { MetaSignatureGuard } from './guards/meta-signature.guard';
+import { OutboxService } from '../../persistence/outbox/outbox.service';
 
 describe('WhatsAppController', () => {
   let controller: WhatsAppController;
   let service: jest.Mocked<WhatsAppService>;
   let outboundService: jest.Mocked<WhatsAppOutboundService>;
   let orchestrator: jest.Mocked<ConversationOrchestrator>;
+  let outboxService: jest.Mocked<OutboxService>;
 
   const validDto: InboundMessageDto = {
     message_id: 'wamid.test123',
@@ -37,8 +39,15 @@ describe('WhatsAppController', () => {
       process: jest.fn().mockResolvedValue({
         response: 'Bot response',
         shouldSend: true,
-        conversationId: 'conv-123',
+        merchantId: 'merchant-123',
         intent: 'GREETING',
+      }),
+    };
+
+    const mockOutboxService = {
+      enqueueWhatsAppText: jest.fn().mockResolvedValue({
+        id: 'outbox-123',
+        status: 'PENDING',
       }),
     };
 
@@ -69,6 +78,10 @@ describe('WhatsAppController', () => {
           provide: ConfigService,
           useValue: mockConfigService,
         },
+        {
+          provide: OutboxService,
+          useValue: mockOutboxService,
+        },
         MetaSignatureGuard,
       ],
     }).compile();
@@ -77,6 +90,7 @@ describe('WhatsAppController', () => {
     service = module.get(WhatsAppService);
     outboundService = module.get(WhatsAppOutboundService);
     orchestrator = module.get(ConversationOrchestrator);
+    outboxService = module.get(OutboxService);
   });
 
   it('should be defined', () => {
@@ -100,7 +114,12 @@ describe('WhatsAppController', () => {
       });
       expect(service.processInboundMessage).toHaveBeenCalledWith(validDto);
       expect(orchestrator.process).toHaveBeenCalled();
-      expect(outboundService.sendTextMessage).toHaveBeenCalledWith('1234567890', 'Bot response');
+      expect(outboxService.enqueueWhatsAppText).toHaveBeenCalledWith({
+        merchantId: 'merchant-123',
+        to: '1234567890',
+        text: 'Bot response',
+        dedupeKey: 'legacy-reply:wamid.test123',
+      });
     });
 
     it('should return processed=false with duplicate flag for duplicate message', async () => {
@@ -139,33 +158,14 @@ describe('WhatsAppController', () => {
         response: 'Response',
         shouldSend: false,
         conversationId: 'conv-123',
+        merchantId: 'merchant-123',
         intent: 'UNKNOWN',
       });
 
       const result = await controller.handleInbound(validDto);
 
       expect(result.processed).toBe(true);
-      expect(outboundService.sendTextMessage).not.toHaveBeenCalled();
-    });
-
-    it('should handle outbound send failure gracefully', async () => {
-      service.processInboundMessage.mockResolvedValue({
-        messageId: 'wamid.test123',
-        channel: 'whatsapp',
-        userExternalId: '1234567890',
-        timestamp: new Date('2026-02-11T10:00:00Z'),
-        text: 'Hello',
-      });
-
-      outboundService.sendTextMessage.mockResolvedValue({
-        success: false,
-        error: 'API error',
-      });
-
-      const result = await controller.handleInbound(validDto);
-
-      expect(result.processed).toBe(true);
-      // Should still return success even if outbound fails (logged)
+      expect(outboxService.enqueueWhatsAppText).not.toHaveBeenCalled();
     });
 
     it('should throw when orchestrator fails after message persistence (legacy behavior)', async () => {
@@ -184,7 +184,7 @@ describe('WhatsAppController', () => {
 
       expect(service.processInboundMessage).toHaveBeenCalledWith(validDto);
       expect(orchestrator.process).toHaveBeenCalled();
-      expect(outboundService.sendTextMessage).not.toHaveBeenCalled();
+      expect(outboxService.enqueueWhatsAppText).not.toHaveBeenCalled();
     });
   });
 });
