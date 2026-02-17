@@ -5,6 +5,7 @@ import { maskPhone } from '../../common/utils/pii.util';
 
 export interface EnqueueWhatsAppTextParams {
   merchantId: string;
+  conversationId?: string; // PR-03.10: For outbound message logging
   to: string;
   text: string;
   replyToMessageId?: string;
@@ -29,7 +30,7 @@ export class OutboxService {
    * @returns Created (or existing) OutboxMessage
    */
   async enqueueWhatsAppText(params: EnqueueWhatsAppTextParams) {
-    const { merchantId, to, text, replyToMessageId, dedupeKey, metadata } = params;
+    const { merchantId, conversationId, to, text, replyToMessageId, dedupeKey, metadata } = params;
 
     const maskedPhone = maskPhone(to);
 
@@ -51,6 +52,7 @@ export class OutboxService {
 
     const message = await this.outboxRepo.create({
       merchant: { connect: { id: merchantId } },
+      conversationId, // PR-03.10: For outbound message logging
       channel: OutboxChannel.WHATSAPP,
       type: OutboxMessageType.SEND_TEXT,
       to,

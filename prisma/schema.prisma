@@ -229,13 +229,14 @@ enum OutboxMessageStatus {
 /// Transactional outbox for reliable WhatsApp outbound messaging
 /// Guarantees eventual delivery without dual-write race conditions
 model OutboxMessage {
-  id          String              @id @default(cuid())
-  merchantId  String              @map("merchant_id")
-  channel     OutboxChannel
-  type        OutboxMessageType
-  to          String
-  payloadJson Json                @map("payload_json")
-  dedupeKey   String?             @map("dedupe_key")
+  id             String              @id @default(cuid())
+  merchantId     String              @map("merchant_id")
+  conversationId String?             @map("conversation_id") // PR-03.10: For outbound message logging
+  channel        OutboxChannel
+  type           OutboxMessageType
+  to             String
+  payloadJson    Json                @map("payload_json")
+  dedupeKey      String?             @map("dedupe_key")
 
   status      OutboxMessageStatus @default(PENDING)
   attempts    Int                 @default(0)

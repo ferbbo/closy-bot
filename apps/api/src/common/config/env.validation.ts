@@ -29,4 +29,5 @@ export const envValidationSchema = Joi.object({
   MESSAGE_HISTORY_DAYS: Joi.number().min(1).max(365).default(30),
   MESSAGE_HISTORY_MAX_PER_CONVO: Joi.number().min(10).max(500).default(50),
   LLM_CONTEXT_LAST_K: Joi.number().min(1).max(50).default(10),
+  SUMMARIZATION_BATCH_SIZE: Joi.number().min(1).max(100).default(20),
 });

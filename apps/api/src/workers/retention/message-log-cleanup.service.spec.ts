@@ -16,6 +16,8 @@ describe('MessageLogCleanupService (AC-03)', () => {
 
   const mockMessageLogRepository = {
     deleteExpired: jest.fn(),
+    findConversationsExceedingCap: jest.fn(),
+    deleteOldestBeyondCap: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -71,6 +73,41 @@ describe('MessageLogCleanupService (AC-03)', () => {
       // Assert
       expect(result).toEqual({ deletedCount: 10 });
       expect(messageLogRepository.deleteExpired).toHaveBeenCalledTimes(1);
+    });
+
+    it('should apply cap cleanup for conversations exceeding limit', async () => {
+      // Arrange
+      mockMessageLogRepository.deleteExpired.mockResolvedValue(5);
+      mockMessageLogRepository.findConversationsExceedingCap.mockResolvedValue([
+        { conversationId: 'conv-1', _count: { id: 60 } },
+        { conversationId: 'conv-2', _count: { id: 75 } },
+      ]);
+      mockMessageLogRepository.deleteOldestBeyondCap.mockResolvedValueOnce(10); // conv-1
+      mockMessageLogRepository.deleteOldestBeyondCap.mockResolvedValueOnce(25); // conv-2
+
+      // Act
+      await service.cleanupExpiredMessages();
+
+      // Assert
+      expect(messageLogRepository.deleteExpired).toHaveBeenCalledTimes(1);
+      expect(messageLogRepository.findConversationsExceedingCap).toHaveBeenCalledWith(50);
+      expect(messageLogRepository.deleteOldestBeyondCap).toHaveBeenCalledTimes(2);
+      expect(messageLogRepository.deleteOldestBeyondCap).toHaveBeenCalledWith('conv-1', 50);
+      expect(messageLogRepository.deleteOldestBeyondCap).toHaveBeenCalledWith('conv-2', 50);
+    });
+
+    it('should not call cap cleanup when no conversations exceed limit', async () => {
+      // Arrange
+      mockMessageLogRepository.deleteExpired.mockResolvedValue(5);
+      mockMessageLogRepository.findConversationsExceedingCap.mockResolvedValue([]);
+
+      // Act
+      await service.cleanupExpiredMessages();
+
+      // Assert
+      expect(messageLogRepository.deleteExpired).toHaveBeenCalledTimes(1);
+      expect(messageLogRepository.findConversationsExceedingCap).toHaveBeenCalledWith(50);
+      expect(messageLogRepository.deleteOldestBeyondCap).not.toHaveBeenCalled();
     });
   });
 });

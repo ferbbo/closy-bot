@@ -5,6 +5,7 @@ import { GroqLlmProvider } from './providers/groq-llm.provider';
 import { LlmProviderError } from './interfaces/llm-provider.interface';
 import { PlaybookService } from '../services/playbook.service';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
+import { ConversationRepository } from '../persistence/repositories/conversation.repository'; // PR-03.10
 
 describe('LlmService', () => {
   let service: LlmService;
@@ -42,6 +43,12 @@ describe('LlmService', () => {
             provide: MessageLogRepository,
             useValue: {
               findLastKByConversation: jest.fn().mockResolvedValue([]),
+            },
+          },
+          {
+            provide: ConversationRepository,
+            useValue: {
+              findById: jest.fn().mockResolvedValue(null),
             },
           },
         ],
@@ -211,6 +218,12 @@ describe('LlmService', () => {
             provide: MessageLogRepository,
             useValue: {
               findLastKByConversation: jest.fn().mockResolvedValue([]),
+            },
+          },
+          {
+            provide: ConversationRepository,
+            useValue: {
+              findById: jest.fn().mockResolvedValue(null),
             },
           },
         ],

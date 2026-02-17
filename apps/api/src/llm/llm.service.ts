@@ -6,6 +6,7 @@ import { PlaybookPromptBuilder, type SystemPromptParams } from './prompts/playbo
 import { containsSuspiciousPatterns } from './prompts/base-system-prompt';
 import { PlaybookService, type MerchantPlaybookData } from '../services/playbook.service';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
+import { ConversationRepository } from '../persistence/repositories/conversation.repository'; // PR-03.10
 
 /**
  * LLM Service - Facade for LLM operations
@@ -57,6 +58,7 @@ export class LlmService {
     private readonly groqProvider: GroqLlmProvider,
     private readonly playbookService: PlaybookService,
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
+    private readonly conversationRepository: ConversationRepository, // PR-03.10
   ) {
     this.llmEnabled = this.configService.get<boolean>('LLM_ENABLED', false);
 
@@ -161,18 +163,17 @@ export class LlmService {
       }));
 
       // PR-03.10: Fetch summary and facts from Conversation (REQ-05, AC-05)
-      // Import ConversationRepository in constructor when needed
-      // For now, include only what we have available
-      // TODO: Inject ConversationRepository and fetch conversation.summary/memoryFacts/lastIntent
+      const conversation = await this.conversationRepository.findById(
+        conversationContext.conversationId,
+      );
 
       return {
         ...baseContext,
         conversationMemory: {
           recentHistory,
-          // summary and facts will be available once ConversationRepository is injected
-          // summary: conversation?.summary,
-          // facts: conversation?.memoryFacts as Record<string, unknown>,
-          // lastIntent: conversation?.lastIntent,
+          summary: conversation?.summary ?? undefined,
+          facts: (conversation?.memoryFacts as Record<string, unknown>) ?? undefined,
+          lastIntent: conversation?.lastIntent ?? undefined,
         },
       };
     } catch (error) {
