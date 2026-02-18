@@ -7,9 +7,15 @@ export interface SendMessageResult {
   error?: string;
 }
 
+export interface WhatsAppCredentials {
+  accessToken: string;
+  phoneNumberId: string;
+}
+
 /**
  * WhatsApp Outbound Service
  * Sends messages via WhatsApp Cloud API
+ * PR-03.11: Added support for dynamic credentials per channel
  */
 @Injectable()
 export class WhatsAppOutboundService {
@@ -36,20 +42,47 @@ export class WhatsAppOutboundService {
 
   /**
    * Send a text message via WhatsApp Cloud API
+   * Legacy method using env var credentials
    *
    * @param to - Recipient phone number (international format, e.g., +573001234567)
    * @param text - Message text content
    * @returns SendMessageResult with success status and message ID
+   * @deprecated Use sendTextMessageWithCredentials() for multi-channel support
    */
   async sendTextMessage(to: string, text: string): Promise<SendMessageResult> {
+    this.logger.debug('Using legacy sendTextMessage with env var credentials');
+
+    return this.sendTextMessageWithCredentials(to, text, {
+      accessToken: this.accessToken,
+      phoneNumberId: this.phoneNumberId,
+    });
+  }
+
+  /**
+   * Send a text message via WhatsApp Cloud API with explicit credentials
+   * PR-03.11: Primary method for multi-channel support (AC-05)
+   *
+   * @param to - Recipient phone number (international format, e.g., +573001234567)
+   * @param text - Message text content
+   * @param credentials - WhatsApp credentials (accessToken, phoneNumberId)
+   * @returns SendMessageResult with success status and message ID
+   */
+  async sendTextMessageWithCredentials(
+    to: string,
+    text: string,
+    credentials: WhatsAppCredentials,
+  ): Promise<SendMessageResult> {
     // Sanitize phone number (remove + and spaces)
     const sanitizedTo = to.replace(/[+\s]/g, '');
     const maskedTo = this.maskPhone(sanitizedTo);
+    const maskedPhoneNumberId = this.maskPhone(credentials.phoneNumberId);
 
-    this.logger.log(`Sending text message to ${maskedTo} (${text.length} chars)`);
+    this.logger.log(
+      `Sending text message to ${maskedTo} via phone ${maskedPhoneNumberId} (${text.length} chars)`,
+    );
 
     // Dry run mode for tests
-    if (this.dryRun || !this.accessToken || !this.phoneNumberId) {
+    if (this.dryRun || !credentials.accessToken || !credentials.phoneNumberId) {
       this.logger.debug('[DRY RUN] Message not sent (test mode or missing credentials)');
       return {
         success: true,
@@ -58,7 +91,7 @@ export class WhatsAppOutboundService {
     }
 
     try {
-      const url = `${this.apiUrl}/${this.apiVersion}/${this.phoneNumberId}/messages`;
+      const url = `${this.apiUrl}/${this.apiVersion}/${credentials.phoneNumberId}/messages`;
       const payload = {
         messaging_product: 'whatsapp',
         to: sanitizedTo,
@@ -71,7 +104,7 @@ export class WhatsAppOutboundService {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${this.accessToken}`,
+          Authorization: `Bearer ${credentials.accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),

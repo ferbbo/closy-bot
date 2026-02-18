@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { OutboxRepository } from '../../persistence/repositories/outbox.repository';
+import { ChannelRepository } from '../../persistence/repositories/channel.repository'; // PR-03.11
 import { WhatsAppOutboundService } from '../../channels/whatsapp/whatsapp-outbound.service';
 import { OutboxMessage, OutboxMessageType, MessageDirection } from '@prisma/client';
 import { maskPhone } from '../../common/utils/pii.util';
@@ -10,6 +11,7 @@ import { MessageLogRepository } from '../../persistence/repositories/message-log
 /**
  * Dispatcher service for processing outbox messages
  * Runs periodically to claim and send pending/failed messages
+ * PR-03.11: Uses channel-specific credentials when available (AC-07)
  */
 @Injectable()
 export class OutboxDispatcherService implements OnModuleInit {
@@ -23,6 +25,7 @@ export class OutboxDispatcherService implements OnModuleInit {
 
   constructor(
     private readonly outboxRepo: OutboxRepository,
+    private readonly channelRepo: ChannelRepository, // PR-03.11
     private readonly whatsappOutbound: WhatsAppOutboundService,
     private readonly configService: ConfigService,
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
@@ -118,6 +121,9 @@ export class OutboxDispatcherService implements OnModuleInit {
   /**
    * Send a text message via WhatsApp
    */
+  /**
+   * PR-03.11 REQ-06 AC-07: Uses channel credentials when available, fallback to env vars
+   */
   private async sendTextMessage(message: OutboxMessage) {
     const payload = message.payloadJson as {
       text: string;
@@ -125,7 +131,34 @@ export class OutboxDispatcherService implements OnModuleInit {
       metadata?: Record<string, unknown>;
     };
 
-    const result = await this.whatsappOutbound.sendTextMessage(message.to, payload.text);
+    let result: { success: boolean; messageId?: string; error?: string };
+
+    // PR-03.11: Use channel credentials if channelId present, else fallback to env vars
+    if (message.channelId) {
+      const channel = await this.channelRepo.findById(message.channelId);
+      if (!channel) {
+        // This should not happen in production, but handle defensively
+        this.logger.warn(
+          `Channel not found for channelId=${message.channelId}, falling back to env vars`,
+        );
+        result = await this.whatsappOutbound.sendTextMessage(message.to, payload.text);
+      } else {
+        // Use channel-specific credentials (AC-07)
+        const credentials = channel.credentials as {
+          businessAccountId: string;
+          phoneNumberId: string;
+          accessToken: string;
+        };
+        result = await this.whatsappOutbound.sendTextMessageWithCredentials(
+          message.to,
+          payload.text,
+          credentials,
+        );
+      }
+    } else {
+      // Backwards compatibility: no channelId -> use env vars (AC-07)
+      result = await this.whatsappOutbound.sendTextMessage(message.to, payload.text);
+    }
 
     if (!result.success) {
       throw new Error(result.error ?? 'Unknown error from WhatsApp API');

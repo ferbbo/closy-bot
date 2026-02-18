@@ -14,18 +14,21 @@ export class ConversationService {
   /**
    * Get or create a conversation for a customer on a specific channel
    * Returns existing active conversation or creates a new one
+   * PR-03.11 AC-11: Includes channelId for multi-channel support
    * @param customerId Customer ID
    * @param merchantId Merchant ID
    * @param channel Channel (whatsapp, webchat, instagram)
+   * @param channelId Channel ID (PR-03.11)
    * @returns Active conversation
    */
   async getOrCreateConversation(
     customerId: string,
     merchantId: string,
     channel: Channel,
+    channelId?: string | null,
   ): Promise<Conversation> {
     this.logger.log(
-      `Getting or creating conversation: customer=${customerId}, merchant=${merchantId}, channel=${channel}`,
+      `Getting or creating conversation: customer=${customerId}, merchant=${merchantId}, channel=${channel}, channelId=${channelId}`,
     );
 
     // Try to find existing active conversation
@@ -33,6 +36,7 @@ export class ConversationService {
       customerId,
       merchantId,
       channel,
+      channelId ?? undefined,
     );
 
     if (conversation) {
@@ -43,11 +47,12 @@ export class ConversationService {
 
     // Create new conversation if not found
     this.logger.log(
-      `Creating new conversation: customer=${customerId}, merchant=${merchantId}, channel=${channel}`,
+      `Creating new conversation: customer=${customerId}, merchant=${merchantId}, channel=${channel}, channelId=${channelId}`,
     );
     conversation = await this.conversationRepository.create({
       customer: { connect: { id: customerId } },
       merchant: { connect: { id: merchantId } },
+      channelId, // PR-03.11 AC-11
       channel,
       status: ConversationStatus.ACTIVE,
       lastMessageAt: new Date(),

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { MessageDirection } from '@prisma/client'; // PR-03.10
+import { MessageDirection, ChannelType } from '@prisma/client'; // PR-03.10, PR-03.11
 import { IntentRouterService, IntentType } from './intent/intent-router.service';
 import { CustomerService } from '../services/customer.service';
 import { ConversationService } from '../services/conversation.service';
@@ -16,9 +16,11 @@ import { MemoryConfigService } from '../common/config/memory-config.service'; //
 export interface OrchestratorInput {
   messageId: string;
   from: string; // sender phone
-  receiverPhoneId: string; // WhatsApp phone number ID
+  receiverPhoneId: string; // WhatsApp phone number ID (deprecated, use merchantId+channelId)
   text: string;
   timestamp: Date;
+  merchantId?: string; // PR-03.11: Pre-resolved from controller
+  channelId?: string; // PR-03.11: Pre-resolved from controller
 }
 
 export interface OrchestratorResult {
@@ -63,6 +65,7 @@ export class ConversationOrchestrator {
 
   /**
    * Process inbound message and generate response
+   * PR-03.11: Supports pre-resolved merchantId+channelId for multi-channel routing
    *
    * @param input - OrchestratorInput with message details
    * @returns OrchestratorResult with response and metadata
@@ -71,19 +74,34 @@ export class ConversationOrchestrator {
     const maskedPhone = this.maskPhone(input.from);
     this.logger.log(`Processing message ${input.messageId} from ${maskedPhone}`);
 
-    // 1. Resolve merchant
-    const merchant = await this.merchantResolver.resolveByWhatsAppPhoneId(input.receiverPhoneId);
+    // 1. Resolve merchant (PR-03.11: use pre-resolved or fallback to legacy resolution)
+    let merchant: Awaited<ReturnType<typeof this.merchantResolver.resolveByWhatsAppPhoneId>>;
+    if (input.merchantId) {
+      // PR-03.11: Merchant already resolved by controller
+      const resolved = await this.merchantResolver.resolveByChannel(
+        ChannelType.WHATSAPP,
+        input.receiverPhoneId,
+      );
+      if (!resolved) {
+        throw new Error(`Merchant ${input.merchantId} not found`);
+      }
+      merchant = resolved.merchant;
+    } else {
+      // Legacy: resolve by phone ID
+      merchant = await this.merchantResolver.resolveByWhatsAppPhoneId(input.receiverPhoneId);
+    }
     this.logger.debug(`Merchant resolved: ${merchant.id}`);
 
     // 2. Resolve or create customer
     const customer = await this.customerService.resolveByPhone(input.from);
     this.logger.debug(`Customer resolved: ${customer.id}`);
 
-    // 3. Get or create conversation
+    // 3. Get or create conversation (PR-03.11: include channelId if present)
     const conversation = await this.conversationService.getOrCreateConversation(
       customer.id,
       merchant.id,
       'whatsapp',
+      input.channelId ?? null, // PR-03.11 AC-11
     );
     this.logger.debug(`Conversation resolved: ${conversation.id}`);
 

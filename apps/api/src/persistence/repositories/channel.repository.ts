@@ -20,10 +20,7 @@ export class ChannelRepository {
    * @param externalId - Provider-specific ID (phone_number_id for WhatsApp)
    * @returns Channel if found, null otherwise
    */
-  async findByTypeAndExternalId(
-    type: ChannelType,
-    externalId: string,
-  ): Promise<Channel | null> {
+  async findByTypeAndExternalId(type: ChannelType, externalId: string): Promise<Channel | null> {
     this.logger.debug(`Finding channel: type=${type}, externalId=${externalId}`);
 
     const channel = await this.prisma.channel.findUnique({

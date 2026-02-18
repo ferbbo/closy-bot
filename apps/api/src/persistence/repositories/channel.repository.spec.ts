@@ -61,10 +61,7 @@ describe('ChannelRepository (AC-02)', () => {
 
       mockPrismaService.channel.findUnique.mockResolvedValue(mockChannel);
 
-      const result = await repository.findByTypeAndExternalId(
-        ChannelType.WHATSAPP,
-        'phone-123',
-      );
+      const result = await repository.findByTypeAndExternalId(ChannelType.WHATSAPP, 'phone-123');
 
       expect(result).toEqual(mockChannel);
       expect(prisma.channel.findUnique).toHaveBeenCalledWith({
