@@ -35,9 +35,67 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+
+    // PR-03.11 P1-2: Seed merchant and channel for legacy endpoint (used by all tests)
+    const merchant = await prisma.merchant.upsert({
+      where: { apiKey: 'sk_test_dev_merchant_001' },
+      update: {},
+      create: {
+        id: 'merchant-legacy-e2e-001',
+        name: 'Dev Test Store',
+        whatsappNumber: '+573001111111',
+        apiKey: 'sk_test_dev_merchant_001',
+      },
+    });
+
+    await prisma.channel.upsert({
+      where: {
+        type_externalId: {
+          type: 'WHATSAPP',
+          externalId: 'phone-legacy-e2e-001',
+        },
+      },
+      create: {
+        merchantId: merchant.id,
+        type: 'WHATSAPP',
+        externalId: 'phone-legacy-e2e-001',
+        displayName: 'Legacy Test Channel',
+        credentials: {
+          businessAccountId: 'ba-legacy-test',
+          phoneNumberId: 'phone-legacy-e2e-001',
+          accessToken: 'token-legacy-test',
+        },
+        isActive: true,
+      },
+      update: {},
+    });
   });
 
   afterAll(async () => {
+    // PR-03.11 P1-2: Clean up merchant and channel (FK-safe order)
+    await prisma.outboxMessage.deleteMany({
+      where: { merchantId: 'merchant-legacy-e2e-001' },
+    });
+    await prisma.messageLog.deleteMany({
+      where: { merchantId: 'merchant-legacy-e2e-001' },
+    });
+    await prisma.conversation.deleteMany({
+      where: { merchantId: 'merchant-legacy-e2e-001' },
+    });
+    await prisma.customer.deleteMany({
+      where: {
+        conversations: {
+          none: {},
+        },
+      },
+    });
+    await prisma.channel.deleteMany({
+      where: { externalId: 'phone-legacy-e2e-001' },
+    });
+    await prisma.merchant.deleteMany({
+      where: { id: 'merchant-legacy-e2e-001' },
+    });
+
     await app.close();
   });
 
@@ -64,6 +122,7 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
     const validPayload = {
       message_id: 'test-wamid-e2e-123',
       from: '1234567890',
+      receiver_phone_id: 'phone-legacy-e2e-001',
       timestamp: '2026-02-11T10:00:00Z',
       text: 'Hello from e2e test',
     };
@@ -152,6 +211,7 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
       const mediaPayload = {
         message_id: 'test-media-456',
         from: '9876543210',
+        receiver_phone_id: 'phone-legacy-e2e-001',
         timestamp: '2026-02-11T11:00:00Z',
         text: 'Check this image',
         media_type: 'image',
@@ -181,6 +241,7 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
       const invalidMedia = {
         message_id: 'test-bad-media',
         from: '1234567890',
+        receiver_phone_id: 'phone-legacy-e2e-001',
         timestamp: '2026-02-11T12:00:00Z',
         media_type: 'invalid_type', // Not in allowed values
         media_url: 'https://example.com/file',
@@ -197,18 +258,21 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
         {
           message_id: 'test-msg-1',
           from: '1111111111',
+          receiver_phone_id: 'phone-legacy-e2e-001',
           timestamp: '2026-02-11T10:00:00Z',
           text: 'Message 1',
         },
         {
           message_id: 'test-msg-2',
           from: '2222222222',
+          receiver_phone_id: 'phone-legacy-e2e-001',
           timestamp: '2026-02-11T10:01:00Z',
           text: 'Message 2',
         },
         {
           message_id: 'test-msg-3',
           from: '3333333333',
+          receiver_phone_id: 'phone-legacy-e2e-001',
           timestamp: '2026-02-11T10:02:00Z',
           text: 'Message 3',
         },
@@ -246,6 +310,7 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
         .send({
           message_id: 'test-order-msg-3',
           from: sender,
+          receiver_phone_id: 'phone-legacy-e2e-001',
           timestamp: '2026-02-11T10:30:00Z',
           text: 'Third message',
         })
@@ -257,6 +322,7 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
         .send({
           message_id: 'test-order-msg-1',
           from: sender,
+          receiver_phone_id: 'phone-legacy-e2e-001',
           timestamp: '2026-02-11T10:10:00Z',
           text: 'First message',
         })
@@ -268,6 +334,7 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
         .send({
           message_id: 'test-order-msg-2',
           from: sender,
+          receiver_phone_id: 'phone-legacy-e2e-001',
           timestamp: '2026-02-11T10:20:00Z',
           text: 'Second message',
         })
@@ -292,6 +359,7 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
       const payloadWithExtra = {
         message_id: 'test-extra-fields',
         from: '5555555555',
+        receiver_phone_id: 'phone-legacy-e2e-001',
         timestamp: '2026-02-11T13:00:00Z',
         text: 'Valid text',
         extraField: 'should be rejected', // Not in DTO
@@ -312,6 +380,7 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
       const racePayload = {
         message_id: 'test-race-condition-789',
         from: '6666666666',
+        receiver_phone_id: 'phone-legacy-e2e-001',
         timestamp: '2026-02-11T14:00:00Z',
         text: 'Racing message',
       };
@@ -344,24 +413,13 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
   });
 
   describe('Conversation Flow (e2e)', () => {
-    // Need to seed merchant and products for these tests
-    beforeAll(async () => {
-      // Ensure merchant exists
-      await prisma.merchant.upsert({
-        where: { apiKey: 'sk_test_dev_merchant_001' },
-        update: {},
-        create: {
-          name: 'Dev Test Store',
-          whatsappNumber: '+573001111111',
-          apiKey: 'sk_test_dev_merchant_001',
-        },
-      });
-    });
+    // Merchant and channel are seeded in main beforeAll
 
     it('should respond to greeting message', async () => {
       const greetingPayload = {
         message_id: 'test-greeting-001',
         from: '+573001234567',
+        receiver_phone_id: 'phone-legacy-e2e-001',
         timestamp: '2026-02-13T10:00:00Z',
         text: 'hola',
       };
@@ -392,6 +450,7 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
       const helpPayload = {
         message_id: 'test-help-001',
         from: '+573002222222',
+        receiver_phone_id: 'phone-legacy-e2e-001',
         timestamp: '2026-02-13T10:05:00Z',
         text: 'ayuda',
       };
@@ -408,6 +467,7 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
       const searchPayload = {
         message_id: 'test-search-001',
         from: '+573003333333',
+        receiver_phone_id: 'phone-legacy-e2e-001',
         timestamp: '2026-02-13T10:10:00Z',
         text: 'busco camisa',
       };
@@ -430,6 +490,7 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
         .send({
           message_id: 'test-multi-user-1',
           from: customer1Phone,
+          receiver_phone_id: 'phone-legacy-e2e-001',
           timestamp: '2026-02-13T10:15:00Z',
           text: 'hola',
         })
@@ -441,6 +502,7 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
         .send({
           message_id: 'test-multi-user-2',
           from: customer2Phone,
+          receiver_phone_id: 'phone-legacy-e2e-001',
           timestamp: '2026-02-13T10:16:00Z',
           text: 'busco pantalón',
         })
@@ -468,6 +530,7 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
       const unknownPayload = {
         message_id: 'test-unknown-001',
         from: '+573006666666',
+        receiver_phone_id: 'phone-legacy-e2e-001',
         timestamp: '2026-02-13T10:20:00Z',
         text: 'asdfghjkl random text',
       };
@@ -484,6 +547,7 @@ describe('WhatsApp Webhook Idempotency (e2e)', () => {
       const dupePayload = {
         message_id: 'test-dupe-response-001',
         from: '+573007777777',
+        receiver_phone_id: 'phone-legacy-e2e-001',
         timestamp: '2026-02-13T10:25:00Z',
         text: 'hola',
       };
