@@ -62,16 +62,32 @@ export class OutboxService {
     // DEBUG level may include truncated text for development
     this.logger.debug(`Message content preview: "${text.substring(0, 50)}..."`);
 
-    const message = await this.outboxRepo.create({
+    // PR-03.11: Build create input with optional channelRef relation (AC-12)
+    const createInput: {
+      merchant: { connect: { id: string } };
+      conversationId?: string;
+      channel: OutboxChannel;
+      type: OutboxMessageType;
+      to: string;
+      payloadJson: Record<string, unknown>;
+      dedupeKey: string;
+      channelRef?: { connect: { id: string } };
+    } = {
       merchant: { connect: { id: merchantId } },
       conversationId, // PR-03.10: For outbound message logging
-      channelId, // PR-03.11 AC-12
       channel: OutboxChannel.WHATSAPP,
       type: OutboxMessageType.SEND_TEXT,
       to,
       payloadJson,
       dedupeKey: finalDedupeKey,
-    });
+    };
+
+    // PR-03.11 AC-12: Connect channel if provided
+    if (channelId) {
+      createInput.channelRef = { connect: { id: channelId } };
+    }
+
+    const message = await this.outboxRepo.create(createInput);
 
     this.logger.debug(`Enqueued OutboxMessage id=${message.id}, status=${message.status}`);
 

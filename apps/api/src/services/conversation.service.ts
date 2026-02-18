@@ -49,14 +49,29 @@ export class ConversationService {
     this.logger.log(
       `Creating new conversation: customer=${customerId}, merchant=${merchantId}, channel=${channel}, channelId=${channelId}`,
     );
-    conversation = await this.conversationRepository.create({
+
+    // PR-03.11: Build create input with optional channelRef relation
+    const createInput: {
+      customer: { connect: { id: string } };
+      merchant: { connect: { id: string } };
+      channel: string;
+      status: string;
+      lastMessageAt: Date;
+      channelRef?: { connect: { id: string } };
+    } = {
       customer: { connect: { id: customerId } },
       merchant: { connect: { id: merchantId } },
-      channelId, // PR-03.11 AC-11
       channel,
       status: ConversationStatus.ACTIVE,
       lastMessageAt: new Date(),
-    });
+    };
+
+    // PR-03.11 AC-11: Connect channel if provided
+    if (channelId) {
+      createInput.channelRef = { connect: { id: channelId } };
+    }
+
+    conversation = await this.conversationRepository.create(createInput);
 
     this.logger.log(`Conversation created: ${conversation.id}`);
     return conversation;
