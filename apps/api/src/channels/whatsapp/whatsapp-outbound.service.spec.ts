@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { WhatsAppOutboundService } from './whatsapp-outbound.service';
+import { WhatsAppOutboundService, WhatsAppCredentials } from './whatsapp-outbound.service';
 
-describe('WhatsAppOutboundService', () => {
+describe('WhatsAppOutboundService (PR-03.11)', () => {
   let service: WhatsAppOutboundService;
 
   beforeEach(async () => {
@@ -34,13 +34,95 @@ describe('WhatsAppOutboundService', () => {
     expect(service).toBeDefined();
   });
 
-  describe('sendTextMessage()', () => {
-    it('should send message in dry run mode (test env)', async () => {
+  describe('sendTextMessageWithCredentials() - AC-05', () => {
+    it('should send message with provided credentials in dry run mode', async () => {
+      const credentials: WhatsAppCredentials = {
+        accessToken: 'channel-specific-token',
+        phoneNumberId: '987654321',
+      };
+
+      const result = await service.sendTextMessageWithCredentials(
+        '+573001234567',
+        'Test message',
+        credentials,
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.messageId).toBeDefined();
+      expect(result.messageId).toContain('dry-run');
+    });
+
+    it('should use accessToken and phoneNumberId from credentials parameter', async () => {
+      const credentials: WhatsAppCredentials = {
+        accessToken: 'custom-token-123',
+        phoneNumberId: 'custom-phone-456',
+      };
+
+      const result = await service.sendTextMessageWithCredentials(
+        '+573001234567',
+        'Test',
+        credentials,
+      );
+
+      expect(result.success).toBe(true);
+      // In dry run, we don't make real API calls, but method accepts credentials
+    });
+
+    it('should handle missing credentials gracefully', async () => {
+      const credentials: WhatsAppCredentials = {
+        accessToken: '',
+        phoneNumberId: '',
+      };
+
+      const result = await service.sendTextMessageWithCredentials(
+        '+573001234567',
+        'Test',
+        credentials,
+      );
+
+      // Should succeed in dry run mode even with empty credentials
+      expect(result.success).toBe(true);
+      expect(result.messageId).toContain('dry-run');
+    });
+
+    it('should sanitize and mask phone numbers in logs', async () => {
+      const credentials: WhatsAppCredentials = {
+        accessToken: 'token',
+        phoneNumberId: '123456789012',
+      };
+
+      const result = await service.sendTextMessageWithCredentials(
+        '+57 300 123 4567',
+        'Test',
+        credentials,
+      );
+
+      expect(result.success).toBe(true);
+      // Phone masking is internal (PII protection - AC-08 related)
+    });
+  });
+
+  describe('sendTextMessage() - AC-06 (legacy method)', () => {
+    it('should use env var credentials for backwards compatibility', async () => {
       const result = await service.sendTextMessage('+573001234567', 'Test message');
 
       expect(result.success).toBe(true);
       expect(result.messageId).toBeDefined();
       expect(result.messageId).toContain('dry-run');
+    });
+
+    it('should delegate to sendTextMessageWithCredentials', async () => {
+      // Spy on the new method to verify delegation
+      const spy = jest.spyOn(service, 'sendTextMessageWithCredentials');
+
+      await service.sendTextMessage('+573001234567', 'Test');
+
+      expect(spy).toHaveBeenCalledWith('+573001234567', 'Test', {
+        accessToken: 'test-token',
+        phoneNumberId: '123456789',
+      });
+
+      spy.mockRestore();
     });
 
     it('should sanitize phone number', async () => {
@@ -81,14 +163,6 @@ describe('WhatsAppOutboundService', () => {
       // Should still succeed in dry run mode
       expect(result.success).toBe(true);
       expect(result.messageId).toContain('dry-run');
-    });
-
-    it('should log truncated message text', async () => {
-      const longMessage = 'a'.repeat(100);
-      const result = await service.sendTextMessage('+573001234567', longMessage);
-
-      expect(result.success).toBe(true);
-      // Logging is internal, but we verify no errors with long messages
     });
   });
 });

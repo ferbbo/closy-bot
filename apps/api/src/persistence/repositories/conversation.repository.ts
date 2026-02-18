@@ -31,17 +31,20 @@ export class ConversationRepository {
   /**
    * Find an active conversation by customer, merchant and channel
    * Returns the most recent active conversation
+   * PR-03.11: Optionally filter by channelId
    */
   async findByCustomerAndChannel(
     customerId: string,
     merchantId: string,
     channel: string,
+    channelId?: string,
   ): Promise<Conversation | null> {
     return this.prisma.conversation.findFirst({
       where: {
         customerId,
         merchantId,
         channel,
+        ...(channelId ? { channelId } : {}),
         status: 'active',
       },
       orderBy: {

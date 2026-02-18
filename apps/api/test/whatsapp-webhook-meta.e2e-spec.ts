@@ -20,6 +20,8 @@ describe('Meta WhatsApp Webhook Compliance (e2e)', () => {
   let prisma: PrismaService;
   let appSecret: string;
   let verifyToken: string;
+  let defaultMerchant: { id: string }; // PR-03.11: Default merchant for existing tests
+  let defaultChannel: { id: string }; // PR-03.11: Default channel for existing tests
 
   beforeAll(async () => {
     // Set test environment variables before creating the app
@@ -50,9 +52,68 @@ describe('Meta WhatsApp Webhook Compliance (e2e)', () => {
     // Get config values from environment
     appSecret = process.env.WHATSAPP_APP_SECRET!;
     verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN!;
+
+    // PR-03.11: Seed default merchant and channel for existing tests
+    defaultMerchant = await prisma.merchant.upsert({
+      where: { id: 'merchant-default-e2e' },
+      create: {
+        id: 'merchant-default-e2e',
+        name: 'Default Test Merchant',
+        whatsappNumber: '+10000000000',
+        apiKey: 'api-key-default-e2e',
+        industry: 'ropa',
+        playbookConfig: { playbook: 'ROPA' },
+      },
+      update: {},
+    });
+
+    defaultChannel = await prisma.channel.upsert({
+      where: {
+        type_externalId: {
+          type: 'WHATSAPP',
+          externalId: 'phone_123',
+        },
+      },
+      create: {
+        merchantId: defaultMerchant.id,
+        type: 'WHATSAPP',
+        externalId: 'phone_123',
+        displayName: 'Default Test Channel',
+        credentials: {
+          businessAccountId: 'ba-default',
+          phoneNumberId: 'phone_123',
+          accessToken: 'token-default',
+        },
+        isActive: true,
+      },
+      update: {},
+    });
   });
 
   afterAll(async () => {
+    // Clean up default merchant and channel (with proper FK order)
+    await prisma.outboxMessage.deleteMany({
+      where: { merchantId: defaultMerchant.id },
+    });
+    await prisma.messageLog.deleteMany({
+      where: { merchantId: defaultMerchant.id },
+    });
+    await prisma.conversation.deleteMany({
+      where: { merchantId: defaultMerchant.id },
+    });
+    await prisma.customer.deleteMany({
+      where: {
+        conversations: {
+          none: {},
+        },
+      },
+    });
+    await prisma.channel.deleteMany({
+      where: { id: defaultChannel.id },
+    });
+    await prisma.merchant.deleteMany({
+      where: { id: defaultMerchant.id },
+    });
     await app.close();
   });
 
@@ -390,11 +451,408 @@ describe('Meta WhatsApp Webhook Compliance (e2e)', () => {
     });
   });
 
+  // PR-03.11 REQ-09: E2E tests for multi-channel routing
+  describe('POST /webhooks/whatsapp - Multi-channel routing (PR-03.11)', () => {
+    let merchantA: { id: string };
+    let merchantB: { id: string };
+    let channelA: { id: string };
+    let channelB: { id: string };
+
+    beforeAll(async () => {
+      // Clean up any residual test data first
+      await prisma.outboxMessage.deleteMany({
+        where: {
+          merchantId: {
+            in: ['merchant-a-e2e', 'merchant-b-e2e'],
+          },
+        },
+      });
+      await prisma.messageLog.deleteMany({
+        where: {
+          merchantId: {
+            in: ['merchant-a-e2e', 'merchant-b-e2e'],
+          },
+        },
+      });
+      await prisma.conversation.deleteMany({
+        where: {
+          merchantId: {
+            in: ['merchant-a-e2e', 'merchant-b-e2e'],
+          },
+        },
+      });
+      await prisma.channel.deleteMany({
+        where: {
+          merchantId: {
+            in: ['merchant-a-e2e', 'merchant-b-e2e'],
+          },
+        },
+      });
+      await prisma.merchant.deleteMany({
+        where: {
+          id: {
+            in: ['merchant-a-e2e', 'merchant-b-e2e'],
+          },
+        },
+      });
+
+      // Seed 2 merchants with 2 different channels
+      merchantA = await prisma.merchant.create({
+        data: {
+          id: 'merchant-a-e2e',
+          name: 'Merchant A E2E',
+          whatsappNumber: '+1111111111', // Legacy field, kept for backwards compat
+          apiKey: 'api-key-a-e2e',
+          industry: 'ropa',
+          playbookConfig: { playbook: 'ROPA' },
+        },
+      });
+
+      merchantB = await prisma.merchant.create({
+        data: {
+          id: 'merchant-b-e2e',
+          name: 'Merchant B E2E',
+          whatsappNumber: '+2222222222', // Legacy field, kept for backwards compat
+          apiKey: 'api-key-b-e2e',
+          industry: 'belleza',
+          playbookConfig: { playbook: 'BELLEZA' },
+        },
+      });
+
+      channelA = await prisma.channel.create({
+        data: {
+          merchantId: merchantA.id,
+          type: 'WHATSAPP',
+          externalId: 'phone-A-123',
+          displayName: 'Channel A',
+          credentials: {
+            businessAccountId: 'ba-A',
+            phoneNumberId: 'phone-A-123',
+            accessToken: 'token-A',
+          },
+          isActive: true,
+        },
+      });
+
+      channelB = await prisma.channel.create({
+        data: {
+          merchantId: merchantB.id,
+          type: 'WHATSAPP',
+          externalId: 'phone-B-456',
+          displayName: 'Channel B',
+          credentials: {
+            businessAccountId: 'ba-B',
+            phoneNumberId: 'phone-B-456',
+            accessToken: 'token-B',
+          },
+          isActive: true,
+        },
+      });
+    });
+
+    afterAll(async () => {
+      // Cleanup (in correct order to avoid FK violations)
+      // Guard against undefined if beforeAll failed
+      if (merchantA && merchantB) {
+        await prisma.outboxMessage.deleteMany({
+          where: { merchantId: { in: [merchantA.id, merchantB.id] } },
+        });
+        await prisma.messageLog.deleteMany({
+          where: { merchantId: { in: [merchantA.id, merchantB.id] } },
+        });
+        await prisma.conversation.deleteMany({
+          where: { merchantId: { in: [merchantA.id, merchantB.id] } },
+        });
+        await prisma.channel.deleteMany({
+          where: { id: { in: [channelA.id, channelB.id] } },
+        });
+        await prisma.merchant.deleteMany({
+          where: { id: { in: [merchantA.id, merchantB.id] } },
+        });
+      }
+    });
+
+    beforeEach(async () => {
+      // Clean up test conversations and outbox messages
+      await prisma.conversation.deleteMany({
+        where: { merchantId: { in: [merchantA.id, merchantB.id] } },
+      });
+      await prisma.outboxMessage.deleteMany({
+        where: { merchantId: { in: [merchantA.id, merchantB.id] } },
+      });
+    });
+
+    it('AC-10: should route messages to correct merchant based on phone_number_id', async () => {
+      // Message to Merchant A
+      const payloadA = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '123',
+            changes: [
+              {
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '+1111111111',
+                    phone_number_id: 'phone-A-123',
+                  },
+                  messages: [
+                    {
+                      from: '+573001111111',
+                      id: 'wamid.e2e-merchant-a',
+                      timestamp: '1707820800',
+                      type: 'text',
+                      text: { body: 'Hello Merchant A' },
+                    },
+                  ],
+                },
+                field: 'messages',
+              },
+            ],
+          },
+        ],
+      };
+
+      // Message to Merchant B
+      const payloadB = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '456',
+            changes: [
+              {
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '+2222222222',
+                    phone_number_id: 'phone-B-456',
+                  },
+                  messages: [
+                    {
+                      from: '+573002222222',
+                      id: 'wamid.e2e-merchant-b',
+                      timestamp: '1707820801',
+                      type: 'text',
+                      text: { body: 'Hello Merchant B' },
+                    },
+                  ],
+                },
+                field: 'messages',
+              },
+            ],
+          },
+        ],
+      };
+
+      const signatureA = generateMetaSignature(JSON.stringify(payloadA), appSecret);
+      const signatureB = generateMetaSignature(JSON.stringify(payloadB), appSecret);
+
+      // Send to Merchant A
+      await request(app.getHttpServer())
+        .post('/webhooks/whatsapp')
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signatureA)
+        .send(JSON.stringify(payloadA))
+        .expect(200);
+
+      // Send to Merchant B
+      await request(app.getHttpServer())
+        .post('/webhooks/whatsapp')
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signatureB)
+        .send(JSON.stringify(payloadB))
+        .expect(200);
+
+      // Verify conversations created for each merchant
+      const conversationA = await prisma.conversation.findFirst({
+        where: { merchantId: merchantA.id },
+      });
+      const conversationB = await prisma.conversation.findFirst({
+        where: { merchantId: merchantB.id },
+      });
+
+      expect(conversationA).not.toBeNull();
+      expect(conversationB).not.toBeNull();
+      expect(conversationA!.merchantId).toBe(merchantA.id);
+      expect(conversationB!.merchantId).toBe(merchantB.id);
+    });
+
+    it('AC-11: should save correct channelId in Conversation', async () => {
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '123',
+            changes: [
+              {
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '+1111111111',
+                    phone_number_id: 'phone-A-123',
+                  },
+                  messages: [
+                    {
+                      from: '+573003333333',
+                      id: 'wamid.e2e-channel-a',
+                      timestamp: '1707820802',
+                      type: 'text',
+                      text: { body: 'Test channelId' },
+                    },
+                  ],
+                },
+                field: 'messages',
+              },
+            ],
+          },
+        ],
+      };
+
+      const signature = generateMetaSignature(JSON.stringify(payload), appSecret);
+
+      await request(app.getHttpServer())
+        .post('/webhooks/whatsapp')
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature)
+        .send(JSON.stringify(payload))
+        .expect(200);
+
+      const conversation = await prisma.conversation.findFirst({
+        where: { merchantId: merchantA.id },
+      });
+
+      expect(conversation).not.toBeNull();
+      expect(conversation!.channelId).toBe(channelA.id);
+    });
+
+    it('AC-12: should save channelId in OutboxMessage', async () => {
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '123',
+            changes: [
+              {
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '+1111111111',
+                    phone_number_id: 'phone-A-123',
+                  },
+                  messages: [
+                    {
+                      from: '+573004444444',
+                      id: 'wamid.e2e-outbox-test',
+                      timestamp: '1707820803',
+                      type: 'text',
+                      text: { body: 'Test outbox channelId' },
+                    },
+                  ],
+                },
+                field: 'messages',
+              },
+            ],
+          },
+        ],
+      };
+
+      const signature = generateMetaSignature(JSON.stringify(payload), appSecret);
+
+      await request(app.getHttpServer())
+        .post('/webhooks/whatsapp')
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature)
+        .send(JSON.stringify(payload))
+        .expect(200);
+
+      // Give time for outbox to be created
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const outboxMessage = await prisma.outboxMessage.findFirst({
+        where: { merchantId: merchantA.id },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      expect(outboxMessage).not.toBeNull();
+      expect(outboxMessage!.channelId).toBe(channelA.id);
+    });
+
+    it('AC-08: should handle unknown channel with 200 OK without crash', async () => {
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '999',
+            changes: [
+              {
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '+9999999999',
+                    phone_number_id: 'phone-unknown-999',
+                  },
+                  messages: [
+                    {
+                      from: '+573009999999',
+                      id: 'wamid.e2e-unknown',
+                      timestamp: '1707820804',
+                      type: 'text',
+                      text: { body: 'Unknown channel' },
+                    },
+                  ],
+                },
+                field: 'messages',
+              },
+            ],
+          },
+        ],
+      };
+
+      const signature = generateMetaSignature(JSON.stringify(payload), appSecret);
+
+      // Should not crash, return 200
+      await request(app.getHttpServer())
+        .post('/webhooks/whatsapp')
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature)
+        .send(JSON.stringify(payload))
+        .expect(200);
+
+      // Verify no conversation created for unknown channel
+      const conversation = await prisma.conversation.findFirst({
+        where: {
+          customer: {
+            phone: '+573009999999',
+          },
+        },
+      });
+
+      expect(conversation).toBeNull();
+    });
+  });
+
   describe('POST /webhooks/whatsapp/inbound - Legacy endpoint', () => {
-    it('should still accept normalized format on legacy endpoint', async () => {
+    it('should require receiver_phone_id (no default fallback - P1-3 fix)', async () => {
+      const legacyPayloadWithoutPhone = {
+        message_id: 'wamid.e2e-legacy-no-phone',
+        from: '+573001234567',
+        timestamp: '2026-02-13T10:00:00Z',
+        text: 'Legacy without receiver_phone_id',
+      };
+
+      // Should reject without receiver_phone_id
+      await request(app.getHttpServer())
+        .post('/webhooks/whatsapp/inbound')
+        .send(legacyPayloadWithoutPhone)
+        .expect(403);
+    });
+
+    it('should accept normalized format when receiver_phone_id is provided', async () => {
       const legacyPayload = {
         message_id: 'wamid.e2e-legacy-123',
         from: '+573001234567',
+        receiver_phone_id: 'phone_123', // Use default channel
         timestamp: '2026-02-13T10:00:00Z',
         text: 'Legacy endpoint test',
       };

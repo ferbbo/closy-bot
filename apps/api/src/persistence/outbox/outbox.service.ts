@@ -6,6 +6,7 @@ import { maskPhone } from '../../common/utils/pii.util';
 export interface EnqueueWhatsAppTextParams {
   merchantId: string;
   conversationId?: string; // PR-03.10: For outbound message logging
+  channelId?: string; // PR-03.11 AC-12: For multi-channel routing
   to: string;
   text: string;
   replyToMessageId?: string;
@@ -30,7 +31,16 @@ export class OutboxService {
    * @returns Created (or existing) OutboxMessage
    */
   async enqueueWhatsAppText(params: EnqueueWhatsAppTextParams) {
-    const { merchantId, conversationId, to, text, replyToMessageId, dedupeKey, metadata } = params;
+    const {
+      merchantId,
+      conversationId,
+      channelId,
+      to,
+      text,
+      replyToMessageId,
+      dedupeKey,
+      metadata,
+    } = params;
 
     const maskedPhone = maskPhone(to);
 
@@ -52,7 +62,17 @@ export class OutboxService {
     // DEBUG level may include truncated text for development
     this.logger.debug(`Message content preview: "${text.substring(0, 50)}..."`);
 
-    const message = await this.outboxRepo.create({
+    // PR-03.11: Build create input with optional channelRef relation (AC-12)
+    const createInput: {
+      merchant: { connect: { id: string } };
+      conversationId?: string;
+      channel: OutboxChannel;
+      type: OutboxMessageType;
+      to: string;
+      payloadJson: Record<string, unknown>;
+      dedupeKey: string;
+      channelRef?: { connect: { id: string } };
+    } = {
       merchant: { connect: { id: merchantId } },
       conversationId, // PR-03.10: For outbound message logging
       channel: OutboxChannel.WHATSAPP,
@@ -60,7 +80,14 @@ export class OutboxService {
       to,
       payloadJson,
       dedupeKey: finalDedupeKey,
-    });
+    };
+
+    // PR-03.11 AC-12: Connect channel if provided
+    if (channelId) {
+      createInput.channelRef = { connect: { id: channelId } };
+    }
+
+    const message = await this.outboxRepo.create(createInput);
 
     this.logger.debug(`Enqueued OutboxMessage id=${message.id}, status=${message.status}`);
 

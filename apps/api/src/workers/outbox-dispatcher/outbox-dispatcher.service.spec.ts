@@ -2,13 +2,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { OutboxDispatcherService } from './outbox-dispatcher.service';
 import { OutboxRepository } from '../../persistence/repositories/outbox.repository';
+import { ChannelRepository } from '../../persistence/repositories/channel.repository'; // PR-03.11
 import { WhatsAppOutboundService } from '../../channels/whatsapp/whatsapp-outbound.service';
-import { OutboxMessageType, OutboxMessage } from '@prisma/client';
+import { OutboxMessageType, OutboxMessage, ChannelType } from '@prisma/client'; // PR-03.11: add ChannelType
 import { MessageLogRepository } from '../../persistence/repositories/message-log.repository'; // PR-03.10
 
 describe('OutboxDispatcherService', () => {
   let service: OutboxDispatcherService;
   let repository: jest.Mocked<OutboxRepository>;
+  let channelRepo: jest.Mocked<ChannelRepository>; // PR-03.11
   let whatsappOutbound: jest.Mocked<WhatsAppOutboundService>;
   let configService: ConfigService;
 
@@ -24,10 +26,20 @@ describe('OutboxDispatcherService', () => {
             markFailed: jest.fn(),
           },
         },
+        // PR-03.11: Add ChannelRepository mock
+        {
+          provide: ChannelRepository,
+          useValue: {
+            findById: jest.fn(),
+            findByTypeAndExternalId: jest.fn(),
+            findByMerchantId: jest.fn(),
+          },
+        },
         {
           provide: WhatsAppOutboundService,
           useValue: {
             sendTextMessage: jest.fn(),
+            sendTextMessageWithCredentials: jest.fn(), // PR-03.11
           },
         },
         {
@@ -55,6 +67,7 @@ describe('OutboxDispatcherService', () => {
 
     service = module.get<OutboxDispatcherService>(OutboxDispatcherService);
     repository = module.get(OutboxRepository);
+    channelRepo = module.get(ChannelRepository); // PR-03.11
     whatsappOutbound = module.get(WhatsAppOutboundService);
     configService = module.get(ConfigService);
   });
@@ -83,6 +96,7 @@ describe('OutboxDispatcherService', () => {
         providers: [
           OutboxDispatcherService,
           { provide: OutboxRepository, useValue: repository },
+          { provide: ChannelRepository, useValue: channelRepo }, // PR-03.11
           { provide: WhatsAppOutboundService, useValue: whatsappOutbound },
           { provide: ConfigService, useValue: configService },
           {
@@ -187,6 +201,99 @@ describe('OutboxDispatcherService', () => {
         'Network timeout',
       );
       expect(repository.markSent).not.toHaveBeenCalled();
+    });
+
+    // PR-03.11 AC-07: Dispatcher uses channel credentials + fallback
+    it('AC-07: should use channel credentials when channelId is present', async () => {
+      const mockChannel = {
+        id: 'channel-1',
+        merchantId: 'merchant-1',
+        type: ChannelType.WHATSAPP,
+        externalId: '123456789',
+        displayName: 'Main WhatsApp',
+        credentials: {
+          businessAccountId: 'ba-123',
+          phoneNumberId: '123456789',
+          accessToken: 'token-from-channel',
+        },
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const mockMessage = {
+        id: 'msg-1',
+        to: '+573001234567',
+        channelId: 'channel-1',
+        payloadJson: { text: 'Test with channel' },
+      };
+
+      channelRepo.findById.mockResolvedValue(mockChannel);
+      whatsappOutbound.sendTextMessageWithCredentials.mockResolvedValue({
+        success: true,
+        messageId: 'whatsapp-ch-123',
+      });
+
+      await service['sendTextMessage'](mockMessage as OutboxMessage);
+
+      expect(channelRepo.findById).toHaveBeenCalledWith('channel-1');
+      expect(whatsappOutbound.sendTextMessageWithCredentials).toHaveBeenCalledWith(
+        '+573001234567',
+        'Test with channel',
+        {
+          businessAccountId: 'ba-123',
+          phoneNumberId: '123456789',
+          accessToken: 'token-from-channel',
+        },
+      );
+      expect(repository.markSent).toHaveBeenCalledWith('msg-1', 'whatsapp-ch-123');
+    });
+
+    it('AC-07: should fallback to env vars if channelId is null (backwards compat)', async () => {
+      const mockMessage = {
+        id: 'msg-2',
+        to: '+573001234567',
+        channelId: null,
+        payloadJson: { text: 'Legacy message' },
+      };
+
+      whatsappOutbound.sendTextMessage.mockResolvedValue({
+        success: true,
+        messageId: 'whatsapp-legacy-456',
+      });
+
+      await service['sendTextMessage'](mockMessage as OutboxMessage);
+
+      expect(channelRepo.findById).not.toHaveBeenCalled();
+      expect(whatsappOutbound.sendTextMessage).toHaveBeenCalledWith(
+        '+573001234567',
+        'Legacy message',
+      );
+      expect(repository.markSent).toHaveBeenCalledWith('msg-2', 'whatsapp-legacy-456');
+    });
+
+    it('AC-07: should fallback to env vars if channel not found (defensive)', async () => {
+      const mockMessage = {
+        id: 'msg-3',
+        to: '+573001234567',
+        channelId: 'non-existent-channel',
+        payloadJson: { text: 'Orphaned message' },
+      };
+
+      channelRepo.findById.mockResolvedValue(null);
+      whatsappOutbound.sendTextMessage.mockResolvedValue({
+        success: true,
+        messageId: 'whatsapp-fallback-789',
+      });
+
+      await service['sendTextMessage'](mockMessage as OutboxMessage);
+
+      expect(channelRepo.findById).toHaveBeenCalledWith('non-existent-channel');
+      expect(whatsappOutbound.sendTextMessage).toHaveBeenCalledWith(
+        '+573001234567',
+        'Orphaned message',
+      );
+      expect(repository.markSent).toHaveBeenCalledWith('msg-3', 'whatsapp-fallback-789');
     });
   });
 

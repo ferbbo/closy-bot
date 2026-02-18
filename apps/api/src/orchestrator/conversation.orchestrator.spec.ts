@@ -247,6 +247,7 @@ describe('ConversationOrchestrator', () => {
         'customer-1',
         'merchant-1',
         'whatsapp',
+        null, // PR-03.11: channelId is null for legacy inputs
       );
     });
 

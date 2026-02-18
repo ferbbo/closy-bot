@@ -63,6 +63,7 @@ model Merchant {
   categories     Category[]
   products       Product[]
   outboxMessages OutboxMessage[]
+  channels       Channel[] // PR-03.11: Multi-channel support
 
   @@map("merchants")
 }
@@ -72,6 +73,12 @@ enum Industry {
   ropa
   belleza
   minimarket
+}
+
+/// Channel type for multi-channel support (PR-03.11)
+enum ChannelType {
+  WHATSAPP
+  INSTAGRAM
 }
 
 /// Customer represents an end-user (identity resolved by phone)
@@ -94,6 +101,7 @@ model Conversation {
   id            String    @id @default(cuid())
   customerId    String    @map("customer_id")
   merchantId    String    @map("merchant_id")
+  channelId     String?   @map("channel_id") // PR-03.11: FK to Channel (nullable for backwards compat)
   channel       String    // whatsapp, webchat, instagram
   status        String    @default("active") // active, closed, handoff
   lastMessageAt DateTime? @map("last_message_at")
@@ -107,6 +115,7 @@ model Conversation {
 
   customer    Customer     @relation(fields: [customerId], references: [id])
   merchant    Merchant     @relation(fields: [merchantId], references: [id])
+  channelRef  Channel?     @relation(fields: [channelId], references: [id]) // PR-03.11
   messageLogs MessageLog[] // PR-03.10: Message history
 
   @@map("conversations")
@@ -232,6 +241,7 @@ model OutboxMessage {
   id             String              @id @default(cuid())
   merchantId     String              @map("merchant_id")
   conversationId String?             @map("conversation_id") // PR-03.10: For outbound message logging
+  channelId      String?             @map("channel_id") // PR-03.11: FK to Channel (nullable for backwards compat)
   channel        OutboxChannel
   type           OutboxMessageType
   to             String
@@ -250,12 +260,41 @@ model OutboxMessage {
   createdAt         DateTime      @default(now()) @map("created_at")
   updatedAt         DateTime      @updatedAt @map("updated_at")
 
-  merchant Merchant @relation(fields: [merchantId], references: [id])
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  channelRef Channel? @relation(fields: [channelId], references: [id]) // PR-03.11
 
   @@map("outbox_messages")
   @@index([merchantId])
   @@index([status, nextRetryAt])
   @@unique([merchantId, dedupeKey])
+}
+
+// ============================================================================
+// PR-03.11: Channel (Multi-channel support)
+// ============================================================================
+
+/// Channel represents a messaging channel (WhatsApp, Instagram, etc.) for a merchant
+/// Each channel has its own credentials and external identifier
+model Channel {
+  id          String      @id @default(cuid())
+  merchantId  String      @map("merchant_id")
+  type        ChannelType
+  externalId  String      @map("external_id") // phone_number_id for WhatsApp, page_id for Instagram
+  displayName String      @map("display_name") // Human-readable name (e.g., "Sucursal Centro")
+  credentials Json // { accessToken, appSecret? } - TODO: encrypt in future
+  isActive    Boolean     @default(true) @map("is_active")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  merchant       Merchant        @relation(fields: [merchantId], references: [id])
+  conversations  Conversation[]
+  outboxMessages OutboxMessage[]
+
+  @@unique([type, externalId])
+  @@map("channels")
+  @@index([merchantId])
+  @@index([type, externalId])
+  @@index([isActive])
 }
 
 // ============================================================================

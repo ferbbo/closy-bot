@@ -14,9 +14,11 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { ChannelType } from '@prisma/client'; // PR-03.11
 import { WhatsAppService } from './whatsapp.service';
 import { WhatsAppOutboundService } from './whatsapp-outbound.service';
 import { ConversationOrchestrator } from '../../orchestrator/conversation.orchestrator';
+import { MerchantResolverService } from '../../services/merchant-resolver.service'; // PR-03.11
 import { InboundMessageDto, InboundMessageResponseDto } from './dto/inbound-message.dto';
 import { MetaWebhookPayload } from './dto/meta-webhook.dto';
 import { MetaSignatureGuard } from './guards/meta-signature.guard';
@@ -39,6 +41,7 @@ export class WhatsAppController {
     private readonly whatsappService: WhatsAppService,
     private readonly outboundService: WhatsAppOutboundService,
     private readonly orchestrator: ConversationOrchestrator,
+    private readonly merchantResolver: MerchantResolverService, // PR-03.11
     private readonly configService: ConfigService,
     private readonly outboxService: OutboxService,
   ) {
@@ -147,6 +150,17 @@ export class WhatsAppController {
       `[LEGACY] Inbound webhook received: message_id=${dto.message_id}, from=${maskedPhone}`,
     );
 
+    // P1-3 Fix: Legacy endpoint now requires receiver_phone_id (no 'default' fallback)
+    if (!dto.receiver_phone_id) {
+      this.logger.error(
+        '[LEGACY] receiver_phone_id is required for multi-channel support. ' +
+          'Update webhook sender to include phone_number_id.',
+      );
+      throw new ForbiddenException(
+        'receiver_phone_id is required. This endpoint requires multi-channel support.',
+      );
+    }
+
     try {
       // Process and dedupe inbound message
       await this.whatsappService.processInboundMessage(dto);
@@ -155,7 +169,7 @@ export class WhatsAppController {
       const result = await this.orchestrator.process({
         messageId: dto.message_id,
         from: dto.from,
-        receiverPhoneId: dto.receiver_phone_id || 'default',
+        receiverPhoneId: dto.receiver_phone_id,
         text: dto.text || '',
         timestamp: new Date(dto.timestamp),
       });
@@ -198,10 +212,37 @@ export class WhatsAppController {
   /**
    * Shared message processing logic
    * Handles idempotency, orchestration, and outbound sending
+   * PR-03.11 REQ-07: Multi-channel routing + unknown channel handling (AC-08)
    */
   private async processMessage(dto: InboundMessageDto): Promise<void> {
     const maskedPhone = maskPhone(dto.from, 'long');
     this.logger.log(`Processing message: id=${dto.message_id}, from=${maskedPhone}`);
+
+    // PR-03.11: Resolve merchant+channel before processing
+    // P1-3 Fix: receiver_phone_id is now required (no 'default' fallback)
+    if (!dto.receiver_phone_id) {
+      this.logger.warn(
+        'Meta webhook missing phone_number_id in metadata. Skipping message processing.',
+      );
+      return;
+    }
+    const phoneNumberId = dto.receiver_phone_id;
+    const resolution = await this.merchantResolver.resolveByChannel(
+      ChannelType.WHATSAPP,
+      phoneNumberId,
+    );
+
+    // AC-08: Unknown channel → log warning + return 200 without crash
+    if (!resolution) {
+      this.logger.warn(
+        `Unknown channel for phone_number_id=${phoneNumberId}, returning 200 OK without processing`,
+      );
+      return;
+    }
+
+    this.logger.debug(
+      `Channel resolved: merchantId=${resolution.merchant.id}, channelId=${resolution.channel.id}`,
+    );
 
     try {
       // 1. Process and dedupe inbound message
@@ -212,7 +253,9 @@ export class WhatsAppController {
         const result = await this.orchestrator.process({
           messageId: dto.message_id,
           from: dto.from,
-          receiverPhoneId: dto.receiver_phone_id || 'default', // MVP: single merchant
+          receiverPhoneId: phoneNumberId, // Keep for backwards compat
+          merchantId: resolution.merchant.id, // PR-03.11
+          channelId: resolution.channel.id, // PR-03.11
           text: dto.text || '',
           timestamp: new Date(dto.timestamp),
         });
@@ -226,6 +269,7 @@ export class WhatsAppController {
           await this.outboxService.enqueueWhatsAppText({
             merchantId: result.merchantId,
             conversationId: result.conversationId, // PR-03.10
+            channelId: resolution.channel.id, // PR-03.11 AC-12
             to: dto.from,
             text: result.response,
             dedupeKey: `reply:${dto.message_id}`,
