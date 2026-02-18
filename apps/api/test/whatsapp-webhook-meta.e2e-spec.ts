@@ -91,7 +91,23 @@ describe('Meta WhatsApp Webhook Compliance (e2e)', () => {
   });
 
   afterAll(async () => {
-    // Clean up default merchant and channel
+    // Clean up default merchant and channel (with proper FK order)
+    await prisma.outboxMessage.deleteMany({
+      where: { merchantId: defaultMerchant.id },
+    });
+    await prisma.messageLog.deleteMany({
+      where: { merchantId: defaultMerchant.id },
+    });
+    await prisma.conversation.deleteMany({
+      where: { merchantId: defaultMerchant.id },
+    });
+    await prisma.customer.deleteMany({
+      where: {
+        conversations: {
+          none: {},
+        },
+      },
+    });
     await prisma.channel.deleteMany({
       where: { id: defaultChannel.id },
     });
@@ -443,6 +459,43 @@ describe('Meta WhatsApp Webhook Compliance (e2e)', () => {
     let channelB: { id: string };
 
     beforeAll(async () => {
+      // Clean up any residual test data first
+      await prisma.outboxMessage.deleteMany({
+        where: {
+          merchantId: {
+            in: ['merchant-a-e2e', 'merchant-b-e2e'],
+          },
+        },
+      });
+      await prisma.messageLog.deleteMany({
+        where: {
+          merchantId: {
+            in: ['merchant-a-e2e', 'merchant-b-e2e'],
+          },
+        },
+      });
+      await prisma.conversation.deleteMany({
+        where: {
+          merchantId: {
+            in: ['merchant-a-e2e', 'merchant-b-e2e'],
+          },
+        },
+      });
+      await prisma.channel.deleteMany({
+        where: {
+          merchantId: {
+            in: ['merchant-a-e2e', 'merchant-b-e2e'],
+          },
+        },
+      });
+      await prisma.merchant.deleteMany({
+        where: {
+          id: {
+            in: ['merchant-a-e2e', 'merchant-b-e2e'],
+          },
+        },
+      });
+
       // Seed 2 merchants with 2 different channels
       merchantA = await prisma.merchant.create({
         data: {
@@ -499,21 +552,24 @@ describe('Meta WhatsApp Webhook Compliance (e2e)', () => {
 
     afterAll(async () => {
       // Cleanup (in correct order to avoid FK violations)
-      await prisma.outboxMessage.deleteMany({
-        where: { merchantId: { in: [merchantA.id, merchantB.id] } },
-      });
-      await prisma.messageLog.deleteMany({
-        where: { merchantId: { in: [merchantA.id, merchantB.id] } },
-      });
-      await prisma.conversation.deleteMany({
-        where: { merchantId: { in: [merchantA.id, merchantB.id] } },
-      });
-      await prisma.channel.deleteMany({
-        where: { id: { in: [channelA.id, channelB.id] } },
-      });
-      await prisma.merchant.deleteMany({
-        where: { id: { in: [merchantA.id, merchantB.id] } },
-      });
+      // Guard against undefined if beforeAll failed
+      if (merchantA && merchantB) {
+        await prisma.outboxMessage.deleteMany({
+          where: { merchantId: { in: [merchantA.id, merchantB.id] } },
+        });
+        await prisma.messageLog.deleteMany({
+          where: { merchantId: { in: [merchantA.id, merchantB.id] } },
+        });
+        await prisma.conversation.deleteMany({
+          where: { merchantId: { in: [merchantA.id, merchantB.id] } },
+        });
+        await prisma.channel.deleteMany({
+          where: { id: { in: [channelA.id, channelB.id] } },
+        });
+        await prisma.merchant.deleteMany({
+          where: { id: { in: [merchantA.id, merchantB.id] } },
+        });
+      }
     });
 
     beforeEach(async () => {
@@ -777,10 +833,26 @@ describe('Meta WhatsApp Webhook Compliance (e2e)', () => {
   });
 
   describe('POST /webhooks/whatsapp/inbound - Legacy endpoint', () => {
-    it('should still accept normalized format on legacy endpoint', async () => {
+    it('should require receiver_phone_id (no default fallback - P1-3 fix)', async () => {
+      const legacyPayloadWithoutPhone = {
+        message_id: 'wamid.e2e-legacy-no-phone',
+        from: '+573001234567',
+        timestamp: '2026-02-13T10:00:00Z',
+        text: 'Legacy without receiver_phone_id',
+      };
+
+      // Should reject without receiver_phone_id
+      await request(app.getHttpServer())
+        .post('/webhooks/whatsapp/inbound')
+        .send(legacyPayloadWithoutPhone)
+        .expect(403);
+    });
+
+    it('should accept normalized format when receiver_phone_id is provided', async () => {
       const legacyPayload = {
         message_id: 'wamid.e2e-legacy-123',
         from: '+573001234567',
+        receiver_phone_id: 'phone_123', // Use default channel
         timestamp: '2026-02-13T10:00:00Z',
         text: 'Legacy endpoint test',
       };

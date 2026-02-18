@@ -50,18 +50,32 @@ ALTER TABLE "channels" ADD CONSTRAINT "channels_merchant_id_fkey" FOREIGN KEY ("
 -- with real credentials via seed script or admin API.
 -- In production, use environment-specific values or post-migration script.
 
+-- P1-1 Fix: Ensure pgcrypto extension for gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
 DO $$
 DECLARE
     merchant_record RECORD;
     phone_number_id TEXT := COALESCE(current_setting('app.whatsapp_phone_number_id', TRUE), 'PLACEHOLDER_PHONE_NUMBER_ID');
     access_token TEXT := COALESCE(current_setting('app.whatsapp_access_token', TRUE), 'PLACEHOLDER_ACCESS_TOKEN');
     app_secret TEXT := COALESCE(current_setting('app.whatsapp_app_secret', TRUE), '');
+    business_account_id TEXT := COALESCE(current_setting('app.whatsapp_business_account_id', TRUE), 'PLACEHOLDER_BA_ID');
+    merchant_external_id TEXT;
 BEGIN
     -- Log migration start
     RAISE NOTICE 'Creating default WhatsApp channels for existing merchants...';
     
     -- Create a default WhatsApp channel for each existing merchant
+    -- P1-2, P1-4 Fix: Use unique external_id per merchant + complete credentials with phoneNumberId
     FOR merchant_record IN SELECT id, name FROM merchants LOOP
+        -- Each merchant gets unique external_id to avoid CONFLICT
+        -- Format: 'legacy-{merchant_id}' or use env var if only one merchant
+        IF (SELECT COUNT(*) FROM merchants) = 1 THEN
+            merchant_external_id := phone_number_id;
+        ELSE
+            merchant_external_id := 'legacy-' || merchant_record.id;
+        END IF;
+        
         INSERT INTO channels (
             id,
             merchant_id,
@@ -76,9 +90,11 @@ BEGIN
             gen_random_uuid()::TEXT,
             merchant_record.id,
             'WHATSAPP',
-            phone_number_id,
-            'WhatsApp Principal',
+            merchant_external_id,
+            'WhatsApp Principal (Migrated)',
             jsonb_build_object(
+                'businessAccountId', business_account_id,
+                'phoneNumberId', merchant_external_id,
                 'accessToken', access_token,
                 'appSecret', app_secret
             ),
@@ -88,13 +104,13 @@ BEGIN
         )
         ON CONFLICT (type, external_id) DO NOTHING; -- Skip if already exists
         
-        RAISE NOTICE 'Created WhatsApp channel for merchant: % (%)', merchant_record.name, merchant_record.id;
+        RAISE NOTICE 'Created WhatsApp channel for merchant: % (%) with external_id: %', merchant_record.name, merchant_record.id, merchant_external_id;
     END LOOP;
     
     RAISE NOTICE 'Data migration completed. Total channels created: %', (SELECT COUNT(*) FROM channels);
     
     -- Warning if using placeholders
     IF phone_number_id = 'PLACEHOLDER_PHONE_NUMBER_ID' THEN
-        RAISE WARNING 'Channels created with PLACEHOLDER credentials. Update them via seed script or admin API.';
+        RAISE WARNING 'Channels created with PLACEHOLDER credentials. Update external_id and credentials via seed script or admin API with real Meta WhatsApp phone_number_id values.';
     END IF;
 END $$;

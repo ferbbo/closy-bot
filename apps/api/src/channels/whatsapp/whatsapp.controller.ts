@@ -150,6 +150,17 @@ export class WhatsAppController {
       `[LEGACY] Inbound webhook received: message_id=${dto.message_id}, from=${maskedPhone}`,
     );
 
+    // P1-3 Fix: Legacy endpoint now requires receiver_phone_id (no 'default' fallback)
+    if (!dto.receiver_phone_id) {
+      this.logger.error(
+        '[LEGACY] receiver_phone_id is required for multi-channel support. ' +
+          'Update webhook sender to include phone_number_id.',
+      );
+      throw new ForbiddenException(
+        'receiver_phone_id is required. This endpoint requires multi-channel support.',
+      );
+    }
+
     try {
       // Process and dedupe inbound message
       await this.whatsappService.processInboundMessage(dto);
@@ -158,7 +169,7 @@ export class WhatsAppController {
       const result = await this.orchestrator.process({
         messageId: dto.message_id,
         from: dto.from,
-        receiverPhoneId: dto.receiver_phone_id || 'default',
+        receiverPhoneId: dto.receiver_phone_id,
         text: dto.text || '',
         timestamp: new Date(dto.timestamp),
       });
@@ -208,7 +219,14 @@ export class WhatsAppController {
     this.logger.log(`Processing message: id=${dto.message_id}, from=${maskedPhone}`);
 
     // PR-03.11: Resolve merchant+channel before processing
-    const phoneNumberId = dto.receiver_phone_id || 'default';
+    // P1-3 Fix: receiver_phone_id is now required (no 'default' fallback)
+    if (!dto.receiver_phone_id) {
+      this.logger.warn(
+        'Meta webhook missing phone_number_id in metadata. Skipping message processing.',
+      );
+      return;
+    }
+    const phoneNumberId = dto.receiver_phone_id;
     const resolution = await this.merchantResolver.resolveByChannel(
       ChannelType.WHATSAPP,
       phoneNumberId,
