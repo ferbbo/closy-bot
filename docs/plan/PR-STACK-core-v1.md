@@ -235,6 +235,31 @@
 - **Incluye:** seed/config por playbook + selección por merchant + composición de prompts LLM.
 - **Excluye:** editor visual avanzado.
 
+### PR-12 — Auth Social OIDC: Google + Microsoft con sesión PostgreSQL 🟡 ENHANCEMENT
+- **Objetivo:** habilitar autenticación OIDC para Merchants con sesión server-side para acceso al dashboard (RNF-08).
+- **Depende de:** PR-02 ✅.
+- **Incluye:**
+  - Modelos `MerchantIdentity` + `Session` (Prisma)
+  - Interface `OidcProvider` + implementaciones Google y Microsoft
+  - `SessionService` + `PostgresSessionStore` (diseño migrable a Redis)
+  - Endpoints: `/auth/login/:provider`, `/auth/callback/:provider`, `/auth/me`, `/auth/logout`
+  - `SessionAuthGuard` para endpoints protegidos
+  - Session cleanup job (@nestjs/schedule)
+  - Tests unit + e2e
+- **Excluye:** UI/frontend, JWT, refresh tokens, roles/permisos, logout global del provider.
+- **DoD específico:**
+  - Migración crea tablas `merchant_identities` + `sessions`
+  - Login Google/Microsoft crea sesión y setea cookie HttpOnly
+  - `/auth/me` retorna merchant con cookie válida, 401 sin ella
+  - `/auth/logout` invalida sesión server-side
+  - Cleanup job elimina sesiones expiradas
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+- **Tech notes:**
+  - OIDC Authorization Code Flow (no implicit)
+  - State parameter con cookie temporal para CSRF protection
+  - 1 cuenta OIDC = 1 merchant (sin roles por ahora)
+  - Session store pattern permite swap a Redis sin cambiar AuthService
+
 ---
 
 ## Cómo se usa este stack
