@@ -34,11 +34,19 @@
   "license": "UNLICENSED",
   "packageManager": "pnpm@10.25.0",
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/uuid": "^11.0.0",
     "prisma": "5.22.0",
     "tsx": "^4.21.0"
   },
   "dependencies": {
+    "@nestjs/axios": "^4.0.1",
     "@nestjs/schedule": "^6.1.1",
-    "@prisma/client": "5.22.0"
+    "@prisma/client": "5.22.0",
+    "axios": "^1.13.5",
+    "cookie-parser": "^1.4.7",
+    "jsonwebtoken": "^9.0.3",
+    "uuid": "10.0.0"
   }
 }

@@ -12,6 +12,7 @@ import { CatalogManagementModule } from './catalog-management/catalog-management
 import { OutboxDispatcherModule } from './workers/outbox-dispatcher/outbox-dispatcher.module';
 import { RetentionModule } from './workers/retention/retention.module'; // PR-03.10
 import { SummarizationModule } from './workers/summarization/summarization.module'; // PR-03.10
+import { AuthModule } from './auth/auth.module'; // PR-12
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { SummarizationModule } from './workers/summarization/summarization.modul
     OutboxDispatcherModule,
     RetentionModule, // PR-03.10
     SummarizationModule, // PR-03.10
+    AuthModule, // PR-12: OIDC Authentication
   ],
 })
 export class AppModule {}

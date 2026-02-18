@@ -30,4 +30,14 @@ export const envValidationSchema = Joi.object({
   MESSAGE_HISTORY_MAX_PER_CONVO: Joi.number().min(10).max(500).default(50),
   LLM_CONTEXT_LAST_K: Joi.number().min(1).max(50).default(10),
   SUMMARIZATION_BATCH_SIZE: Joi.number().min(1).max(100).default(20),
+
+  // PR-12: Auth OIDC configuration
+  GOOGLE_CLIENT_ID: Joi.string().optional(),
+  GOOGLE_CLIENT_SECRET: Joi.string().optional(),
+  MICROSOFT_CLIENT_ID: Joi.string().optional(),
+  MICROSOFT_CLIENT_SECRET: Joi.string().optional(),
+  AUTH_REDIRECT_URL: Joi.string().uri().default('http://localhost:3000'),
+  AUTH_SESSION_TTL_HOURS: Joi.number().min(1).max(720).default(24), // Max 30 days
+  AUTH_COOKIE_DOMAIN: Joi.string().optional(),
+  AUTH_SESSION_CLEANUP_CRON: Joi.string().optional(),
 });

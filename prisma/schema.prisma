@@ -63,7 +63,9 @@ model Merchant {
   categories     Category[]
   products       Product[]
   outboxMessages OutboxMessage[]
-  channels       Channel[] // PR-03.11: Multi-channel support
+  channels       Channel[]   // PR-03.11: Multi-channel support
+  identities     MerchantIdentity[] // PR-12: OIDC identities
+  sessions       Session[]   // PR-12: Auth sessions
 
   @@map("merchants")
 }
@@ -295,6 +297,51 @@ model Channel {
   @@index([merchantId])
   @@index([type, externalId])
   @@index([isActive])
+}
+
+// ============================================================================
+// PR-12: Auth OIDC - Social Login (Google + Microsoft)
+// ============================================================================
+
+/// OidcProvider enum for supported identity providers
+enum OidcProvider {
+  GOOGLE
+  MICROSOFT
+}
+
+/// MerchantIdentity links merchants to external OIDC providers
+model MerchantIdentity {
+  id          String       @id @default(cuid())
+  merchantId  String       @map("merchant_id")
+  provider    OidcProvider
+  oidcSubject String       @map("oidc_subject") // 'sub' claim from ID token
+  email       String
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, oidcSubject])
+  @@map("merchant_identities")
+  @@index([merchantId])
+  @@index([email])
+}
+
+/// Session stores server-side sessions for authenticated merchants
+model Session {
+  id        String   @id @default(cuid())
+  sessionId String   @unique @map("session_id") // UUID for cookie
+  merchantId String  @map("merchant_id")
+  expiresAt DateTime @map("expires_at")
+  userAgent String?  @map("user_agent")
+  ipAddress String?  @map("ip_address")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+  @@index([sessionId])
+  @@index([expiresAt])
+  @@index([merchantId])
 }
 
 // ============================================================================
