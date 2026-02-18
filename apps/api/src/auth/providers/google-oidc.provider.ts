@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { decode } from 'jsonwebtoken';
+import { verify } from 'jsonwebtoken';
+import jwksClient from 'jwks-rsa';
 import { OidcProvider, OidcTokens, OidcUserInfo } from './oidc-provider.interface';
 
 /**
@@ -16,6 +17,8 @@ export class GoogleOidcProvider implements OidcProvider {
   private readonly clientSecret: string;
   private readonly authorizationEndpoint = 'https://accounts.google.com/o/oauth2/v2/auth';
   private readonly tokenEndpoint = 'https://oauth2.googleapis.com/token';
+  private readonly jwksUri = 'https://www.googleapis.com/oauth2/v3/certs';
+  private readonly jwksClient: jwksClient.JwksClient;
 
   constructor(
     private readonly httpService: HttpService,
@@ -23,6 +26,13 @@ export class GoogleOidcProvider implements OidcProvider {
   ) {
     this.clientId = this.configService.getOrThrow<string>('GOOGLE_CLIENT_ID');
     this.clientSecret = this.configService.getOrThrow<string>('GOOGLE_CLIENT_SECRET');
+
+    // Initialize JWKS client for signature verification
+    this.jwksClient = jwksClient({
+      jwksUri: this.jwksUri,
+      cache: true,
+      cacheMaxAge: 86400000, // 24 hours
+    });
   }
 
   getAuthorizationUrl(state: string, redirectUri: string): string {
@@ -79,45 +89,58 @@ export class GoogleOidcProvider implements OidcProvider {
 
   async getUserInfo(idToken: string): Promise<OidcUserInfo> {
     try {
-      // TODO(security): Implement JWKS verification for production
-      // For now, decode and validate structure/expiry
-      const decoded = decode(idToken, { complete: true }) as {
-        payload: Record<string, unknown>;
-      } | null;
+      // Get signing key from JWKS
+      const getKey = (
+        header: { kid?: string },
+        callback: (err: Error | null, key?: string) => void,
+      ) => {
+        this.jwksClient.getSigningKey(header.kid || '', (err, key) => {
+          if (err) {
+            this.logger.error('Failed to get signing key', err);
+            callback(err);
+            return;
+          }
+          const signingKey = key?.getPublicKey();
+          callback(null, signingKey);
+        });
+      };
 
-      if (!decoded || !decoded.payload) {
-        throw new Error('Invalid ID token structure');
-      }
-
-      const payload = decoded.payload;
+      // Verify token signature and claims
+      const payload = await new Promise<Record<string, unknown>>((resolve, reject) => {
+        verify(
+          idToken,
+          getKey as never, // Type cast needed for jwks-rsa callback
+          {
+            algorithms: ['RS256'],
+            issuer: ['https://accounts.google.com', 'accounts.google.com'],
+            audience: this.clientId,
+          },
+          (err, decoded) => {
+            if (err) {
+              this.logger.error('ID token verification failed', err);
+              reject(new Error('ID token verification failed'));
+              return;
+            }
+            resolve(decoded as Record<string, unknown>);
+          },
+        );
+      });
 
       // Verify required claims
-      if (!payload.sub || !payload.email) {
-        throw new Error('Missing required claims (sub, email)');
+      if (!payload.sub || typeof payload.sub !== 'string') {
+        throw new Error('Missing required claim: sub');
       }
 
-      // Verify issuer
-      if (!payload.iss || !payload.iss.includes('accounts.google.com')) {
-        throw new Error('Invalid issuer');
+      if (!payload.email || typeof payload.email !== 'string') {
+        throw new Error('Missing required claim: email');
       }
 
-      // Verify audience (client_id)
-      if (payload.aud !== this.clientId) {
-        throw new Error('Invalid audience');
-      }
-
-      // Verify expiry
-      const now = Math.floor(Date.now() / 1000);
-      if (payload.exp && payload.exp < now) {
-        throw new Error('Token expired');
-      }
-
-      this.logger.debug(`Extracted user info for sub: ${payload.sub}`);
+      this.logger.debug(`Verified and extracted user info for sub: ${payload.sub}`);
 
       return {
         sub: payload.sub,
         email: payload.email,
-        name: payload.name,
+        name: payload.name as string | undefined,
       };
     } catch (error) {
       this.logger.error('Failed to extract user info from ID token', error);
