@@ -127,10 +127,16 @@ describe('AuthService (AC-08, AC-09)', () => {
       jest.spyOn(prismaService.merchantIdentity, 'findUnique').mockResolvedValue(mockIdentity);
       jest.spyOn(sessionService, 'create').mockResolvedValue(mockSession);
 
-      const result = await service.handleCallback('google', 'code123', 'state-match', 'state-match', {
-        userAgent: 'test-agent',
-        ipAddress: '127.0.0.1',
-      });
+      const result = await service.handleCallback(
+        'google',
+        'code123',
+        'state-match',
+        'state-match',
+        {
+          userAgent: 'test-agent',
+          ipAddress: '127.0.0.1',
+        },
+      );
 
       expect(result.sessionId).toBe('uuid-session');
       expect(result.merchant.id).toBe('merchant-1');

@@ -83,24 +83,51 @@ export class MicrosoftOidcProvider implements OidcProvider {
 
   async getUserInfo(idToken: string): Promise<OidcUserInfo> {
     try {
-      // Decode JWT without verification (verification done by provider)
-      // In production, should verify signature using Microsoft's JWKS
-      const decoded = decode(idToken) as IdTokenClaims | null;
+      // TODO(security): Implement JWKS verification for production
+      // For now, decode and validate structure/expiry
+      const decoded = decode(idToken, { complete: true }) as {
+        payload: Record<string, unknown>;
+      } | null;
 
-      if (!decoded || !decoded.sub || !decoded.email) {
-        // Microsoft uses 'preferred_username' as email for some accounts
-        const email = decoded.email || decoded.preferred_username;
-        if (!decoded.sub || !email) {
-          throw new Error('Invalid ID token structure');
-        }
+      if (!decoded || !decoded.payload) {
+        throw new Error('Invalid ID token structure');
       }
 
-      this.logger.debug(`Extracted user info for sub: ${decoded.sub}`);
+      const payload = decoded.payload;
+
+      // Verify required claims
+      if (!payload.sub) {
+        throw new Error('Missing required claim: sub');
+      }
+
+      // Microsoft uses 'preferred_username' or 'email'
+      const email = payload.email || payload.preferred_username;
+      if (!email) {
+        throw new Error('Missing email/preferred_username claim');
+      }
+
+      // Verify issuer
+      if (!payload.iss || !payload.iss.includes('login.microsoftonline.com')) {
+        throw new Error('Invalid issuer');
+      }
+
+      // Verify audience (client_id)
+      if (payload.aud !== this.clientId) {
+        throw new Error('Invalid audience');
+      }
+
+      // Verify expiry
+      const now = Math.floor(Date.now() / 1000);
+      if (payload.exp && payload.exp < now) {
+        throw new Error('Token expired');
+      }
+
+      this.logger.debug(`Extracted user info for sub: ${payload.sub}`);
 
       return {
-        sub: decoded.sub,
-        email: decoded.email || decoded.preferred_username,
-        name: decoded.name,
+        sub: payload.sub,
+        email: email,
+        name: payload.name,
       };
     } catch (error) {
       this.logger.error('Failed to extract user info from ID token', error);

@@ -79,20 +79,45 @@ export class GoogleOidcProvider implements OidcProvider {
 
   async getUserInfo(idToken: string): Promise<OidcUserInfo> {
     try {
-      // Decode JWT without verification (verification done by provider)
-      // In production, should verify signature using Google's JWKS
-      const decoded = decode(idToken) as IdTokenClaims | null;
+      // TODO(security): Implement JWKS verification for production
+      // For now, decode and validate structure/expiry
+      const decoded = decode(idToken, { complete: true }) as {
+        payload: Record<string, unknown>;
+      } | null;
 
-      if (!decoded || !decoded.sub || !decoded.email) {
+      if (!decoded || !decoded.payload) {
         throw new Error('Invalid ID token structure');
       }
 
-      this.logger.debug(`Extracted user info for sub: ${decoded.sub}`);
+      const payload = decoded.payload;
+
+      // Verify required claims
+      if (!payload.sub || !payload.email) {
+        throw new Error('Missing required claims (sub, email)');
+      }
+
+      // Verify issuer
+      if (!payload.iss || !payload.iss.includes('accounts.google.com')) {
+        throw new Error('Invalid issuer');
+      }
+
+      // Verify audience (client_id)
+      if (payload.aud !== this.clientId) {
+        throw new Error('Invalid audience');
+      }
+
+      // Verify expiry
+      const now = Math.floor(Date.now() / 1000);
+      if (payload.exp && payload.exp < now) {
+        throw new Error('Token expired');
+      }
+
+      this.logger.debug(`Extracted user info for sub: ${payload.sub}`);
 
       return {
-        sub: decoded.sub,
-        email: decoded.email,
-        name: decoded.name,
+        sub: payload.sub,
+        email: payload.email,
+        name: payload.name,
       };
     } catch (error) {
       this.logger.error('Failed to extract user info from ID token', error);

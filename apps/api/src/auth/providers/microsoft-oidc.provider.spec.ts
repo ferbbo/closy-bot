@@ -58,7 +58,9 @@ describe('MicrosoftOidcProvider (AC-04, AC-05)', () => {
         },
       };
 
-      jest.spyOn(httpService, 'post').mockReturnValue(of(mockResponse) as any);
+      jest
+        .spyOn(httpService, 'post')
+        .mockReturnValue(of(mockResponse) as ReturnType<typeof httpService.post>);
 
       const result = await provider.exchangeCodeForTokens(
         'test-code-ms',

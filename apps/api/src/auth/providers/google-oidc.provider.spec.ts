@@ -7,7 +7,6 @@ import { GoogleOidcProvider } from './google-oidc.provider';
 describe('GoogleOidcProvider (AC-02, AC-03)', () => {
   let provider: GoogleOidcProvider;
   let httpService: HttpService;
-  let configService: ConfigService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -34,7 +33,6 @@ describe('GoogleOidcProvider (AC-02, AC-03)', () => {
 
     provider = module.get<GoogleOidcProvider>(GoogleOidcProvider);
     httpService = module.get<HttpService>(HttpService);
-    configService = module.get<ConfigService>(ConfigService);
   });
 
   describe('AC-02: getAuthorizationUrl', () => {
@@ -63,7 +61,9 @@ describe('GoogleOidcProvider (AC-02, AC-03)', () => {
         },
       };
 
-      jest.spyOn(httpService, 'post').mockReturnValue(of(mockResponse) as any);
+      jest
+        .spyOn(httpService, 'post')
+        .mockReturnValue(of(mockResponse) as ReturnType<typeof httpService.post>);
 
       const result = await provider.exchangeCodeForTokens(
         'test-code',

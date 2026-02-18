@@ -76,7 +76,8 @@ describe('SessionAuthGuard (AC-13)', () => {
       const result = await guard.canActivate(mockContext);
 
       expect(result).toBe(true);
-      expect((mockRequest as any).merchant).toBe(mockMerchant);
+      // Verify merchant was attached to request
+      expect((mockRequest as unknown as { merchant: unknown }).merchant).toBe(mockMerchant);
     });
   });
 });

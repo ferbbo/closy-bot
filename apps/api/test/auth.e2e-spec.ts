@@ -5,7 +5,8 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
+import cookieParser from 'cookie-parser';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/persistence/prisma/prisma.service';
 
@@ -19,6 +20,10 @@ describe('Auth (e2e) - PR-12', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+
+    // Enable cookie parser (required for auth tests)
+    app.use(cookieParser());
+
     await app.init();
 
     prisma = app.get<PrismaService>(PrismaService);
@@ -34,9 +39,7 @@ describe('Auth (e2e) - PR-12', () => {
 
   describe('AC-10: GET /auth/login/:provider', () => {
     it('should redirect to Google with state cookie', async () => {
-      const response = await request(app.getHttpServer())
-        .get('/auth/login/google')
-        .expect(302);
+      const response = await request(app.getHttpServer()).get('/auth/login/google').expect(302);
 
       expect(response.headers.location).toContain('https://accounts.google.com');
       expect(response.headers.location).toContain('state=');
@@ -45,9 +48,7 @@ describe('Auth (e2e) - PR-12', () => {
     });
 
     it('should redirect to Microsoft', async () => {
-      const response = await request(app.getHttpServer())
-        .get('/auth/login/microsoft')
-        .expect(302);
+      const response = await request(app.getHttpServer()).get('/auth/login/microsoft').expect(302);
 
       expect(response.headers.location).toContain('https://login.microsoftonline.com');
     });
@@ -55,9 +56,7 @@ describe('Auth (e2e) - PR-12', () => {
 
   describe('AC-17: Unknown provider', () => {
     it('should return 404 for unknown provider', async () => {
-      const response = await request(app.getHttpServer())
-        .get('/auth/login/unknown')
-        .expect(404);
+      const response = await request(app.getHttpServer()).get('/auth/login/unknown').expect(404);
 
       expect(response.body.message).toContain('Unknown provider');
     });
@@ -65,9 +64,7 @@ describe('Auth (e2e) - PR-12', () => {
 
   describe('AC-12: GET /auth/me', () => {
     it('should return 401 without cookie', async () => {
-      await request(app.getHttpServer())
-        .get('/auth/me')
-        .expect(401);
+      await request(app.getHttpServer()).get('/auth/me').expect(401);
     });
 
     it('should return 401 with invalid cookie', async () => {
@@ -78,19 +75,19 @@ describe('Auth (e2e) - PR-12', () => {
     });
 
     it('should return merchant info with valid session', async () => {
-      // Create test merchant
+      // Create test merchant with unique api key
       const merchant = await prisma.merchant.create({
         data: {
           name: 'Test Merchant',
           whatsappNumber: 'test-auth@example.com',
-          apiKey: 'test-key-auth',
+          apiKey: `test-key-auth-${Date.now()}`,
         },
       });
 
-      // Create session
+      // Create session with unique ID
       const session = await prisma.session.create({
         data: {
-          sessionId: 'test-session-e2e',
+          sessionId: `test-session-e2e-${Date.now()}`,
           merchantId: merchant.id,
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
@@ -113,18 +110,18 @@ describe('Auth (e2e) - PR-12', () => {
 
   describe('AC-15: POST /auth/logout', () => {
     it('should invalidate session and clear cookie', async () => {
-      // Create test merchant and session
+      // Create test merchant and session with unique IDs
       const merchant = await prisma.merchant.create({
         data: {
           name: 'Test Logout Merchant',
           whatsappNumber: 'test-logout@example.com',
-          apiKey: 'test-key-logout',
+          apiKey: `test-key-logout-${Date.now()}`,
         },
       });
 
       const session = await prisma.session.create({
         data: {
-          sessionId: 'test-session-logout',
+          sessionId: `test-session-logout-${Date.now()}`,
           merchantId: merchant.id,
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
