@@ -3,7 +3,7 @@
  * Handles playbook selection, composition, and validation
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PlaybookConfig, Industry } from '../domain/entities/playbook-config.interface';
 import { RopaPlaybookDefaults } from '../domain/entities/playbook-defaults/ropa.config';
 import { BellezaPlaybookDefaults } from '../domain/entities/playbook-defaults/belleza.config';
@@ -149,17 +149,84 @@ export class PlaybookService {
   }
 
   /**
-   * Validate playbook config structure
+   * Validate PlaybookConfig structure (throws BadRequestException if invalid)
+   * @param config - Config to validate
+   * @param requireComplete - If true, requires all fields (for PUT). If false, allows partial (for PATCH)
    */
-  validatePlaybookConfig(config: unknown): boolean {
+  validatePlaybookConfig(config: Partial<PlaybookConfig> | unknown, requireComplete = false): void {
     if (!config || typeof config !== 'object') {
-      return false;
+      throw new BadRequestException('PlaybookConfig must be an object');
     }
 
     const playbook = config as Record<string, unknown>;
 
-    // Basic structure validation
-    const requiredKeys = ['industry', 'llmPrompt', 'checkoutQuestions', 'messages', 'rules'];
-    return requiredKeys.every((key) => key in playbook);
+    // If requireComplete=true (PUT), check all required top-level keys
+    if (requireComplete) {
+      const requiredKeys = ['industry', 'llmPrompt', 'messages', 'rules', 'checkoutQuestions'];
+      const missingKeys = requiredKeys.filter((k) => !(k in playbook));
+
+      if (missingKeys.length > 0) {
+        throw new BadRequestException(
+          `PlaybookConfig is incomplete. Missing fields: ${missingKeys.join(', ')}`,
+        );
+      }
+    }
+
+    // Validate nested structures if provided
+    if (playbook.llmPrompt !== undefined) {
+      if (typeof playbook.llmPrompt !== 'object' || playbook.llmPrompt === null) {
+        throw new BadRequestException('llmPrompt must be an object');
+      }
+
+      const llmPrompt = playbook.llmPrompt as Record<string, unknown>;
+
+      if ('focusAreas' in llmPrompt && !Array.isArray(llmPrompt.focusAreas)) {
+        throw new BadRequestException('llmPrompt.focusAreas must be an array');
+      }
+
+      if ('commonQuestions' in llmPrompt && !Array.isArray(llmPrompt.commonQuestions)) {
+        throw new BadRequestException('llmPrompt.commonQuestions must be an array');
+      }
+
+      if (
+        'emojiUsage' in llmPrompt &&
+        !['none', 'moderate', 'frequent'].includes(llmPrompt.emojiUsage as string)
+      ) {
+        throw new BadRequestException(
+          'llmPrompt.emojiUsage must be one of: none, moderate, frequent',
+        );
+      }
+    }
+
+    if (playbook.messages !== undefined) {
+      if (typeof playbook.messages !== 'object' || playbook.messages === null) {
+        throw new BadRequestException('messages must be an object');
+      }
+    }
+
+    if (playbook.rules !== undefined) {
+      if (typeof playbook.rules !== 'object' || playbook.rules === null) {
+        throw new BadRequestException('rules must be an object');
+      }
+
+      const rules = playbook.rules as Record<string, unknown>;
+
+      if ('maxRecommendations' in rules) {
+        const max = rules.maxRecommendations;
+        if (typeof max !== 'number' || max < 0 || max > 10) {
+          throw new BadRequestException(
+            'rules.maxRecommendations must be a number between 0 and 10',
+          );
+        }
+      }
+    }
+
+    if (playbook.checkoutQuestions !== undefined) {
+      if (!Array.isArray(playbook.checkoutQuestions)) {
+        throw new BadRequestException('checkoutQuestions must be an array');
+      }
+    }
+
+    this.logger.debug('PlaybookConfig validation passed');
   }
 }

@@ -196,22 +196,66 @@ describe('PlaybookService', () => {
         },
       };
 
-      expect(service.validatePlaybookConfig(validConfig)).toBe(true);
+      expect(() => service.validatePlaybookConfig(validConfig, true)).not.toThrow();
     });
 
-    it('should reject invalid config', () => {
+    it('should reject invalid config when requireComplete=true', () => {
       const invalidConfig = {
         industry: 'ropa',
         // Missing required keys
       };
 
-      expect(service.validatePlaybookConfig(invalidConfig)).toBe(false);
+      expect(() => service.validatePlaybookConfig(invalidConfig, true)).toThrow();
+    });
+
+    it('should allow partial config when requireComplete=false', () => {
+      const partialConfig = {
+        llmPrompt: { tone: 'professional' },
+      };
+
+      expect(() => service.validatePlaybookConfig(partialConfig, false)).not.toThrow();
     });
 
     it('should reject non-object config', () => {
-      expect(service.validatePlaybookConfig(null)).toBe(false);
-      expect(service.validatePlaybookConfig('string')).toBe(false);
-      expect(service.validatePlaybookConfig(123)).toBe(false);
+      expect(() => service.validatePlaybookConfig(null, false)).toThrow();
+      expect(() => service.validatePlaybookConfig('string', false)).toThrow();
+      expect(() => service.validatePlaybookConfig(123, false)).toThrow();
+    });
+
+    it('should throw if llmPrompt.focusAreas is not an array', () => {
+      const invalidConfig = {
+        llmPrompt: {
+          focusAreas: 'not-an-array',
+        },
+      };
+
+      expect(() => service.validatePlaybookConfig(invalidConfig, false)).toThrow(
+        'focusAreas must be an array',
+      );
+    });
+
+    it('should throw if llmPrompt.emojiUsage is invalid', () => {
+      const invalidConfig = {
+        llmPrompt: {
+          emojiUsage: 'invalid',
+        },
+      };
+
+      expect(() => service.validatePlaybookConfig(invalidConfig, false)).toThrow(
+        'emojiUsage must be one of: none, moderate, frequent',
+      );
+    });
+
+    it('should throw if rules.maxRecommendations is out of range', () => {
+      const invalidConfig = {
+        rules: {
+          maxRecommendations: 15,
+        },
+      };
+
+      expect(() => service.validatePlaybookConfig(invalidConfig, false)).toThrow(
+        'maxRecommendations must be a number between 0 and 10',
+      );
     });
   });
 });

@@ -1,4 +1,4 @@
-# Setup Instructions - Core V1 MVP
+ggpull# Setup Instructions - Core V1 MVP
 
 This document provides step-by-step instructions to set up the Closy Bot development environment.
 
