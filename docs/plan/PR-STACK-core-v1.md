@@ -411,6 +411,131 @@
 
 ---
 
+## Frontend Stack
+
+### PR-FE-00 — Backend CORS: Habilitar cross-origin para dashboard 🔵 INFRASTRUCTURE
+- **Objetivo:** configurar CORS en NestJS para permitir requests desde el frontend dashboard en localhost:3001 (dev) y dominio de producción.
+- **Depende de:** Ninguno.
+- **Incluye:**
+  - Configuración CORS en `main.ts` con `app.enableCors()`
+  - Env vars: `CORS_ORIGINS` (comma-separated list de orígenes permitidos)
+  - Defaults: `http://localhost:3001` para dev
+  - Credentials: `true` (para cookies de sesión)
+  - Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS
+  - Allowed headers: Content-Type, Cookie, x-api-key, Authorization
+  - Exposed headers: Set-Cookie
+  - Actualizar `.env.example`
+  - Tests E2E: verificar headers CORS en response
+- **Excluye:** rate limiting por origen, CORS dinámico por merchant.
+- **DoD específico:**
+  - `OPTIONS /auth/me` retorna headers `Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials`
+  - Requests desde `localhost:3001` con cookies funcionan
+  - Requests desde origen no permitido → bloqueado
+  - `pnpm lint`, `pnpm test` pasan
+- **Tech notes:**
+  - NestJS: `app.enableCors({ origin: process.env.CORS_ORIGINS?.split(','), credentials: true })`
+  - Producción: agregar dominio real a `CORS_ORIGINS`
+- **Prioridad:** ALTA — bloquea PR-FE-01
+
+### PR-FE-01 — Frontend Bootstrap: Next.js + shadcn + TanStack Query 🔵 NEW
+- **Objetivo:** crear package `@closy-bot/dashboard` con stack frontend mínimo y primera página funcional (login redirect + dashboard placeholder).
+- **Depende de:** PR-12 ✅ (Auth OIDC backend), PR-FE-00 (CORS).
+- **Incluye:**
+  - Package `@closy-bot/dashboard` en `apps/dashboard/`
+  - Next.js 14 App Router + TypeScript 5.x
+  - Tailwind CSS 3.4 + shadcn/ui (Button, Card, Form, Input base)
+  - TanStack Query v5 provider + QueryClientProvider
+  - React Hook Form + Zod configurados
+  - Middleware Next.js auth (verifica cookie via `/auth/me`, redirect a `/login` si 401)
+  - Layout base con sidebar placeholder
+  - Páginas:
+    - `/login` — botones "Google" y "Microsoft" que redirigen a `{API_URL}/auth/login/:provider`
+    - `/dashboard` — protected, muestra merchant info (nombre, email, industry)
+  - API client base (`lib/api.ts`) con `fetch` + `credentials: 'include'`
+  - Hook `useAuth()` con TanStack Query para `/auth/me`
+  - Scripts root: `pnpm dev:dashboard`, `pnpm build:dashboard`, `pnpm lint:dashboard`
+  - `.env.example` con `NEXT_PUBLIC_API_URL=http://localhost:3000`
+  - Actualizar `pnpm-workspace.yaml` con `apps/dashboard`
+- **Excluye:**
+  - Auth.js/NextAuth (usa backend existente)
+  - Zustand (TanStack Query maneja server state)
+  - OpenAPI client generator (PR-FE-02)
+  - BFF route handlers complejos
+  - UI de channels/catalog/playbook (PRs posteriores)
+- **Consumer Experience:**
+  - Dev: `pnpm dev:dashboard` → http://localhost:3001
+  - Login: Click "Google" → redirect `localhost:3000/auth/login/google` → callback → redirect `/dashboard`
+  - Logout: Click "Logout" → POST `/auth/logout` → redirect `/login`
+- **DoD específico:**
+  - `pnpm --filter @closy-bot/dashboard dev` arranca en puerto 3001
+  - `pnpm --filter @closy-bot/dashboard build` completa sin errores
+  - Login redirect funciona end-to-end con backend local
+  - `/dashboard` muestra nombre y email del merchant (GET `/auth/me`)
+  - Middleware redirige a `/login` si no autenticado (cookie ausente o inválida)
+  - shadcn components instalados: Button, Card, Form, Input
+  - `pnpm lint` pasa (ESLint config con Next.js rules)
+  - Responsive básico (mobile-first)
+- **Tech notes:**
+  - Port 3001 (Next.js) vs 3000 (NestJS backend)
+  - Cookie `session_id` se envía automáticamente con `credentials: 'include'`
+  - TanStack Query: `staleTime: 5min` para `/auth/me` (reduce requests)
+  - Middleware pattern: `middleware.ts` en root, matcher para rutas protegidas
+  - shadcn CLI: `pnpm dlx shadcn-ui@latest init`
+- **Prioridad:** ALTA — habilita desarrollo de UI para todos los flujos
+
+### PR-FE-02 — OpenAPI Client Generation 🔵 FUTURE
+- **Objetivo:** generar cliente TypeScript tipado desde OpenAPI spec del backend.
+- **Depende de:** PR-FE-01, backend expone OpenAPI spec (`@nestjs/swagger`).
+- **Incluye:**
+  - NestJS Swagger module configurado (si no existe)
+  - Script `pnpm generate:api-client` usando `openapi-typescript-codegen` o `@hey-api/openapi-ts`
+  - Cliente tipado en `apps/dashboard/src/lib/api-client/`
+  - Integración con TanStack Query hooks
+  - CI: regenerar en cambios al backend
+- **Excluye:** cambios funcionales al backend.
+- **DoD específico:**
+  - `pnpm generate:api-client` genera tipos desde `/api-docs`
+  - Hooks TanStack Query usan tipos generados
+  - `pnpm lint`, `pnpm typecheck` pasan
+- **Prioridad:** MEDIA — mejora DX pero no bloquea MVP
+
+### PR-FE-03 — Dashboard: Channels UI 🔵 FUTURE
+- **Objetivo:** UI para listar channels y ver health status.
+- **Depende de:** PR-FE-01, PR-16 ✅ (Channel List API), PR-14 ✅ (Channel Health).
+- **Incluye:**
+  - Página `/dashboard/channels`
+  - Lista de channels con status badge (connected/error)
+  - Botón "Add WhatsApp" → redirect `/onboarding/whatsapp/start`
+  - Panel de health con retry buttons
+  - TanStack Query hooks para `/channels` y `/channels/:id/health`
+- **Excluye:** CRUD channels, Instagram.
+- **Prioridad:** MEDIA
+
+### PR-FE-04 — Dashboard: Catalog UI 🔵 FUTURE
+- **Objetivo:** UI para upload CSV y ver lista de productos.
+- **Depende de:** PR-FE-01, PR-17 ✅ (File Upload).
+- **Incluye:**
+  - Página `/dashboard/catalog`
+  - Drag & drop zone para CSV (`react-dropzone`)
+  - Upload con progreso visual
+  - Tabla de productos con búsqueda
+  - Import stats (created/updated/errors)
+- **Excluye:** CRUD individual de productos, editor de variantes.
+- **Prioridad:** MEDIA
+
+### PR-FE-05 — Dashboard: Playbook Settings UI 🔵 FUTURE
+- **Objetivo:** UI para configurar playbook JSON del merchant.
+- **Depende de:** PR-FE-01, PR-15 ✅ (Merchant Settings API).
+- **Incluye:**
+  - Página `/dashboard/settings`
+  - Form con secciones: Profile, Messages, Rules, Guidelines
+  - Deep merge con PATCH endpoint
+  - Validación Zod client-side (reutiliza schemas)
+- **Excluye:** editor visual avanzado, preview de conversación.
+- **Prioridad:** BAJA
+
+---
+
 ## Cómo se usa este stack
 
 1) Antes de construir `PR-XX`, el Planner crea un Brief en `docs/plan/pr-briefs/PR-XX-<slug>.md`.
