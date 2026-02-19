@@ -144,6 +144,7 @@ Permite a un merchant autenticado conectar su WhatsApp Business Account via Meta
 | GET | `/onboarding/whatsapp/start` | Inicia OAuth Meta (redirect) |
 | GET | `/onboarding/whatsapp/callback` | Callback OAuth → crea Channel |
 | POST | `/onboarding/whatsapp/:channelId/subscribe-webhook` | Retry webhook subscription |
+| GET | `/channels` | **Lista todos los channels del merchant** |
 | GET | `/channels/:id/health` | Health check del canal |
 | POST | `/channels/:id/retry-webhook` | Retry webhook con backoff |
 | POST | `/channels/:id/refresh-status` | Re-fetch status desde Meta |
@@ -159,15 +160,38 @@ open "http://localhost:3000/onboarding/whatsapp/start"
 
 Meta mostrará el flujo de Embedded Signup. Al completar, callback crea el Channel.
 
-#### 2. Verificar Channel Creado
+#### 2. Listar Channels del Merchant (PR-16)
 
-El channel ID se recibe en el redirect del callback:
-```
-/dashboard?status=success&channelId=<channel-id>
+```bash
+curl -X GET http://localhost:3000/channels \
+  -H "Cookie: session_id=<tu-session-id>"
 ```
 
-> **Nota:** Endpoint `GET /channels` para listar todos los channels está planificado en **PR-16**.
-> Por ahora, usar el `channelId` del redirect o consultar directamente la DB.
+**Respuesta esperada:**
+```json
+[
+  {
+    "id": "clxxx...",
+    "type": "WHATSAPP",
+    "displayName": "Sucursal Centro",
+    "status": "connected",
+    "webhookSubscribed": true,
+    "lastWebhookAt": "2026-02-19T10:30:00Z",
+    "createdAt": "2026-02-15T08:00:00Z"
+  },
+  {
+    "id": "clyyy...",
+    "type": "WHATSAPP",
+    "displayName": "Sucursal Norte",
+    "status": "error",
+    "webhookSubscribed": false,
+    "lastWebhookAt": null,
+    "createdAt": "2026-02-18T14:00:00Z"
+  }
+]
+```
+
+Si el merchant no tiene channels, retorna `[]` (array vacío).
 
 #### 3. Health Check de Canal
 
@@ -547,6 +571,7 @@ pnpm test:e2e whatsapp-webhook
 pnpm test:e2e auth
 pnpm test:e2e whatsapp-onboarding
 pnpm test:e2e channel-health
+pnpm test:e2e channel-list
 ```
 
 ### Tests Disponibles
@@ -556,6 +581,7 @@ pnpm test:e2e channel-health
 | `auth.e2e-spec.ts` | Login OIDC |
 | `whatsapp-onboarding.e2e-spec.ts` | Meta Embedded Signup |
 | `channel-health.e2e-spec.ts` | Health + Retry |
+| `channel-list.e2e-spec.ts` | List channels (PR-16) |
 | `whatsapp-webhook.e2e-spec.ts` | Conversación básica |
 | `whatsapp-webhook-meta.e2e-spec.ts` | Meta payload compliance |
 | `catalog-management.e2e-spec.ts` | CRUD catálogo |
