@@ -360,6 +360,55 @@
   - Estructura validada: `customGuidelines[]`, `llmPrompt{}`, `messages{}`, `rules{}`, `checkoutQuestions[]`
   - Respuesta incluye config mergeado resultado para confirmar al cliente
 
+### PR-16 — Channel List API: Listar channels del merchant 🟢 ENHANCEMENT
+- **Objetivo:** exponer endpoint para que un merchant autenticado pueda listar todos sus channels conectados, habilitando visibilidad de canales en UI futura.
+- **Depende de:** PR-14 ✅ (Channel Health).
+- **Incluye:**
+  - Endpoint `GET /channels` → lista todos los channels del merchant autenticado
+  - `ChannelListService.getChannels(merchantId)` usando `ChannelRepository.findByMerchantId()` existente
+  - DTO: `ChannelListItemDto` (id, type, displayName, status, webhookSubscribed, lastWebhookAt, createdAt)
+  - Guard: `SessionAuthGuard`
+  - Tests unit + e2e
+  - Fix documentación en `BACKEND-EXECUTION-GUIDE.md` (actualmente referencia endpoint inexistente)
+- **Excluye:** filtrado avanzado, paginación, sorting (MVP), CRUD de channels (solo lectura).
+- **DoD específico:**
+  - `GET /channels` retorna lista de channels del merchant autenticado
+  - Sin auth → 401 Unauthorized
+  - Merchant sin channels → `[]` (array vacío, 200 OK)
+  - Solo retorna channels con `isActive=true`
+  - `pnpm lint`, `pnpm test` pasan
+- **Tech notes:**
+  - Reutiliza `ChannelRepository.findByMerchantId()` ya implementado en PR-03.11
+  - Controlador puede extender `ChannelHealthController` o ser separado (`ChannelListController`)
+  - DTO excluye `credentials` por seguridad (no exponer accessToken)
+- **Prioridad:** BAJA — no bloquea flujos principales (merchant recibe channelId en callback de onboarding)
+
+### PR-17 — Catalog Import File Upload: multipart/form-data 🟡 IMPROVEMENT
+- **Objetivo:** permitir upload de archivo CSV real via `multipart/form-data` para UX drag & drop en UI.
+- **Depende de:** PR-03.7 ✅ (Catalog Management API).
+- **Incluye:**
+  - Endpoint `POST /api/catalog/import-file` con `@UseInterceptors(FileInterceptor('file'))`
+  - Validación de extensión `.csv` y tamaño máximo (5MB MVP)
+  - Parseo de `file.buffer.toString('utf-8')` → reutiliza `ImportService.importFromCSV()`
+  - Guard: `ApiKeyAuthGuard` (igual que endpoint actual)
+  - Deprecation header en endpoint actual (`/api/catalog/import`)
+  - Tests unit + e2e (upload real con supertest)
+  - Actualizar `BACKEND-EXECUTION-GUIDE.md` con cURL correcto
+- **Excluye:** streaming para archivos grandes, validación de encoding (asume UTF-8), preview antes de import.
+- **DoD específico:**
+  - `POST /api/catalog/import-file` acepta `multipart/form-data` con campo `file`
+  - Archivo `.csv` válido → 200 + stats (created, updated, errors)
+  - Archivo no-CSV → 400 Bad Request
+  - Archivo > 5MB → 413 Payload Too Large
+  - Endpoint actual sigue funcionando (backwards compatible)
+  - `pnpm lint`, `pnpm test` pasan
+- **Tech notes:**
+  - NestJS: `@nestjs/platform-express` con Multer ya incluido
+  - `FileInterceptor('file')` + `@UploadedFile() file: Express.Multer.File`
+  - Límite configurable via env: `CATALOG_IMPORT_MAX_SIZE_MB=5`
+  - cURL correcto: `curl -X POST -H "x-api-key: ..." -F "file=@catalog.csv" /api/catalog/import-file`
+- **Prioridad:** MEDIA — mejora UX significativa para onboarding de merchants
+
 ---
 
 ## Cómo se usa este stack
