@@ -260,6 +260,55 @@
   - 1 cuenta OIDC = 1 merchant (sin roles por ahora)
   - Session store pattern permite swap a Redis sin cambiar AuthService
 
+### PR-13 — Meta Embedded Signup: WhatsApp Channel Onboarding 🔴 CRÍTICO
+- **Objetivo:** permitir que un merchant con sesión activa conecte su WhatsApp Business Account via Meta Embedded Signup, creando un `Channel` con `wabaId`, `phoneNumberId`, y credentials válidas.
+- **Depende de:** PR-03.11 ✅ (Channel model), PR-12 (Auth OIDC — merchant autenticado requerido).
+- **Incluye:**
+  - Módulo `onboarding/` con `MetaOAuthController` y `MetaOAuthService`
+  - Endpoints `/onboarding/whatsapp/start` y `/onboarding/whatsapp/callback`
+  - Extensión de schema `Channel`: `wabaId`, `status` (enum: pending/connected/error), `statusReason`, `webhookSubscribed`, `lastWebhookAt`
+  - OAuth flow completo con anti-CSRF (state cookie httpOnly)
+  - Exchange code → access_token → fetch WABA/phone info → create/update Channel
+  - Webhook subscription automática post-callback (via Meta Graph API)
+  - Endpoint retry manual: `POST /onboarding/whatsapp/:channelId/subscribe-webhook`
+  - Guards: SessionAuthGuard en todos los endpoints
+  - `.env.example` con: `META_APP_ID`, `META_APP_SECRET`, `META_CONFIG_ID`
+  - Tests unit (exchange, subscription) + e2e (mock OAuth)
+- **Excluye:** encrypt helper real (mantiene TODO), Instagram OAuth, UI/frontend, múltiples WABAs por merchant.
+- **DoD específico:**
+  - Merchant puede completar onboarding → Channel creado con status=connected
+  - Webhook subscription automática (o retry manual)
+  - anti-CSRF validado (state mismatch → 403)
+  - Idempotencia: `phone_number_id` ya existente para otro merchant → 409; mismo merchant → update
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+- **Tech notes:**
+  - OAuth flow: `GET /start` → redirect Meta OAuth URL con config_id → `GET /callback` con code → exchange → fetch WABA info → create Channel
+  - Webhook subscription: `POST /{waba_id}/subscribed_apps` post-callback
+  - State cookie patrón idéntico a PR-12 (5 min TTL, httpOnly, secure)
+  - Si subscription falla: status=connected pero webhookSubscribed=false, retry manual disponible
+
+### PR-14 — Channel Health + Status Management 🟡 ENHANCEMENT
+- **Objetivo:** exponer health check por canal para UI "Fix", con diagnóstico, estado, y operaciones de retry controladas.
+- **Depende de:** PR-13 (Channel con status/webhookSubscribed).
+- **Incluye:**
+  - Endpoint `GET /channels/:id/health` → `ChannelHealthDto` (status, webhookSubscribed, lastWebhookAt, recentErrors, recommendation)
+  - `ChannelHealthService`: `getHealth()`, `retryWebhookSubscription()`, `refreshChannelStatus()`
+  - Extensión de `Channel`: `lastErrorAt`, `errorCount`
+  - Endpoint `POST /channels/:id/retry-webhook` → retry webhook subscription con backoff
+  - Endpoint `POST /channels/:id/refresh-status` → re-fetch desde Meta API
+  - Rate limiting con `@nestjs/throttler` (5 req/min por merchant)
+  - Recommendation logic: "resubscribe_webhook" | "refresh_credentials" | "check_permissions"
+  - Guard: SessionAuthGuard + ownership check (channel.merchantId === session.merchantId)
+  - Retry con exponential backoff (1s, 2s, 4s, max 3 intentos)
+  - Tests unit + e2e
+- **Excluye:** background jobs automáticos de health check, alertas/notificaciones, UI/frontend, histórico de errores persistido.
+- **DoD específico:**
+  - Health endpoint retorna estado correcto con recommendation
+  - Retry webhook actualiza `webhookSubscribed` si éxito
+  - Rate limit funcional (429 si excede)
+  - Ownership check: 403 si channel no pertenece al merchant
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+
 ---
 
 ## Cómo se usa este stack

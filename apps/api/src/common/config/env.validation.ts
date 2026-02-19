@@ -40,4 +40,10 @@ export const envValidationSchema = Joi.object({
   AUTH_SESSION_TTL_HOURS: Joi.number().min(1).max(720).default(24), // Max 30 days
   AUTH_COOKIE_DOMAIN: Joi.string().optional(),
   AUTH_SESSION_CLEANUP_CRON: Joi.string().optional(),
+
+  // PR-13: Meta Embedded Signup configuration
+  META_APP_ID: Joi.string().optional(),
+  META_APP_SECRET: Joi.string().optional(),
+  META_CONFIG_ID: Joi.string().optional(),
+  META_REDIRECT_URI: Joi.string().uri().optional(),
 });

@@ -11,6 +11,12 @@ process.env.MICROSOFT_CLIENT_SECRET = 'test-microsoft-secret';
 process.env.AUTH_REDIRECT_URL = 'http://localhost:3000';
 process.env.AUTH_SESSION_TTL_HOURS = '24';
 
+// PR-13: Meta Embedded Signup env vars
+process.env.META_APP_ID = 'test-meta-app-id';
+process.env.META_APP_SECRET = 'test-meta-app-secret';
+process.env.META_CONFIG_ID = 'test-meta-config-id';
+process.env.META_REDIRECT_URI = 'http://localhost:3000/onboarding/whatsapp/callback';
+
 // NODE_ENV for test mode
 process.env.NODE_ENV = 'test';
 
