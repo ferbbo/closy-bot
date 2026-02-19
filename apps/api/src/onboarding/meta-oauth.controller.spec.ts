@@ -111,14 +111,12 @@ describe('MetaOAuthController', () => {
         redirect: jest.fn(),
       } as unknown as Response;
 
-      await controller.callback('test-code', 'state-2', mockReq, mockRes);
+      // AC-07: State mismatch should throw 403 Forbidden
+      await expect(
+        controller.callback('test-code', 'state-2', mockReq, mockRes),
+      ).rejects.toThrow('Invalid state parameter (CSRF protection)');
 
       expect(mockRes.clearCookie).toHaveBeenCalledWith('meta_oauth_state');
-      expect(mockRes.redirect).toHaveBeenCalledWith(302, expect.stringContaining('status=error'));
-      expect(mockRes.redirect).toHaveBeenCalledWith(
-        302,
-        expect.stringContaining('reason=state_mismatch'),
-      );
     });
 
     it('should handle callback error and redirect with error reason', async () => {

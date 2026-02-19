@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule'; // PR-03.10: Centralized scheduler
+import { ThrottlerModule } from '@nestjs/throttler'; // PR-13: Rate limiting
 import { CommonModule } from './common/common.module';
 import { ChannelsModule } from './channels/channels.module';
 import { DomainModule } from './domain/domain.module';
@@ -18,6 +19,12 @@ import { OnboardingModule } from './onboarding/onboarding.module'; // PR-13
 @Module({
   imports: [
     ScheduleModule.forRoot(), // PR-03.10: Single scheduler instance for all workers
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000, // 60 seconds
+        limit: 10, // Default: 10 requests per 60 seconds
+      },
+    ]), // PR-13: Basic rate limiting for retry endpoints
     CommonModule,
     PersistenceModule,
     ChannelsModule,

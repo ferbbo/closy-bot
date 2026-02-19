@@ -47,9 +47,6 @@ describe('WhatsApp Onboarding E2E (PR-13)', () => {
     }
   });
 
-  beforeEach(() => {
-    // Skip Meta provider mocking en E2E - el flow completo usa env vars reales o mock a nivel de endpoint
-
   describe('AC-11: Authentication required', () => {
     it('should return 401 for /start without session', async () => {
       await request(app.getHttpServer()).get('/onboarding/whatsapp/start').expect(401);

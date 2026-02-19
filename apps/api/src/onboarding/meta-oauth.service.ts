@@ -35,8 +35,11 @@ export class MetaOAuthService {
     private readonly metaProvider: MetaEmbeddedSignupProvider,
     private readonly prisma: PrismaService,
   ) {
-    const baseUrl = process.env.META_REDIRECT_URI || 'http://localhost:3000';
-    this.redirectUri = `${baseUrl}/onboarding/whatsapp/callback`;
+    // META_REDIRECT_URI is the full callback URL (not baseUrl)
+    this.redirectUri =
+      process.env.META_REDIRECT_URI || 'http://localhost:3000/onboarding/whatsapp/callback';
+    // Extract base URL for webhook URL construction
+    const baseUrl = this.redirectUri.replace(/\/onboarding\/whatsapp\/callback$/, '');
     this.webhookUrl = `${baseUrl}/webhooks/whatsapp`;
     this.webhookVerifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || 'default-verify-token';
   }
@@ -142,7 +145,7 @@ export class MetaOAuthService {
           accessToken: wabaData.accessToken,
           phoneNumberId: wabaData.phoneNumberId,
           wabaId: wabaData.wabaId,
-          appSecret: process.env.WHATSAPP_APP_SECRET,
+          appSecret: process.env.META_APP_SECRET,
         },
         wabaId: wabaData.wabaId,
         status: 'pending', // Initial status
@@ -172,7 +175,7 @@ export class MetaOAuthService {
           accessToken: wabaData.accessToken,
           phoneNumberId: wabaData.phoneNumberId,
           wabaId: wabaData.wabaId,
-          appSecret: process.env.WHATSAPP_APP_SECRET,
+          appSecret: process.env.META_APP_SECRET,
         },
         wabaId: wabaData.wabaId,
         displayName: wabaData.verifiedName,

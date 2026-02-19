@@ -8,9 +8,11 @@ import {
   Req,
   UseGuards,
   ForbiddenException,
+  ConflictException,
   Logger,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Response, Request } from 'express';
 import { MetaOAuthService } from './meta-oauth.service';
 import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
@@ -89,10 +91,9 @@ export class MetaOAuthController {
       this.logger.warn(
         `State mismatch for merchant ${merchantId}: cookie=${cookieState}, query=${state}`,
       );
-      // AC-07: State mismatch -> 403
+      // AC-07: State mismatch -> 403 Forbidden
       res.clearCookie(this.cookieName);
-      res.redirect(HttpStatus.FOUND, '/dashboard?status=error&reason=state_mismatch');
-      return;
+      throw new ForbiddenException('Invalid state parameter (CSRF protection)');
     }
 
     // Clear state cookie
@@ -120,11 +121,15 @@ export class MetaOAuthController {
         error.stack,
       );
 
-      // Handle specific errors
+      // AC-12: ConflictException (409) should not redirect - let exception filter handle it
+      // Rethrow known exceptions to maintain proper HTTP status codes
+      if (error instanceof ConflictException) {
+        throw error;
+      }
+
+      // Handle other errors with redirect
       let reason = 'unknown_error';
-      if (error.message.includes('already connected')) {
-        reason = 'already_connected';
-      } else if (error.message.includes('exchange failed')) {
+      if (error.message.includes('exchange failed')) {
         reason = 'invalid_code';
       } else if (error.message.includes('WABA')) {
         reason = 'waba_fetch_failed';
@@ -137,7 +142,9 @@ export class MetaOAuthController {
   /**
    * Retry webhook subscription manually
    * REQ-07: AC-10 - Retry endpoint should work
+   * Rate limited to prevent abuse (5 requests per minute per merchant)
    */
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post(':channelId/subscribe-webhook')
   async retryWebhookSubscription(
     @Param('channelId') channelId: string,
