@@ -2,7 +2,8 @@
 
 > **Status**: `DRAFT` | `APPROVED` | `AMENDED`
 > **Archivo**: `docs/plan/pr-briefs/PR-XX-<slug>.md`
-> **Regla**: Máx 2 páginas. Spec-locked. Sin scope extra.
+> **Issue**: [#NN](link) (1 issue con todos los REQs)
+> **Regla**: Max 2 páginas. Spec-locked. Sin scope extra.
 
 ## Objetivo
 
@@ -22,8 +23,10 @@
 
 | ID | Requisito | Issue | AC |
 |--------|-----------|-------|------|
-| REQ-01 | | #NN | AC-01 |
-| REQ-02 | | #NN | AC-02 |
+| REQ-01 | | [#NN](link) | AC-01 |
+| REQ-02 | | [#NN](link) | AC-02 |
+
+> **Nota**: Todos los REQs apuntan al mismo issue (#NN).
 
 ## Paths a tocar (concretos)
 

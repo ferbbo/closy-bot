@@ -24,7 +24,7 @@
 
 ### Fase 2: Setup (post-aprobacion)
 
-4. **Planner** — crea issues (1:1 con REQs del brief) + branch + sync
+4. **Planner** — crea 1 issue con TODOS los REQs del brief + branch + sync
 
 ### Fase 3: Build (spec-locked)
 

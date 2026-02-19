@@ -15,7 +15,7 @@
 │  ══════════════════════════════════════════════════════════════  │
 │  4. 🚧 BRIEF GATE — Human aprueba brief.md                     │
 │  ══════════════════════════════════════════════════════════════  │
-│  5. Planner → Issues + Branch (post-aprobación)                 │
+│  5. Planner → Issue + Branch (post-aprobación)                  │
 │  6. Builder → Implementación (spec-locked)                      │
 │  7. ↺ Spec Change Request (si falta info → volver a 3-4)       │
 │  8. Reviewer → Validación contra brief + AC + DoD               │
@@ -53,12 +53,12 @@
 - **Regla dura**: **NO se crea rama, NO se crean issues, NO se escribe código** hasta que el humano marque `Status: APPROVED`
 - **Acción**: Humano revisa brief, ajusta si necesario, cambia status a APPROVED
 
-### Paso 5 — Planner: Issues + Branch
+### Paso 5 — Planner: Issue + Branch
 - **Quién**: Planner
 - **Input**: brief.md APPROVED
-- **Output**: Issues en GitHub (1 por requisito/AC), branch `PR-XX-<slug>`, brief sincronizado con issues
-- **Gate**: Branch existe, issues creados, mapeo 1:1 REQ→Issue
-- **Regla**: Cada issue referencia el REQ-ID y AC-ID del brief
+- **Output**: 1 issue en GitHub con TODOS los REQs, branch `PR-XX-<slug>`, brief sincronizado con issue
+- **Gate**: Branch existe, issue creado con todos los REQs/ACs
+- **Regla**: El issue contiene todos los REQ-IDs y AC-IDs del brief
 
 ### Paso 6 — Builder: Implementación (spec-locked)
 - **Quién**: Builder
@@ -122,9 +122,9 @@
 | Aspecto | Detalle |
 |---------|---------|
 | **Entradas** | PR-STACK entry, tech notes del Architect, codebase actual, issues existentes |
-| **Salidas** | `brief.md` (DRAFT), issues en GitHub (1:1 con REQs), branch, issue actualizado |
-| **Reglas duras** | NO escribe código. NO modifica scope sin aprobación humana. NO crea branch/issues antes de BRIEF GATE. |
-| **Checklist** | ☐ brief.md tiene todos los campos ☐ REQs numerados ☐ AC verificables con evidencia definida ☐ Scope fence explícito ☐ Issues mapeados 1:1 |
+| **Salidas** | `brief.md` (DRAFT), 1 issue en GitHub con todos los REQs, branch, issue actualizado |
+| **Reglas duras** | NO escribe código. NO modifica scope sin aprobación humana. NO crea branch/issue antes de BRIEF GATE. |
+| **Checklist** | ☐ brief.md tiene todos los campos ☐ REQs numerados ☐ AC verificables con evidencia definida ☐ Scope fence explícito ☐ Issue contiene todos los REQs |
 
 ### Builder
 
@@ -183,7 +183,7 @@ AGENTS.md                               # Guardrails globales + referencia SDD
 ### Convenciones de nombres
 - Brief: `docs/plan/pr-briefs/PR-XX-<slug>.md` (ej: `PR-04-carrito-crud.md`)
 - Branch: `PR-XX-<slug>` (mismo slug que el brief)
-- Issues: título `PR-XX REQ-NN: <descripción corta>`
+- Issue: título `PR-XX: <descripción del PR>` (1 issue con todos los REQs)
 - PR description: SIEMPRE linkea el brief.md
 
 ---
@@ -256,7 +256,7 @@ Implementa PR-XX según el brief aprobado.
 Contexto:
 - Brief: docs/plan/pr-briefs/PR-XX-<slug>.md (status: APPROVED)
 - Branch: PR-XX-<slug>
-- Issues: [#NN, #MM]
+- Issue: #NN (contiene todos los REQs)
 
 Instrucciones:
 1. Lee el brief completo. Verifica que status = APPROVED.
@@ -313,12 +313,12 @@ Output: Verdict con fix list accionable (NO implementes fixes).
 
 ---
 
-## 5. Política de trazabilidad 1:1
+## 5. Política de trazabilidad
 
 ### Regla: cada requisito es rastreable de spec a evidencia
 
 ```
-brief.md (REQ-01) → GitHub Issue (#NN) → PR Checklist (AC-01) → Evidencia (test/log)
+brief.md (REQ-01..N) → GitHub Issue (#NN) → PR Checklist (AC-01..N) → Evidencia (test/log)
 ```
 
 ### Mapeo obligatorio
@@ -326,12 +326,12 @@ brief.md (REQ-01) → GitHub Issue (#NN) → PR Checklist (AC-01) → Evidencia 
 | Artefacto | Contiene | Referencia |
 |-----------|----------|------------|
 | **brief.md** | REQ-01..N + AC-01..N | Fuente de verdad |
-| **GitHub Issue** | 1 issue por REQ (título: `PR-XX REQ-NN: <desc>`) | Linkea a brief.md |
+| **GitHub Issue** | 1 issue por PR con TODOS los REQs (título: `PR-XX: <desc>`) | Linkea a brief.md |
 | **PR description** | Checklist con cada AC + columna evidencia | Linkea a brief.md |
 | **Código/Tests** | Test por AC + nombre descriptivo | Referencia AC-ID en describe/test name |
 
 ### Reglas de trazabilidad
-1. **Cada REQ del brief tiene exactamente 1 issue** en GitHub.
+1. **Cada PR tiene exactamente 1 issue** en GitHub con todos los REQs.
 2. **Cada AC del brief aparece como checkbox** en el PR description.
 3. **Cada AC debe tener evidencia** antes de merge: nombre del test, log, o screenshot.
 4. **Si un REQ se agrega/modifica post-aprobación**, se registra en Spec Change Log del brief.
@@ -340,7 +340,7 @@ brief.md (REQ-01) → GitHub Issue (#NN) → PR Checklist (AC-01) → Evidencia 
 ### Verificación pre-merge (humano)
 - [ ] Todos los AC del brief están marcados en el PR checklist
 - [ ] Cada AC tiene evidencia documentada
-- [ ] No hay REQs del brief sin issue correspondiente
+- [ ] Issue contiene todos los REQs del brief
 - [ ] Spec Change Log refleja todos los cambios post-aprobación (si hubo)
 
 ---
@@ -360,7 +360,7 @@ brief.md (REQ-01) → GitHub Issue (#NN) → PR Checklist (AC-01) → Evidencia 
 
 | Paso | Actor | Acción | Output |
 |------|-------|--------|--------|
-| 5 | Planner | Crea issues (1:1 con REQs) | Issues en GitHub |
+| 5 | Planner | Crea 1 issue con todos los REQs | Issue en GitHub |
 | 6 | Planner | Crea branch `PR-XX-<slug>` | Branch remota + local |
 | 7 | Planner | Sincroniza issue con brief | Issue actualizado |
 

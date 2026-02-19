@@ -9,12 +9,15 @@ import {
   RetryWebhookResponseDto,
   RefreshStatusResponseDto,
 } from './dto/channel-health.dto';
+import { ChannelListItemDto } from './dto/channel-list.dto';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
+import { ChannelListService } from './channel-list.service';
 
 /**
  * Channel Health Controller
  * Provides health diagnostics and recovery operations for channels
  * REQ-03, REQ-05, REQ-07, REQ-08, REQ-09
+ * PR-16: REQ-01 (GET /channels endpoint)
  */
 @Controller('channels')
 @UseGuards(SessionAuthGuard) // All endpoints require authentication
@@ -25,11 +28,23 @@ export class ChannelHealthController {
 
   constructor(
     private readonly channelHealthService: ChannelHealthService,
+    private readonly channelListService: ChannelListService,
     private readonly configService: ConfigService,
   ) {
     // REQ-09: Rate limit from env vars (defaults: 5 req/min)
     this.rateLimitTtl = this.configService.get<number>('CHANNEL_HEALTH_RATE_LIMIT_TTL', 60000);
     this.rateLimitMax = this.configService.get<number>('CHANNEL_HEALTH_RATE_LIMIT_MAX', 5);
+  }
+
+  /**
+   * List all channels for authenticated merchant
+   * GET /channels
+   * PR-16: REQ-01, AC-01, AC-02, AC-03
+   */
+  @Get()
+  async listChannels(@Req() req: AuthenticatedRequest): Promise<ChannelListItemDto[]> {
+    this.logger.debug(`Listing channels for merchant ${req.merchant.id}`);
+    return this.channelListService.getChannels(req.merchant.id);
   }
 
   /**
