@@ -298,6 +298,9 @@ model Channel {
   statusReason      String?       @map("status_reason") @db.Text
   webhookSubscribed Boolean       @default(false) @map("webhook_subscribed")
   lastWebhookAt     DateTime?     @map("last_webhook_at")
+  // PR-14: Channel health tracking
+  lastErrorAt       DateTime?     @map("last_error_at")
+  errorCount        Int           @default(0) @map("error_count")
   createdAt         DateTime      @default(now()) @map("created_at")
   updatedAt         DateTime      @updatedAt @map("updated_at")
 

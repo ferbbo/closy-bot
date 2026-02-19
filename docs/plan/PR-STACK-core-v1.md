@@ -296,7 +296,7 @@
   - Extensión de `Channel`: `lastErrorAt`, `errorCount`
   - Endpoint `POST /channels/:id/retry-webhook` → retry webhook subscription con backoff
   - Endpoint `POST /channels/:id/refresh-status` → re-fetch desde Meta API
-  - Rate limiting con `@nestjs/throttler` (5 req/min por merchant)
+  - Rate limiting con `@nestjs/throttler` (5 req/min por IP — ver known limitation)
   - Recommendation logic: "resubscribe_webhook" | "refresh_credentials" | "check_permissions"
   - Guard: SessionAuthGuard + ownership check (channel.merchantId === session.merchantId)
   - Retry con exponential backoff (1s, 2s, 4s, max 3 intentos)
@@ -308,6 +308,21 @@
   - Rate limit funcional (429 si excede)
   - Ownership check: 403 si channel no pertenece al merchant
   - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+- **Known Limitations:** Rate limit es por IP (no per-merchant). Ver PR-14.1 para mejora.
+
+### PR-14.1 — Custom Throttler: Rate Limit per Merchant 🟢 FUTURE
+- **Objetivo:** implementar rate limiting por merchant (no por IP) para endpoints de channel health retry.
+- **Depende de:** PR-14.
+- **Incluye:**
+  - Custom `ThrottlerGuard` que usa `req.merchant.id` como key (en lugar de IP)
+  - Override en controller con `@SkipThrottle()` para health GET (solo aplica a POSTs)
+  - Custom storage que trackea por merchant ID
+  - Update E2E tests actualmente skipped
+- **Excluye:** distributed rate limiting (Redis), dashboard de métricas.
+- **Prioridad:** BAJA para V1 MVP (solo relevante si múltiples merchants comparten IP en producción)
+- **DoD específico:**
+  - E2E test AC-14 pasa: 2 merchants desde misma IP tienen límites independientes
+  - Backwards compatible con throttler existente
 
 ---
 
