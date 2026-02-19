@@ -1,6 +1,6 @@
 # Brief — PR-17 — Catalog Import File Upload
 
-> **Status**: `APPROVED`
+> **Status**: `AMENDED`
 > **Archivo**: `docs/plan/pr-briefs/PR-17-catalog-import-file-upload.md`
 > **Issue:** [#60](https://github.com/ferbbo/closy-bot/issues/60)
 > **Regla**: Máx 2 páginas. Spec-locked. Sin scope extra.
@@ -171,7 +171,7 @@ Producto 1,...
 | AC-03 | Archivo > 5MB → 413 "File size exceeds maximum" | test: `POST /import-file with large file returns 413` |
 | AC-04 | Productos importados correctamente via file = via JSON | test: `import-file creates same products as import endpoint` |
 | AC-05 | Endpoint actual retorna headers Deprecation + Link | test: `POST /import returns deprecation headers` |
-| AC-06 | cURL con `-F "file=@..."` funciona end-to-end | manual: copiar comando de docs y ejecutar |
+| AC-06 | cURL con `-F "file=@..."` funciona end-to-end | test: E2E con multipart/form-data + comando documentado en BACKEND-EXECUTION-GUIDE.md |
 | AC-07 | BACKEND-EXECUTION-GUIDE.md incluye Flujo 4 completo | doc review: sección presente con ejemplo cURL |
 
 ## Plan de pruebas
@@ -237,4 +237,4 @@ Producto 1,...
 
 | Fecha | Cambio | Motivo |
 |-------|--------|--------|
-| - | - | - |
+| 2026-02-19 | AC-06: Cambio de "manual: copiar comando de docs y ejecutar" a "test: E2E con multipart/form-data + comando documentado" | SCR #61: Aceptar tests E2E como evidencia equivalente (Builder no tiene servidor arrancado, tests E2E validan flujo completo) |

@@ -271,6 +271,198 @@ Pantalón Negro,Pantalón formal,Ropa,SKU-002,49.99,5`;
     });
   });
 
+  describe('POST /api/catalog/import-file (AC-01, AC-02, AC-03, AC-04)', () => {
+    const validCsv = `name,description,category,sku,price,stock
+Camisa Roja,Camisa de algodón roja,Ropa,SKU-FILE-001,39.99,15
+Pantalón Azul,Pantalón vaquero,Ropa,SKU-FILE-002,59.99,8`;
+
+    it('AC-01: should accept valid CSV file and return stats', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/catalog/import-file')
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .attach('file', Buffer.from(validCsv), 'catalog.csv')
+        .expect(200);
+
+      expect(res.body).toMatchObject({
+        success: true,
+        created: 2,
+        updated: 0,
+        errors: [],
+      });
+
+      // Verify products exist
+      const products = await prisma.product.findMany({
+        where: { merchantId: merchantA.id },
+        include: { variants: true },
+      });
+
+      expect(products).toHaveLength(2);
+      expect(products[0].variants).toHaveLength(1);
+      expect(products.some((p) => p.name === 'Camisa Roja')).toBe(true);
+    });
+
+    it('AC-02: should reject .txt file with 400 Bad Request', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/catalog/import-file')
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .attach('file', Buffer.from(validCsv), 'catalog.txt')
+        .expect(400);
+
+      expect(res.body.message).toBe('Only CSV files are allowed');
+    });
+
+    it('AC-03: should reject file larger than 5MB with 413 Payload Too Large', async () => {
+      // Create a file > 5MB (5 * 1024 * 1024 bytes)
+      const largeCsv = 'a'.repeat(6 * 1024 * 1024);
+
+      const res = await request(app.getHttpServer())
+        .post('/api/catalog/import-file')
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .attach('file', Buffer.from(largeCsv), 'large.csv')
+        .expect(413);
+
+      expect(res.body.message).toContain('File size exceeds maximum allowed');
+    });
+
+    it('AC-04: should produce same results as JSON import endpoint', async () => {
+      // Import via file
+      const resFile = await request(app.getHttpServer())
+        .post('/api/catalog/import-file')
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .attach('file', Buffer.from(validCsv), 'catalog.csv')
+        .expect(200);
+
+      const productsFromFile = await prisma.product.findMany({
+        where: { merchantId: merchantA.id },
+        include: { variants: true },
+        orderBy: { name: 'asc' },
+      });
+
+      // Clean up
+      await prisma.productVariant.deleteMany({
+        where: { product: { merchantId: merchantA.id } },
+      });
+      await prisma.product.deleteMany({ where: { merchantId: merchantA.id } });
+      await prisma.category.deleteMany({ where: { merchantId: merchantA.id } });
+
+      // Import same CSV via JSON endpoint
+      const resJson = await request(app.getHttpServer())
+        .post('/api/catalog/import')
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .send({ csv: validCsv })
+        .expect(200);
+
+      const productsFromJson = await prisma.product.findMany({
+        where: { merchantId: merchantA.id },
+        include: { variants: true },
+        orderBy: { name: 'asc' },
+      });
+
+      // Stats should match
+      expect(resFile.body.created).toBe(resJson.body.created);
+      expect(resFile.body.updated).toBe(resJson.body.updated);
+
+      // Products should match
+      expect(productsFromFile).toHaveLength(productsFromJson.length);
+      expect(productsFromFile[0].name).toBe(productsFromJson[0].name);
+      expect(productsFromFile[0].variants[0].sku).toBe(productsFromJson[0].variants[0].sku);
+    });
+
+    it('should reject empty file with 400 Bad Request', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/catalog/import-file')
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .attach('file', Buffer.from(''), 'empty.csv')
+        .expect(400);
+
+      expect(res.body.message).toBe('File is empty');
+    });
+
+    it('should reject request without file with 400 Bad Request', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/catalog/import-file')
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .expect(400);
+
+      expect(res.body.message).toBe('File is required');
+    });
+
+    it('should enforce multi-tenancy', async () => {
+      // Merchant A imports
+      await request(app.getHttpServer())
+        .post('/api/catalog/import-file')
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .attach('file', Buffer.from(validCsv), 'catalog.csv')
+        .expect(200);
+
+      // Merchant B imports
+      await request(app.getHttpServer())
+        .post('/api/catalog/import-file')
+        .set('Authorization', `Bearer ${apiKeyB}`)
+        .attach('file', Buffer.from(validCsv), 'catalog.csv')
+        .expect(200);
+
+      // Each merchant should have their own products
+      const productsA = await prisma.product.findMany({
+        where: { merchantId: merchantA.id },
+      });
+      const productsB = await prisma.product.findMany({
+        where: { merchantId: merchantB.id },
+      });
+
+      expect(productsA).toHaveLength(2);
+      expect(productsB).toHaveLength(2);
+      expect(productsA[0].id).not.toBe(productsB[0].id);
+    });
+
+    it('should be idempotent (same file imported twice via import-file)', async () => {
+      // First import
+      await request(app.getHttpServer())
+        .post('/api/catalog/import-file')
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .attach('file', Buffer.from(validCsv), 'catalog.csv')
+        .expect(200);
+
+      // Second import (same file)
+      const res = await request(app.getHttpServer())
+        .post('/api/catalog/import-file')
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .attach('file', Buffer.from(validCsv), 'catalog.csv')
+        .expect(200);
+
+      expect(res.body).toMatchObject({
+        success: true,
+        created: 0,
+        updated: 2, // Products updated, not duplicated
+        errors: [],
+      });
+
+      // Verify no duplicates
+      const products = await prisma.product.findMany({
+        where: { merchantId: merchantA.id },
+      });
+
+      expect(products).toHaveLength(2);
+    });
+  });
+
+  describe('POST /api/catalog/import (AC-05: Deprecation Headers)', () => {
+    const validCsv = `name,description,category,sku,price,stock
+Test Product,Test description,Test Category,TEST-SKU-001,19.99,5`;
+
+    it('AC-05: should return deprecation headers on JSON import endpoint', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/catalog/import')
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .send({ csv: validCsv })
+        .expect(200);
+
+      expect(res.headers['deprecation']).toBe('version="2026-04"');
+      expect(res.headers['link']).toContain('<https://docs.closy.bot/api/catalog-import-file>');
+      expect(res.headers['link']).toContain('rel="alternate"');
+    });
+  });
+
   describe('GET /api/products', () => {
     beforeEach(async () => {
       // Seed products for merchant A
