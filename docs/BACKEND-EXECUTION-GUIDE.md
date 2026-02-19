@@ -300,8 +300,7 @@ curl -X POST http://localhost:3000/api/catalog/import \
   -d "{\"csv\": $csv_content}"
 ```
 
-> **Nota:** Upload de archivo vía `multipart/form-data` (drag & drop) está planificado en **PR-17**.
-> Endpoint futuro: `POST /api/catalog/import-file`
+> **⚠️ Deprecado:** Usar `POST /api/catalog/import-file` para upload directo de archivos (ver Flujo 4).
 
 **Respuesta:**
 ```json
@@ -334,6 +333,175 @@ curl "http://localhost:3000/api/products?category=Ropa&limit=10" \
 
 ---
 
+## Flujo 4: Catalog Import File Upload (PR-17)
+
+### Descripción
+
+Upload de archivo CSV real via `multipart/form-data` para UX drag & drop en UI.
+
+### Pre-requisitos
+
+1. Merchant con API key configurada
+2. Archivo CSV con formato válido (ver `examples/catalog-template.csv`)
+3. Tamaño máximo: configurado en `CATALOG_IMPORT_MAX_SIZE_MB` (default: 5MB)
+
+### Formato CSV Esperado
+
+```csv
+name,description,category,sku,price,stock
+Camisa Básica,Camisa algodón 100%,Ropa,CAM-001,35000,20
+Jeans Clásico,Pantalón mezclilla,Ropa,JEAN-001,85000,15
+```
+
+**Campos:**
+- `name` (requerido): Nombre del producto
+- `description` (opcional): Descripción
+- `category` (requerido): Nombre de categoría
+- `sku` (requerido): Código único para idempotencia
+- `price` (requerido): Precio en número decimal
+- `stock` (requerido): Cantidad en stock (entero)
+
+### Endpoint
+
+**POST** `/api/catalog/import-file`
+
+**Autenticación:** API Key (header `x-api-key` o `Authorization: Bearer <key>`)
+
+**Content-Type:** `multipart/form-data`
+
+**Form field:** `file` (tipo: File/Blob)
+
+### Probar con cURL
+
+#### Upload de Archivo CSV
+
+```bash
+# Upload directo de archivo (drag & drop ready)
+curl -X POST http://localhost:3000/api/catalog/import-file \
+  -H "x-api-key: <merchant-api-key>" \
+  -F "file=@examples/catalog-template.csv"
+```
+
+**Respuesta exitosa (200):**
+```json
+{
+  "success": true,
+  "created": 15,
+  "updated": 0,
+  "errors": []
+}
+```
+
+**Archivo válido con errores parciales:**
+```json
+{
+  "success": false,
+  "created": 10,
+  "updated": 3,
+  "errors": [
+    {
+      "row": 5,
+      "field": "price",
+      "message": "Price must be a valid number"
+    }
+  ]
+}
+```
+
+#### Errores Comunes
+
+**Archivo no CSV (400):**
+```bash
+curl -X POST http://localhost:3000/api/catalog/import-file \
+  -H "x-api-key: <merchant-api-key>" \
+  -F "file=@catalog.txt"
+```
+
+Respuesta:
+```json
+{
+  "statusCode": 400,
+  "message": "Only CSV files are allowed"
+}
+```
+
+**Archivo demasiado grande (413):**
+```bash
+# Si archivo > CATALOG_IMPORT_MAX_SIZE_MB (default: 5MB)
+curl -X POST http://localhost:3000/api/catalog/import-file \
+  -H "x-api-key: <merchant-api-key>" \
+  -F "file=@huge-catalog.csv"
+```
+
+Respuesta:
+```json
+{
+  "statusCode": 413,
+  "message": "File size exceeds maximum allowed (5MB)"
+}
+```
+
+**Sin autenticación (401):**
+```bash
+curl -X POST http://localhost:3000/api/catalog/import-file \
+  -F "file=@catalog.csv"
+```
+
+Respuesta:
+```json
+{
+  "statusCode": 401,
+  "message": "API key is required"
+}
+```
+
+### Validaciones
+
+| Validación | Código Error | Mensaje |
+|------------|--------------|---------|
+| Extensión no `.csv` | 400 | "Only CSV files are allowed" |
+| Tamaño > límite | 413 | "File size exceeds maximum allowed (XMB)" |
+| Archivo vacío | 400 | "File is empty" |
+| Sin archivo | 400 | "File is required" |
+| Sin API key | 401 | "API key is required" |
+
+### Idempotencia
+
+El import es idempotente por SKU:
+- **Producto con SKU existente:** se actualiza (no duplica)
+- **Producto con SKU nuevo:** se crea
+
+```bash
+# Primera carga (crea 10 productos)
+curl -X POST http://localhost:3000/api/catalog/import-file \
+  -H "x-api-key: <merchant-api-key>" \
+  -F "file=@catalog.csv"
+# => created: 10, updated: 0
+
+# Segunda carga (mismo archivo)
+curl -X POST http://localhost:3000/api/catalog/import-file \
+  -H "x-api-key: <merchant-api-key>" \
+  -F "file=@catalog.csv"
+# => created: 0, updated: 10 (⚠️ no duplica)
+```
+
+### Comparación con Endpoint JSON (Deprecado)
+
+| Feature | `/api/catalog/import` (JSON) | `/api/catalog/import-file` (File) |
+|---------|------------------------------|-----------------------------------|
+| Content-Type | `application/json` | `multipart/form-data` |
+| Payload | `{ "csv": "<contenido>" }` | `file=@archivo.csv` |
+| UI Drag & Drop | ❌ (requiere transformación) | ✅ (nativo) |
+| cURL | ⚠️ Complejo (jq required) | ✅ Simple (`-F`) |
+| Status | ⚠️ Deprecado (header presente) | ✅ Recomendado |
+
+**Migración:**
+El endpoint JSON (`/api/catalog/import`) sigue funcional pero retorna headers de deprecación:
+- `Deprecation: version="2026-04"`
+- `Link: <https://docs.closy.bot/api/catalog-import-file>; rel="alternate"`
+
+---
+
 ## Estado de Implementación
 
 ### ✅ Flujos Completamente Funcionales
@@ -347,6 +515,7 @@ curl "http://localhost:3000/api/products?category=Ropa&limit=10" \
 | Búsqueda catálogo | PR-03.5, PR-03 | ✅ Funcional |
 | Respuestas LLM | PR-03.6 | ✅ Funcional (si `LLM_ENABLED=true`) |
 | Catálogo CRUD/Import | PR-03.7 | ✅ Funcional |
+| Catalog Import File Upload | PR-17 | ✅ Funcional (multipart/form-data) |
 
 ### ❌ Flujos Pendientes (ver PR-STACK)
 
@@ -394,7 +563,7 @@ pnpm test:e2e channel-health
 
 ---
 
-## Flujo 4: Configuración Merchant (PR-15)
+## Flujo 5: Configuración Merchant (PR-15)
 
 ### Descripción
 

@@ -8,11 +8,18 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   NotFoundException,
+  BadRequestException,
+  PayloadTooLargeException,
   Logger,
   HttpCode,
   HttpStatus,
+  Res,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
 import { Merchant } from '@prisma/client';
 import { ApiKeyAuthGuard } from '../common/guards/api-key-auth.guard';
 import { CurrentMerchant } from '../common/decorators/merchant.decorator';
@@ -48,9 +55,60 @@ export class CatalogManagementController {
   ) {}
 
   /**
-   * Bulk import products from CSV
+   * Bulk import products from CSV file (multipart/form-data)
+   * POST /api/catalog/import-file
+   * Form field: file (CSV)
+   * @returns Import statistics and errors
+   */
+  @Post('catalog/import-file')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('file'))
+  async importFile(
+    @CurrentMerchant() merchant: Merchant,
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<ImportResponseDto> {
+    this.logger.log(`File import requested by merchant ${merchant.id}`);
+
+    // Validate file exists
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+
+    // Validate file extension (case-insensitive)
+    const fileExt = file.originalname.toLowerCase().split('.').pop();
+    if (fileExt !== 'csv') {
+      throw new BadRequestException('Only CSV files are allowed');
+    }
+
+    // Validate file size
+    const maxSizeMB = parseInt(process.env.CATALOG_IMPORT_MAX_SIZE_MB || '5', 10);
+    const maxSizeBytes = maxSizeMB * 1024 * 1024;
+    if (file.size > maxSizeBytes) {
+      throw new PayloadTooLargeException(`File size exceeds maximum allowed (${maxSizeMB}MB)`);
+    }
+
+    // Validate file is not empty
+    if (file.size === 0) {
+      throw new BadRequestException('File is empty');
+    }
+
+    // Convert buffer to UTF-8 string
+    const csvContent = file.buffer.toString('utf-8');
+
+    // Reuse existing import service
+    const result = await this.importService.importFromCSV(merchant.id, csvContent);
+    this.logger.log(
+      `File import completed for merchant ${merchant.id}: ${result.created} created, ${result.updated} updated, ${result.errors.length} errors`,
+    );
+
+    return result;
+  }
+
+  /**
+   * Bulk import products from CSV (JSON payload)
    * POST /api/catalog/import
    * Body: { csv: "name,description,category,sku,price,stock\n..." }
+   * @deprecated Use POST /api/catalog/import-file instead
    * @returns Import statistics and errors
    */
   @Post('catalog/import')
@@ -58,8 +116,13 @@ export class CatalogManagementController {
   async importCsv(
     @CurrentMerchant() merchant: Merchant,
     @Body() dto: ImportCsvDto,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<ImportResponseDto> {
     this.logger.log(`Bulk import requested by merchant ${merchant.id}`);
+
+    // Add deprecation headers
+    res.setHeader('Deprecation', 'version="2026-04"');
+    res.setHeader('Link', '<https://docs.closy.bot/api/catalog-import-file>; rel="alternate"');
 
     const result = await this.importService.importFromCSV(merchant.id, dto.csv);
     this.logger.log(
