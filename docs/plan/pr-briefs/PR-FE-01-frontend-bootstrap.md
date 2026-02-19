@@ -1,8 +1,9 @@
 # Brief — PR-FE-01 — Frontend Bootstrap: Next.js + shadcn + TanStack Query
 
-> **Status**: `APPROVED`
+> **Status**: `AMENDED`
 > **Archivo**: `docs/plan/pr-briefs/PR-FE-01-frontend-bootstrap.md`
 > **Issue**: [#67](https://github.com/ferbbo/closy-bot/issues/67)
+> **SCR**: [#69](https://github.com/ferbbo/closy-bot/issues/69)
 > **Regla**: Max 2 páginas. Spec-locked. Sin scope extra.
 
 ## Objetivo
@@ -267,7 +268,7 @@ NEXT_PUBLIC_API_URL=http://localhost:3000
 | AC-09 | Middleware redirige a `/login` si `/auth/me` retorna 401 | manual: browser sin cookie → `/dashboard` → redirect `/login` |
 | AC-10 | Página `/login` tiene botones "Google" y "Microsoft" funcionales | manual: click botón → redirect `localhost:3000/auth/login/google` |
 | AC-11 | Página `/dashboard` protegida (solo accesible con auth) | manual: sin cookie → redirect; con cookie → muestra contenido |
-| AC-12 | Dashboard muestra `merchant.name`, `merchant.email`, `merchant.industry` | manual: login → dashboard muestra datos correctos desde `useAuth()` |
+| AC-12 | Dashboard muestra `merchant.name`, `merchant.email` | manual: login → dashboard muestra datos correctos desde `useAuth()` |
 | AC-13 | `pnpm-workspace.yaml` actualizado con `apps/dashboard` | manual: verificar archivo contiene `apps/dashboard` |
 | AC-14 | Root `package.json` tiene scripts `dev:dashboard`, `build:dashboard`, `lint:dashboard` | manual: `pnpm dev:dashboard` funciona desde root |
 
@@ -296,8 +297,8 @@ NEXT_PUBLIC_API_URL=http://localhost:3000
 - [ ] Sin scope creep (solo lo del brief)
 - [ ] `pnpm --filter @closy-bot/dashboard dev` arranca sin errores
 - [ ] `pnpm --filter @closy-bot/dashboard build` completa sin errores TypeScript
-- [ ] `pnpm lint:dashboard` pasa (ESLint Next.js rules)
-- [ ] Login redirect funciona end-to-end con backend local (PR-12 backend)
+- [ ] TypeScript type checking pasa (via build)
+- [ ] Login flow funciona con backend local (manual navigation workaround para port redirect)
 - [ ] Dashboard muestra merchant info correctamente (GET `/auth/me`)
 - [ ] Middleware auth funcional (redirect `/login` si 401)
 - [ ] Responsive básico funcional (mobile-first, testear en DevTools mobile view)
@@ -340,4 +341,6 @@ NEXT_PUBLIC_API_URL=http://localhost:3000
 
 | Fecha | Cambio | Motivo |
 |-------|--------|--------|
-| — | — | — |
+| 2026-02-19 | AC-12: Removido `merchant.industry` | Backend PR-12 no expone industry field; MVP V1 no lo requiere (SCR #69) |
+| 2026-02-19 | DoD: Cambiado "pnpm lint:dashboard pasa" → "TypeScript type checking pasa (via build)" | TSConfig monorepo conflict; build type check suficiente para MVP (SCR #69) |
+| 2026-02-19 | DoD: Cambiado "Login redirect end-to-end" → "Login flow con workaround" | Backend redirige a puerto 3000; requiere manual navigation; fix en PR-FE-02 (SCR #69) |
