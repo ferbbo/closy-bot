@@ -36,6 +36,6 @@ import { AuthModule } from '../auth/auth.module'; // For SessionAuthGuard
       },
     },
   ],
-  exports: [MetaOAuthService],
+  exports: [MetaOAuthService, MetaEmbeddedSignupProvider], // PR-14: Export provider for ChannelHealthService
 })
 export class OnboardingModule {}
