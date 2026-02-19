@@ -365,9 +365,57 @@ pnpm test:e2e channel-health
 
 Permite al merchant autenticado ver y actualizar su perfil (nombre, industria) y configurar el comportamiento del bot conversacional mediante `playbookConfig` JSON.
 
+**Casos de uso:**
+- Self-service onboarding: merchant configura su tienda sin intervención manual
+- Personalización del tone y mensajes del bot
+- Ajuste de reglas de negocio (upsell, recomendaciones, validaciones)
+- A/B testing de diferentes configuraciones de playbook
+
 ### Pre-requisitos
 
 1. Merchant autenticado (cookie `session_id` válida - ver Flujo 1)
+
+### Cómo obtener el `session_id`
+
+Después del login OIDC (Flujo 1), el `session_id` se encuentra en la cookie de respuesta:
+
+**Opción 1: Con navegador (inspeccionar)**
+```bash
+# 1. Abrir en navegador
+open "http://localhost:3000/auth/login/google"
+
+# 2. Después del redirect, abrir DevTools → Application → Cookies
+# 3. Copiar el valor de la cookie "session_id"
+```
+
+**Opción 2: Con cURL (desarrollo)**
+```bash
+# El servidor responde con Set-Cookie en el callback
+curl -v "http://localhost:3000/auth/callback/google?code=..." 2>&1 | grep -i "set-cookie: session_id"
+
+# Extraer el session_id de la respuesta
+```
+
+**Opción 3: Consultar DB directamente (desarrollo)**
+```sql
+-- Ver sesiones activas
+SELECT session_id, merchant_id, expires_at 
+FROM sessions 
+WHERE expires_at > NOW() 
+ORDER BY created_at DESC 
+LIMIT 5;
+```
+
+### Industrias Disponibles
+
+El campo `industry` acepta uno de estos valores:
+
+| Valor | Descripción | Playbook por defecto |
+|-------|-------------|---------------------|
+| `ropa` | Tiendas de ropa, moda, accesorios | Enfoque en tallas, colores, estilos |
+| `belleza` | Cosméticos, cuidado personal, spa | Tipos de piel, guardrails médicos |
+| `minimarket` | Abarrotes, despensa, productos básicos | Cantidades, sustituciones, entrega rápida |
+| `null` | Sin industria específica | Playbook genérico |
 
 ### Endpoints
 
@@ -387,13 +435,47 @@ curl -X GET http://localhost:3000/merchants/me \
   -H "Cookie: session_id=<tu-session-id>"
 ```
 
-**Respuesta esperada (200):**
+**Respuesta esperada (200) - Sin configuración:**
 ```json
 {
   "id": "clxxx...",
   "name": "Mi Tienda",
   "industry": "ropa",
   "playbookConfig": null
+}
+```
+
+**Respuesta esperada (200) - Con playbookConfig:**
+```json
+{
+  "id": "clxxx...",
+  "name": "Mi Tienda",
+  "industry": "ropa",
+  "playbookConfig": {
+    "industry": "ropa",
+    "llmPrompt": {
+      "tone": "Eres un asesor de moda friendly y cercano...",
+      "focusAreas": ["Talla", "Color", "Estilo"],
+      "commonQuestions": ["¿Qué tallas tienen?"],
+      "upsellStrategy": "Sugerir accesorios complementarios",
+      "emojiUsage": "moderate"
+    },
+    "messages": {
+      "greeting": "¡Hola! 👋 Bienvenido a Mi Tienda",
+      "addToCartConfirm": "✅ Agregado al carrito",
+      "noStock": "😔 Producto agotado",
+      "upsellTemplate": "También te puede interesar: {product}",
+      "checkoutStart": "¡Genial! Vamos a finalizar"
+    },
+    "rules": {
+      "askSizeBeforeCart": true,
+      "askSkinTypeOnSearch": false,
+      "autoSubstitutions": false,
+      "upsellEnabled": true,
+      "maxRecommendations": 3
+    },
+    "checkoutQuestions": []
+  }
 }
 ```
 
@@ -542,10 +624,131 @@ curl -X PUT http://localhost:3000/merchants/me/playbook \
     }
   }'
 ```
+# Opción A: Desde archivo JSON
+   curl -X PUT http://localhost:3000/merchants/me/playbook \
+     -H "Cookie: session_id=<session-id>" \
+     -H "Content-Type: application/json" \
+     -d @examples/playbook-ropa-custom.json
+   
+   # Opción B: Inline (más rápido para testing)
+   curl -X PUT http://localhost:3000/merchants/me/playbook \
+     -H "Cookie: session_id=<session-id>" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "industry": "ropa",
+       "llmPrompt": {
+         "tone": "Friendly y profesional",
+         "focusAreas": ["Talla", "Color"],
+         "commonQuestions": ["¿Tienen envío gratis?"],
+         "upsellStrategy": "Accesorios",
+         "emojiUsage": "moderate"
+       },
+       "messages": {
+### Tips y Buenas Prácticas
 
-**Respuesta esperada (400):**
+#### 1. Testing Iterativo con PATCH
+
+Para ajustar configuración sin reescribir todo (útil para A/B testing):
+
+```bash
+# Probar tone formal
+curl -X PATCH http://localhost:3000/merchants/me/playbook \
+  -H "Cookie: session_id=<session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{ "llmPrompt": { "tone": "Formal y elegante" } }'
+
+# Si no funciona, probar tone casual
+curl -X PATCH http://localhost:3000/merchants/me/playbook \
+  -H "Cookie: session_id=<session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{ "llmPrompt": { "tone": "Casual y divertido" } }'
+```
+
+#### 2. Validar antes de aplicar
+
+Para evitar errores 400, validar estructura localmente:
+
+```bash
+# Guardar config en archivo
+cat > test-playbook.json <<EOF
+{
+  "industry": "ropa",
+  "llmPrompt": { ... },
+  "messages": { ... },
+  "rules": { ... },
+  "checkoutQuestions": []
+}
+EOF
+
+# Validar JSON
+jq empty test-playbook.json && echo "✅ JSON válido" || echo "❌ JSON inválido"
+
+# Aplicar
+curl -X PUT http://localhost:3000/merchants/me/playbook \
+  -H "Cookie: session_id=<session-id>" \
+  -H "Content-Type: application/json" \
+  -d @test-playbook.json
+```
+
+#### 3. Backup de configuración actual
+
+Antes de cambios importantes:
+
+```bash
+# Guardar config actual
+curl -X GET http://localhost:3000/merchants/me \
+  -H "Cookie: session_id=<session-id>" \
+  | jq '.playbookConfig' > backup-playbook-$(date +%Y%m%d).json
+
+# Si algo sale mal, restaurar
+curl -X PUT http://localhost:3000/merchants/me/playbook \
+  -H "Cookie: session_id=<session-id>" \
+  -H "Content-Type: application/json" \
+  -d @backup-playbook-20260219.json
+```
+
+#### 4. Validación de campos individuales
+
+El sistema valida:
+
+- `llmPrompt.focusAreas`: debe ser array
+- `llmPrompt.emojiUsage`: solo 'none', 'moderate', 'frequent'
+- `rules.maxRecommendations`: número entre 0 y 10
+- `checkoutQuestions`: debe ser array
+- `messages`: todos los campos de tipo string
+
+#### 5. Variables dinámicas en mensajes
+
+Usar placeholders en `messages`:
+
+- `{merchant_name}`: se reemplaza con el nombre de la tienda
+- `{product}`: se reemplaza con nombre del producto (en upsellTemplate)
+
+Ejemplo:
 ```json
 {
+  "messages": {
+    "greeting": "Bienvenido a {merchant_name}! 👋",
+    "upsellTemplate": "También te puede gustar {product}"
+  }
+}
+```
+
+         "greeting": "¡Hola! 👋",
+         "addToCartConfirm": "✅ Agregado",
+         "noStock": "Agotado",
+         "upsellTemplate": "Te interesa: {product}",
+         "checkoutStart": "Finalizamos"
+       },
+       "rules": {
+         "askSizeBeforeCart": true,
+         "askSkinTypeOnSearch": false,
+         "autoSubstitutions": false,
+         "upsellEnabled": true,
+         "maxRecommendations": 3
+       },
+       "checkoutQuestions": []
+     }'
   "statusCode": 400,
   "message": "PlaybookConfig is incomplete. Missing fields: messages, rules, checkoutQuestions"
 }

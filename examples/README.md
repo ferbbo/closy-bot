@@ -187,7 +187,121 @@ const prompt = await playbookService.buildPromptForMerchant(merchant);
 // Combina: base + industria + custom config
 ```
 
-### Nivel 3: Sistema de plantillas avanzado (futuro)
+### Nivel 3: Playbooks Custom vía API (PR-15 ✅)
+
+Con PR-15, puedes configurar playbooks completos directamente desde la API usando DTOs estructurados:
+
+#### Archivos de ejemplo incluidos
+
+```bash
+examples/
+├── playbook-ropa-custom.json
+├── playbook-belleza-custom.json
+└── playbook-minimarket-custom.json
+```
+
+#### Estructura del DTO
+
+```typescript
+{
+  industry: 'ropa' | 'belleza' | 'minimarket',
+  llmPrompt: {
+    tone: string,                    // Personalidad del bot
+    focusAreas: string[],            // Aspectos clave a preguntar
+    commonQuestions: string[],       // Preguntas frecuentes
+    upsellStrategy: string,          // Estrategia de recomendaciones
+    emojiUsage: 'none' | 'moderate' | 'frequent'
+  },
+  messages: {
+    greeting: string,                // Saludo inicial
+    addToCartConfirm: string,        // Confirmación de agregar
+    noStock: string,                 // Sin stock
+    upsellTemplate: string,          // Usa placeholder {product}
+    checkoutStart: string            // Inicio checkout
+  },
+  rules: {
+    askSizeBeforeCart: boolean,      // Preguntar talla (ropa)
+    askSkinTypeOnSearch: boolean,    // Preguntar tipo piel (belleza)
+    autoSubstitutions: boolean,      // Sustituciones (minimarket)
+    upsellEnabled: boolean,
+    maxRecommendations: number       // 0-10
+  },
+  checkoutQuestions: string[]        // Preguntas adicionales en checkout
+}
+```
+
+#### Cómo usar
+
+**1. Reemplazar configuración completa (PUT)**
+
+```bash
+curl -X PUT http://localhost:3000/merchants/me/playbook \
+  -H "Cookie: session_id=<tu-session-id>" \
+  -H "Content-Type: application/json" \
+  -d @examples/playbook-ropa-custom.json
+```
+
+**2. Actualizar solo algunos campos (PATCH)**
+
+```bash
+# Solo cambiar el tono
+curl -X PATCH http://localhost:3000/merchants/me/playbook \
+  -H "Cookie: session_id=<tu-session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "llmPrompt": {
+      "tone": "Eres super casual y usas mucho slang 😎"
+    }
+  }'
+
+# Solo cambiar mensaje de saludo
+curl -X PATCH http://localhost:3000/merchants/me/playbook \
+  -H "Cookie: session_id=<tu-session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": {
+      "greeting": "¡Qué onda! 🤙 ¿En qué te ayudo?"
+    }
+  }'
+```
+
+**3. Ver configuración actual**
+
+```bash
+curl -X GET http://localhost:3000/merchants/me \
+  -H "Cookie: session_id=<tu-session-id>" \
+  | jq '.playbookConfig'
+```
+
+#### Tips de configuración
+
+- **Tone**: Define personalidad completa en 2-3 oraciones claras
+- **focusAreas**: Lista 3-5 aspectos que el bot debe preguntar/mencionar siempre
+- **upsellStrategy**: Ser específico sobre cuándo y qué recomendar
+- **messages**: Usar placeholders `{merchant_name}` y `{product}` donde aplique
+- **rules**: Combinar según industria (ej: ropa = askSizeBeforeCart + upsellEnabled)
+- **checkoutQuestions**: Preguntas específicas de tu negocio (horario, dirección, etc.)
+
+#### Ejemplos por industria
+
+**Ropa:**
+- `askSizeBeforeCart: true` - Siempre preguntar talla antes de agregar
+- `upsellEnabled: true` - Sugerir accesorios complementarios
+- `maxRecommendations: 3` - Hasta 3 sugerencias
+
+**Belleza:**
+- `askSkinTypeOnSearch: true` - Preguntar tipo de piel al buscar
+- `upsellEnabled: true` - Sugerir rutina completa
+- `maxRecommendations: 2` - Máximo 2 productos complementarios
+
+**Minimarket:**
+- `autoSubstitutions: true` - Ofrecer automáticamente sustitutos si no hay stock
+- `upsellEnabled: true` - Recordar productos comúnmente olvidados
+- `checkoutQuestions: ["¿Horario de entrega?"]` - Preguntar horario preferido
+
+Ver guía completa: [BACKEND-EXECUTION-GUIDE.md](../docs/BACKEND-EXECUTION-GUIDE.md) → Flujo 4
+
+### Nivel 4: Sistema de plantillas avanzado (futuro)
 
 Para gestión visual de playbooks, considera (post-MVP):
 - Admin UI para editar system prompts
