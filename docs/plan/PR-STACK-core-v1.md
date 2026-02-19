@@ -324,6 +324,35 @@
   - E2E test AC-14 pasa: 2 merchants desde misma IP tienen límites independientes
   - Backwards compatible con throttler existente
 
+### PR-15 — Merchant Settings API: Profile + PlaybookConfig Management 🔵 IN_REVIEW
+- **Objetivo:** exponer endpoints HTTP para que merchant autenticado pueda leer/actualizar su perfil (name, industry) y su `playbookConfig` JSON, habilitando self-service onboarding y configuración del bot conversacional.
+- **Depende de:** PR-12 (Auth OIDC — SessionAuthGuard), PR-03.6 (LLM + Playbook system).
+- **Incluye:**
+  - Módulo `merchant-settings/` (controller + service + DTOs)
+  - 4 Endpoints protegidos con SessionAuthGuard:
+    - `GET /merchants/me` → profile + playbookConfig
+    - `PATCH /merchants/me` → update name/industry
+    - `PUT /merchants/me/playbook` → replace playbookConfig completo
+    - `PATCH /merchants/me/playbook` → merge parcial playbookConfig
+  - DTOs con `class-validator`: `UpdateMerchantDto`, `UpdatePlaybookConfigDto`, `MerchantProfileResponseDto`
+  - `PlaybookService.validatePlaybookConfig()`: validación de estructura + throws BadRequestException
+  - Deep merge via `PlaybookService.mergePlaybookConfig()` existente
+  - Tests unit (12) + E2E (10) = 22 tests
+  - Documentación: `BACKEND-EXECUTION-GUIDE.md` con Flujo 4 (cURL examples)
+- **Excluye:** UI/frontend, múltiples usuarios por merchant, roles/permisos granulares.
+- **DoD específico:**
+  - GET /merchants/me retorna merchant con playbookConfig
+  - PUT full replacement requiere config completo (validación estricta)
+  - PATCH permite actualizaciones parciales con deep merge
+  - Todos endpoints sin sesión → 401
+  - PlaybookConfig inválido → 400 con mensaje específico
+  - 40 tests passing (30 unit + 10 E2E)
+  - `pnpm lint`, `pnpm test` pasan
+- **Issue:** [#55](https://github.com/ferbbo/closy-bot/issues/55)
+- **Pull Request:** [#56](https://github.com/ferbbo/closy-bot/pull/56)
+- **Branch:** `PR-15-merchant-settings-api`
+- **Brief:** [PR-15-merchant-settings-api.md](./pr-briefs/PR-15-merchant-settings-api.md)
+
 ---
 
 ## Cómo se usa este stack

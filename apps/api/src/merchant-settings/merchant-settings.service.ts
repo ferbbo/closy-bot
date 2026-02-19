@@ -114,7 +114,7 @@ export class MerchantSettingsService {
    */
   async mergePlaybookConfig(
     merchantId: string,
-    partialConfig: UpdatePlaybookConfigDto,
+    partialConfig: Record<string, unknown>,
   ): Promise<MerchantProfileResponseDto> {
     this.logger.log(`Merging playbookConfig for merchant ${merchantId}`);
 
@@ -131,12 +131,9 @@ export class MerchantSettingsService {
     const currentPlaybook = this.playbookService.getPlaybookForMerchant(merchant);
 
     // Merge with partial config
-    const merged = this.playbookService.mergePlaybookConfig(
-      currentPlaybook,
-      partialConfig as unknown as Record<string, unknown>,
-    );
+    const merged = this.playbookService.mergePlaybookConfig(currentPlaybook, partialConfig);
 
-    // Validate merged result
+    // Validate merged result (requireComplete=false allows partial structures)
     this.playbookService.validatePlaybookConfig(merged, false);
 
     // Save merged config

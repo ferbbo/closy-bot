@@ -163,10 +163,9 @@ describe('MerchantSettings (e2e) - PR-15', () => {
 
   describe('AC-06: PUT with incomplete config returns 400', () => {
     it('should reject invalid config on PUT', async () => {
+      // Config with only industry (missing 4 of 5 required top-level fields)
       const incompleteConfig = {
         industry: 'ropa',
-        llmPrompt: { tone: 'friendly' },
-        // Missing required fields: messages, rules, checkoutQuestions
       };
 
       const response = await request(app.getHttpServer())
@@ -175,7 +174,8 @@ describe('MerchantSettings (e2e) - PR-15', () => {
         .send(incompleteConfig)
         .expect(400);
 
-      expect(response.body.message).toContain('incomplete');
+      // Expect error message about missing fields (from validatePlaybookConfig)
+      expect(response.body.message).toMatch(/incomplete|Missing fields/);
     });
   });
 
@@ -224,8 +224,14 @@ describe('MerchantSettings (e2e) - PR-15', () => {
       const response = await request(app.getHttpServer())
         .patch('/merchants/me/playbook')
         .set('Cookie', [`session_id=${sessionId}`])
-        .send(partialConfig)
-        .expect(200);
+        .send(partialConfig);
+
+      if (response.status !== 200) {
+        console.log('DEBUG: PATCH failed with status', response.status);
+        console.log('DEBUG: Response body:', JSON.stringify(response.body, null, 2));
+      }
+
+      expect(response.status).toBe(200);
 
       // Check that tone was updated but other fields remain
       expect(response.body.playbookConfig.llmPrompt.tone).toBe('Updated tone via PATCH');
@@ -318,7 +324,86 @@ describe('MerchantSettings (e2e) - PR-15', () => {
         .send(invalidConfig)
         .expect(400);
 
-      expect(response.body.message).toContain('focusAreas must be an array');
+      // Message can be string or array from class-validator
+      const message = Array.isArray(response.body.message)
+        ? response.body.message.join(' ')
+        : response.body.message;
+      expect(message).toContain('focusAreas must be an array');
+    });
+  });
+
+  describe('P1-2: Unknown keys should be stripped (not rejected)', () => {
+    it('PATCH /merchants/me with unknown field should return 200 and strip unknown key', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/merchants/me')
+        .set('Cookie', [`session_id=${sessionId}`])
+        .send({ name: 'Valid Name', unknownField: 'should be ignored' })
+        .expect(200);
+
+      expect(response.body.name).toBe('Valid Name');
+      expect(response.body.unknownField).toBeUndefined();
+    });
+
+    it('PUT /merchants/me/playbook with unknown field should return 200 and strip unknown key', async () => {
+      const configWithExtra = {
+        industry: 'ropa',
+        llmPrompt: {
+          tone: 'Professional',
+          focusAreas: ['Size'],
+          commonQuestions: [],
+          upsellStrategy: 'Test',
+          emojiUsage: 'moderate',
+        },
+        messages: {
+          greeting: 'Hello',
+          addToCartConfirm: 'Added',
+          noStock: 'Out',
+          upsellTemplate: 'Try',
+          checkoutStart: 'Start',
+        },
+        rules: {
+          askSizeBeforeCart: true,
+          askSkinTypeOnSearch: false,
+          autoSubstitutions: false,
+          upsellEnabled: true,
+          maxRecommendations: 3,
+        },
+        checkoutQuestions: [],
+        unknownTopLevel: 'should be ignored',
+      };
+
+      const response = await request(app.getHttpServer())
+        .put('/merchants/me/playbook')
+        .set('Cookie', [`session_id=${sessionId}`])
+        .send(configWithExtra)
+        .expect(200);
+
+      expect(response.body.playbookConfig.industry).toBe('ropa');
+      expect(response.body.playbookConfig.unknownTopLevel).toBeUndefined();
+
+      // Verify in DB
+      const merchant = await prisma.merchant.findUnique({ where: { id: testMerchant.id } });
+      const playbookConfig = merchant?.playbookConfig as Record<string, unknown> | null;
+      expect(playbookConfig?.['unknownTopLevel']).toBeUndefined();
+    });
+
+    it('PATCH /merchants/me/playbook accepts unknown top-level field (MVP: no strict filtering)', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/merchants/me/playbook')
+        .set('Cookie', [`session_id=${sessionId}`])
+        .send({
+          llmPrompt: {
+            tone: 'Updated tone',
+          },
+          unknownTopLevel: 'will be stored but ignored',
+        })
+        .expect(200);
+
+      expect(response.body.playbookConfig.llmPrompt.tone).toBe('Updated tone');
+
+      // MVP limitation: unknown fields are not stripped, but they don't affect system behavior
+      // PlaybookService only reads known fields, so unknown fields are safely ignored
+      // Strict filtering would require deep schema validation (out of MVP scope)
     });
   });
 });

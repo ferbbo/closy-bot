@@ -77,8 +77,9 @@ export class PlaybookService {
 
   /**
    * Merge custom config with base config
+   * PUBLIC: used by MerchantSettingsService for PATCH operations
    */
-  private mergePlaybookConfig(
+  mergePlaybookConfig(
     baseConfig: PlaybookConfig,
     customConfig: Record<string, unknown>,
   ): PlaybookConfig {
@@ -160,10 +161,10 @@ export class PlaybookService {
 
     const playbook = config as Record<string, unknown>;
 
-    // If requireComplete=true (PUT), check all required top-level keys
+    // If requireComplete=true (PUT), check all required top-level keys exist and are not undefined
     if (requireComplete) {
       const requiredKeys = ['industry', 'llmPrompt', 'messages', 'rules', 'checkoutQuestions'];
-      const missingKeys = requiredKeys.filter((k) => !(k in playbook));
+      const missingKeys = requiredKeys.filter((k) => playbook[k] === undefined);
 
       if (missingKeys.length > 0) {
         throw new BadRequestException(
