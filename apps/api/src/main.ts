@@ -30,10 +30,38 @@ async function bootstrap() {
     }),
   );
 
-  // Enable CORS for development
-  if (nodeEnv === 'development') {
-    app.enableCors();
+  // PR-FE-00: Configure CORS for dashboard frontend
+  // Allows cross-origin requests with credentials (session cookies)
+  const corsOriginsEnv = configService.get<string>('CORS_ORIGINS', '');
+  const defaultOrigins = ['http://localhost:3001']; // Dashboard dev default
+
+  let allowedOrigins: string[];
+  if (corsOriginsEnv) {
+    // Parse comma-separated origins, trim whitespace
+    allowedOrigins = corsOriginsEnv
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+    logger.log(`CORS enabled for origins: ${allowedOrigins.join(', ')}`);
+  } else {
+    // Fallback to defaults, log warning in production
+    allowedOrigins = defaultOrigins;
+    if (nodeEnv === 'production') {
+      logger.warn(
+        'CORS_ORIGINS not configured. Using default origins. Set CORS_ORIGINS env var for production.',
+      );
+    } else {
+      logger.log(`CORS enabled for default origins: ${allowedOrigins.join(', ')}`);
+    }
   }
+
+  app.enableCors({
+    origin: allowedOrigins,
+    credentials: true, // Allow cookies (session_id)
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Cookie', 'x-api-key', 'Authorization'],
+    exposedHeaders: ['Set-Cookie'],
+  });
 
   await app.listen(port);
   logger.log(`🚀 Application is running on: http://localhost:${port}`);

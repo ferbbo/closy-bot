@@ -16,6 +16,11 @@ Copiar `.env.example` a `.env` y configurar:
 # Base de datos
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/closy_bot?schema=public"
 
+# CORS (PR-FE-00) - Para dashboard frontend
+# Comma-separated list de orígenes permitidos
+# Default dev: http://localhost:3001 (Next.js dashboard)
+CORS_ORIGINS="http://localhost:3001"
+
 # Auth OIDC (PR-12)
 AUTH_REDIRECT_URL="http://localhost:3000"
 AUTH_COOKIE_DOMAIN=""  # vacío para localhost
@@ -1079,6 +1084,40 @@ Groq API no responde.
 La firma `X-Hub-Signature-256` no coincide.
 
 **Modo dev:** Si `WHATSAPP_APP_SECRET` no está configurado, se permite el request con warning.
+
+### CORS: "Access to fetch blocked" (browser console)
+
+El browser bloquea requests cross-origin.
+
+**Diagnóstico:**
+
+```bash
+# Verificar CORS preflight
+curl -X OPTIONS http://localhost:3000/auth/me \
+  -H "Origin: http://localhost:3001" \
+  -H "Access-Control-Request-Method: GET" \
+  -v
+
+# Deben aparecer headers:
+# Access-Control-Allow-Origin: http://localhost:3001
+# Access-Control-Allow-Credentials: true
+```
+
+**Soluciones comunes:**
+
+| Problema | Solución |
+|----------|----------|
+| Origen no permitido | Agregar a `CORS_ORIGINS` en `.env` |
+| Falta `credentials: include` | Agregar en fetch del frontend |
+| Cookie no se envía | Verificar `SameSite`, `Domain` de la cookie |
+| Headers bloqueados | Verificar `allowedHeaders` en CORS config |
+
+**Ejemplo configuración producción:**
+
+```bash
+# .env producción
+CORS_ORIGINS="https://dashboard.closybot.com,https://admin.closybot.com"
+```
 
 ---
 
