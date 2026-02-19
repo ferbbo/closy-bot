@@ -32,19 +32,13 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <p className="text-sm text-gray-500">Nombre del negocio</p>
-              <p className="font-medium">{merchant?.businessName ?? '-'}</p>
+              <p className="text-sm text-gray-500">Nombre</p>
+              <p className="font-medium">{merchant?.name ?? '-'}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Email</p>
               <p className="font-medium">{merchant?.email ?? '-'}</p>
             </div>
-            {merchant?.industry && (
-              <div>
-                <p className="text-sm text-gray-500">Industria</p>
-                <p className="font-medium">{merchant.industry}</p>
-              </div>
-            )}
           </CardContent>
         </Card>
       </div>

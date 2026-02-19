@@ -1,14 +1,14 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { api, type MerchantInfo } from '@/lib/api';
+import { api, type AuthMeResponse } from '@/lib/api';
 
 export function useAuth() {
   const {
-    data: merchant,
+    data,
     isLoading,
     error,
-  } = useQuery<MerchantInfo>({
+  } = useQuery<AuthMeResponse>({
     queryKey: ['auth', 'me'],
     queryFn: api.getMe,
     retry: false,
@@ -16,9 +16,9 @@ export function useAuth() {
   });
 
   return {
-    merchant,
+    merchant: data?.merchant,
     isLoading,
-    isAuthenticated: !!merchant && !error,
+    isAuthenticated: data?.authenticated ?? false,
     error,
   };
 }

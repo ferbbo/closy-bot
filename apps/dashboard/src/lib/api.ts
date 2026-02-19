@@ -30,15 +30,18 @@ export async function apiFetch<T>(
   return res.json();
 }
 
-export interface MerchantInfo {
-  id: string;
-  email: string;
-  businessName: string;
-  industry?: string;
+// Backend /auth/me response structure
+export interface AuthMeResponse {
+  authenticated: boolean;
+  merchant: {
+    id: string;
+    name: string;
+    email: string;
+  };
 }
 
 export const api = {
-  getMe: () => apiFetch<MerchantInfo>('/auth/me'),
+  getMe: () => apiFetch<AuthMeResponse>('/auth/me'),
   getGoogleAuthUrl: () => `${API_URL}/auth/login/google`,
   getMicrosoftAuthUrl: () => `${API_URL}/auth/login/microsoft`,
 };

@@ -93,13 +93,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <div className="flex-shrink-0">
                   <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
                     <span className="text-sm font-medium text-gray-600">
-                      {merchant.businessName?.[0]?.toUpperCase() || 'U'}
+                      {merchant.name?.[0]?.toUpperCase() || 'U'}
                     </span>
                   </div>
                 </div>
                 <div className="ml-3 min-w-0 flex-1">
                   <p className="text-sm font-medium text-gray-900 truncate">
-                    {merchant.businessName || 'Usuario'}
+                    {merchant.name || 'Usuario'}
                   </p>
                   <p className="text-xs text-gray-500 truncate">
                     {merchant.email}
@@ -160,13 +160,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   <div className="flex-shrink-0">
                     <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
                       <span className="text-sm font-medium text-gray-600">
-                        {merchant.businessName?.[0]?.toUpperCase() || 'U'}
+                        {merchant.name?.[0]?.toUpperCase() || 'U'}
                       </span>
                     </div>
                   </div>
                   <div className="ml-3 min-w-0 flex-1">
                     <p className="text-sm font-medium text-gray-900 truncate">
-                      {merchant.businessName || 'Usuario'}
+                      {merchant.name || 'Usuario'}
                     </p>
                     <p className="text-xs text-gray-500 truncate">
                       {merchant.email}
