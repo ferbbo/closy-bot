@@ -161,11 +161,13 @@ Meta mostrará el flujo de Embedded Signup. Al completar, callback crea el Chann
 
 #### 2. Verificar Channel Creado
 
-```bash
-# Listar canales del merchant (requiere auth)
-curl -X GET http://localhost:3000/channels \
-  -H "Cookie: session_id=<tu-session-id>"
+El channel ID se recibe en el redirect del callback:
 ```
+/dashboard?status=success&channelId=<channel-id>
+```
+
+> **Nota:** Endpoint `GET /channels` para listar todos los channels está planificado en **PR-16**.
+> Por ahora, usar el `channelId` del redirect o consultar directamente la DB.
 
 #### 3. Health Check de Canal
 
@@ -216,8 +218,9 @@ Flujo conversacional WhatsApp para:
 |--------|----------|-------------|
 | GET | `/webhooks/whatsapp` | Verificación Meta webhook |
 | POST | `/webhooks/whatsapp` | Procesa mensajes inbound |
-| POST | `/catalog/import` | Import CSV de productos |
-| GET | `/catalog/products` | Lista productos |
+| POST | `/api/catalog/import` | Import CSV (JSON body) |
+| GET | `/api/products` | Lista productos |
+| GET | `/api/products?q=<texto>` | Buscar productos |
 
 ### Probar Webhook Verification
 
@@ -273,13 +276,32 @@ curl -X POST http://localhost:3000/webhooks/whatsapp \
 
 ### Cargar Catálogo
 
+**Método actual (JSON body):**
+
 ```bash
-# Import CSV con API Key del merchant
-curl -X POST http://localhost:3000/catalog/import \
+# Import CSV como JSON string
+# Nota: El contenido CSV se envía como string en el campo "csv"
+curl -X POST http://localhost:3000/api/catalog/import \
   -H "x-api-key: <merchant-api-key>" \
-  -H "Content-Type: multipart/form-data" \
-  -F "file=@examples/catalog-template.csv"
+  -H "Content-Type: application/json" \
+  -d '{
+    "csv": "name,description,category,sku,price,stock\nCamisa Básica,Camisa algodón 100%,Ropa,CAM-001,35000,20\nJeans Clásico,Pantalón mezclilla,Ropa,JEAN-001,85000,15"
+  }'
 ```
+
+**Cargar desde archivo (requiere transformación):**
+
+```bash
+# Leer archivo CSV y enviarlo como JSON
+csv_content=$(cat examples/catalog-template.csv | jq -Rs .)
+curl -X POST http://localhost:3000/api/catalog/import \
+  -H "x-api-key: <merchant-api-key>" \
+  -H "Content-Type: application/json" \
+  -d "{\"csv\": $csv_content}"
+```
+
+> **Nota:** Upload de archivo vía `multipart/form-data` (drag & drop) está planificado en **PR-17**.
+> Endpoint futuro: `POST /api/catalog/import-file`
 
 **Respuesta:**
 ```json
@@ -293,7 +315,20 @@ curl -X POST http://localhost:3000/catalog/import \
 ### Probar Búsqueda Directa (sin WhatsApp)
 
 ```bash
-curl "http://localhost:3000/catalog/products?search=camisa" \
+# Buscar productos por texto
+curl "http://localhost:3000/api/products?q=camisa" \
+  -H "x-api-key: <merchant-api-key>"
+```
+
+```bash
+# Listar todos los productos
+curl "http://localhost:3000/api/products" \
+  -H "x-api-key: <merchant-api-key>"
+```
+
+```bash
+# Filtrar por categoría
+curl "http://localhost:3000/api/products?category=Ropa&limit=10" \
   -H "x-api-key: <merchant-api-key>"
 ```
 
@@ -792,9 +827,18 @@ Ejemplo:
 
 6. **Cargar catálogo** (Flujo 3):
    ```bash
-   curl -X POST http://localhost:3000/catalog/import \
+   # Opción A: Inline (para testing rápido)
+   curl -X POST http://localhost:3000/api/catalog/import \
      -H "x-api-key: <merchant-api-key>" \
-     -F "file=@catalog.csv"
+     -H "Content-Type: application/json" \
+     -d '{"csv": "name,description,category,sku,price,stock\nCamisa,Algodón 100%,Ropa,CAM-001,35000,20"}'
+   
+   # Opción B: Desde archivo (requiere jq)
+   csv_content=$(cat catalog.csv | jq -Rs .)
+   curl -X POST http://localhost:3000/api/catalog/import \
+     -H "x-api-key: <merchant-api-key>" \
+     -H "Content-Type: application/json" \
+     -d "{\"csv\": $csv_content}"
    ```
 
 7. **Probar bot** vía WhatsApp con configuración personalizada aplicada.
