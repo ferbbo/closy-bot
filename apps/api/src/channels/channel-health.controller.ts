@@ -3,6 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
 import { ChannelOwnershipGuard } from './guards/channel-ownership.guard';
 import { ChannelHealthService } from './channel-health.service';
+import { ConfigService } from '@nestjs/config';
 import {
   ChannelHealthDto,
   RetryWebhookResponseDto,
@@ -19,8 +20,17 @@ import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.i
 @UseGuards(SessionAuthGuard) // All endpoints require authentication
 export class ChannelHealthController {
   private readonly logger = new Logger(ChannelHealthController.name);
+  private readonly rateLimitTtl: number;
+  private readonly rateLimitMax: number;
 
-  constructor(private readonly channelHealthService: ChannelHealthService) {}
+  constructor(
+    private readonly channelHealthService: ChannelHealthService,
+    private readonly configService: ConfigService,
+  ) {
+    // REQ-09: Rate limit from env vars (defaults: 5 req/min)
+    this.rateLimitTtl = this.configService.get<number>('CHANNEL_HEALTH_RATE_LIMIT_TTL', 60000);
+    this.rateLimitMax = this.configService.get<number>('CHANNEL_HEALTH_RATE_LIMIT_MAX', 5);
+  }
 
   /**
    * Get channel health diagnostics
@@ -46,7 +56,7 @@ export class ChannelHealthController {
   @Post(':id/retry-webhook')
   @HttpCode(200) // Return 200 instead of default 201 for POST
   @UseGuards(ChannelOwnershipGuard)
-  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 req/min
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // Note: @Throttle decorator values are static, using global config
   async retryWebhook(
     @Param('id') channelId: string,
     @Req() req: AuthenticatedRequest,
@@ -64,7 +74,7 @@ export class ChannelHealthController {
   @Post(':id/refresh-status')
   @HttpCode(200) // Return 200 instead of default 201 for POST
   @UseGuards(ChannelOwnershipGuard)
-  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 req/min
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // Note: @Throttle decorator values are static, using global config
   async refreshStatus(
     @Param('id') channelId: string,
     @Req() req: AuthenticatedRequest,

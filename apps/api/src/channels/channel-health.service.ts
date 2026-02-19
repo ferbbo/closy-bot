@@ -138,6 +138,15 @@ export class ChannelHealthService {
 
     this.logger.log(`Retrying webhook subscription for channel: ${channelId}`);
 
+    // P2: Idempotency - skip if already healthy
+    if (channel.webhookSubscribed && channel.errorCount === 0 && channel.status === 'connected') {
+      this.logger.log(`Channel ${channelId} already healthy, skipping retry`);
+      return {
+        success: true,
+        message: 'Webhook already subscribed and healthy',
+      };
+    }
+
     // Exponential backoff: 1s, 2s, 4s (max 3 attempts)
     const delays = [1000, 2000, 4000];
     let lastError = '';

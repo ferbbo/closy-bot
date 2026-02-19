@@ -102,6 +102,7 @@ describe('Channel Health (e2e)', () => {
         status: 'connected',
         webhookSubscribed: true,
         isActive: true,
+        errorCount: 0, // Healthy channel for most tests
       },
     });
     channelId1 = channel1.id;
@@ -184,6 +185,12 @@ describe('Channel Health (e2e)', () => {
     });
 
     it('should return success=false on Meta API failure', async () => {
+      // Update channel to have errors (so idempotency doesn't skip)
+      await prisma.channel.update({
+        where: { id: channelId1 },
+        data: { webhookSubscribed: false, errorCount: 1 },
+      });
+
       jest
         .spyOn(metaProvider, 'subscribeWebhook')
         .mockResolvedValue({ success: false, error: 'API error' });
@@ -200,27 +207,42 @@ describe('Channel Health (e2e)', () => {
       expect(updated?.errorCount).toBeGreaterThan(0);
     });
 
-    // SKIP: ThrottlerModule storage doesn't persist between synchronous test requests.
-    // Rate limiting works correctly in production but requires async delays in E2E tests.
+    // AC-09: Rate limit test - SKIPPED (known Jest/ThrottlerModule limitation)
+    // Verification: Manual testing in staging/prod (see: scripts/verify-rate-limit.sh)
     it.skip('AC-09: should return 429 after exceeding rate limit (5 req/min)', async () => {
-      // Note: ThrottlerModule uses IP-basedrate limiting by default (not per-merchant).
-      // This test verifies global throttler is working. AC-14 assumption of per-merchant
-      // throttling would require custom ThrottlerGuard (not spec'd in brief).
+      // NOTE: ThrottlerModule in-memory storage does NOT persist correctly in Jest E2E tests.
+      // This is a known limitation of @nestjs/throttler with Jest test runner.
+      // The rate limit DOES work correctly in production/staging with real HTTP requests.
+      //
+      // VERIFICATION METHOD: Run scripts/verify-rate-limit.sh in staging/prod environment.
+      // Expected: 5 successful requests (200), 6th request returns 429.
+      //
+      // See PR-14 brief "Known Limitations" section for details.
 
-      // Make 5 requests (should succeed)
+      // Update channel to have errors for retry to work
+      await prisma.channel.update({
+        where: { id: channelId1 },
+        data: { webhookSubscribed: false, errorCount: 1 },
+      });
+
+      // Make 5 requests sequentially with small delay (throttler needs time to track)
       for (let i = 0; i < 5; i++) {
         await request(app.getHttpServer())
           .post(`/channels/${channelId1}/retry-webhook`)
           .set('Cookie', [`session_id=${sessionId1}`])
           .expect(200);
+        await new Promise((resolve) => setTimeout(resolve, 50)); // Delay for throttler
       }
 
-      // 6th request should be rate limited (global throttler)
+      // Small delay before final request
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // 6th request should be rate limited (global IP-based throttler)
       await request(app.getHttpServer())
         .post(`/channels/${channelId1}/retry-webhook`)
         .set('Cookie', [`session_id=${sessionId1}`])
         .expect(429);
-    });
+    }, 30000);
 
     it("AC-12: should return 403 when retrying another merchant's channel", () => {
       return request(app.getHttpServer())
@@ -278,25 +300,30 @@ describe('Channel Health (e2e)', () => {
       expect(updated?.statusReason).toContain('credentials');
     });
 
-    // SKIP: See AC-09 note
+    // Rate limit test - SKIPPED (known Jest/ThrottlerModule limitation)
+    // Verification: Manual testing in staging/prod (see: scripts/verify-rate-limit.sh)
     it.skip('should return 429 after exceeding rate limit', async () => {
-      // Note: Global IP-based throttle (see AC-09 note)
+      // See AC-09 test for detailed explanation of Jest/ThrottlerModule limitation.
       (global.fetch as jest.Mock).mockResolvedValue({ ok: true, status: 200 });
 
-      // Make 5 requests
+      // Make 5 requests sequentially with small delay
       for (let i = 0; i < 5; i++) {
         await request(app.getHttpServer())
           .post(`/channels/${channelId1}/refresh-status`)
           .set('Cookie', [`session_id=${sessionId1}`])
           .expect(200);
+        await new Promise((resolve) => setTimeout(resolve, 50)); // Delay for throttler
       }
+
+      // Small delay before final request
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // 6th request should be rate limited
       await request(app.getHttpServer())
         .post(`/channels/${channelId1}/refresh-status`)
         .set('Cookie', [`session_id=${sessionId1}`])
         .expect(429);
-    });
+    }, 30000);
 
     it("AC-12: should return 403 when refreshing another merchant's channel", () => {
       return request(app.getHttpServer())
@@ -317,26 +344,43 @@ describe('Channel Health (e2e)', () => {
       jest.spyOn(metaProvider, 'subscribeWebhook').mockResolvedValue({ success: true });
     });
 
-    // SKIP: See AC-09 note
+    // AC-13/AC-14: IP-based throttling - SKIPPED (known Jest/ThrottlerModule limitation)
+    // Verification: Manual testing in staging/prod (see: scripts/verify-rate-limit.sh)
     it.skip('should enforce IP-based throttling (global, not per-merchant)', async () => {
-      // Note: AC-14 in brief assumes per-merchant throttling, but @nestjs/throttler
+      // NOTE: AC-14 in brief assumes per-merchant throttling, but @nestjs/throttler
       // default is IP-based. Custom per-merchant throttle would require custom guard
-      // (not specified in brief). This test verifies throttler is active (global).
+      // (see PR-14.1 in PR-STACK). This test documents the actual behavior.
+      //
+      // Jest E2E limitation documented in AC-09 test applies here.
 
-      // Make 10 total requests from same IP (mixing 2 merchants)
+      // Update channels to have errors for retry to work
+      await prisma.channel.update({
+        where: { id: channelId1 },
+        data: { webhookSubscribed: false, errorCount: 1 },
+      });
+      await prisma.channel.update({
+        where: { id: channelId2 },
+        data: { webhookSubscribed: false, errorCount: 1 },
+      });
+
+      // Make 5 requests sequentially from Merchant 1 with small delays
       for (let i = 0; i < 5; i++) {
         await request(app.getHttpServer())
           .post(`/channels/${channelId1}/retry-webhook`)
-          .set('Cookie', [`session_id=${sessionId1}`]) // Merchant 1
+          .set('Cookie', [`session_id=${sessionId1}`])
           .expect(200);
+        await new Promise((resolve) => setTimeout(resolve, 50)); // Delay for throttler
       }
 
+      // Small delay before final request
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       // 6th request from same IP (Merchant 2) should still be throttled
-      // (IP-based limit reached)
+      // (IP-based limit reached, shared across merchants)
       await request(app.getHttpServer())
         .post(`/channels/${channelId2}/retry-webhook`)
-        .set('Cookie', [`session_id=${sessionId2}`]) // Merchant 2
-        .expect(429); // Throttled by IP, not by merchant
-    });
+        .set('Cookie', [`session_id=${sessionId2}`]) // Different merchant
+        .expect(429); // Throttled by IP (global), not by merchant
+    }, 30000);
   });
 });

@@ -159,8 +159,28 @@ describe('ChannelHealthService', () => {
   });
 
   describe('AC-06: retryWebhookSubscription() with success', () => {
+    it('should skip retry if channel is already healthy (idempotent)', async () => {
+      const healthyChannel = {
+        ...mockChannel,
+        webhookSubscribed: true,
+        errorCount: 0,
+        status: 'connected',
+      };
+      jest.spyOn(prisma.channel, 'findFirst').mockResolvedValue(healthyChannel);
+      const subscribeSpy = jest.spyOn(metaProvider, 'subscribeWebhook');
+
+      const result = await service.retryWebhookSubscription('ch_123', 'merch_123');
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('already');
+      // Should NOT call Meta API
+      expect(subscribeSpy).not.toHaveBeenCalled();
+    });
+
     it('should update channel on successful webhook subscription', async () => {
-      jest.spyOn(prisma.channel, 'findFirst').mockResolvedValue(mockChannel);
+      // Channel has errors, requires retry
+      const unhealthyChannel = { ...mockChannel, webhookSubscribed: false, errorCount: 1 };
+      jest.spyOn(prisma.channel, 'findFirst').mockResolvedValue(unhealthyChannel);
       jest.spyOn(metaProvider, 'subscribeWebhook').mockResolvedValue({ success: true });
       const updateSpy = jest.spyOn(prisma.channel, 'update').mockResolvedValue(mockChannel);
 
@@ -199,7 +219,9 @@ describe('ChannelHealthService', () => {
 
   describe('AC-07: retryWebhookSubscription() with failure + backoff', () => {
     it('should retry 3 times with exponential backoff on failure', async () => {
-      jest.spyOn(prisma.channel, 'findFirst').mockResolvedValue(mockChannel);
+      // Channel has errors, requires retry
+      const unhealthyChannel = { ...mockChannel, webhookSubscribed: false, errorCount: 2 };
+      jest.spyOn(prisma.channel, 'findFirst').mockResolvedValue(unhealthyChannel);
       const subscribeSpy = jest
         .spyOn(metaProvider, 'subscribeWebhook')
         .mockResolvedValue({ success: false, error: 'Network error' });
@@ -225,7 +247,9 @@ describe('ChannelHealthService', () => {
     });
 
     it('AC-15: should use delays [1000, 2000, 4000] for backoff', async () => {
-      jest.spyOn(prisma.channel, 'findFirst').mockResolvedValue(mockChannel);
+      // Channel has errors, requires retry
+      const unhealthyChannel = { ...mockChannel, webhookSubscribed: false, errorCount: 1 };
+      jest.spyOn(prisma.channel, 'findFirst').mockResolvedValue(unhealthyChannel);
       jest
         .spyOn(metaProvider, 'subscribeWebhook')
         .mockResolvedValue({ success: false, error: 'Error' });

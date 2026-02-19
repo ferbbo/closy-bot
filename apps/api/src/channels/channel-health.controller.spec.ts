@@ -6,6 +6,7 @@ import { ChannelOwnershipGuard } from './guards/channel-ownership.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { ChannelHealthDto } from './dto/channel-health.dto';
 import { ExecutionContext } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 /**
  * Unit tests for ChannelHealthController
@@ -24,6 +25,12 @@ describe('ChannelHealthController', () => {
             getHealth: jest.fn(),
             retryWebhookSubscription: jest.fn(),
             refreshChannelStatus: jest.fn(),
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue(60000), // Mock returns default values
           },
         },
         {
