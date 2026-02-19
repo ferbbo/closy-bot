@@ -22,7 +22,7 @@ Crear el package frontend `@closy-bot/dashboard` con stack mínimo (Next.js 14 A
 - Middleware auth: verifica cookie via `GET /auth/me`, redirect `/login` si 401
 - Layout base con sidebar placeholder (responsive mobile-first)
 - Página `/login`: botones "Google" y "Microsoft" → redirect `{API_URL}/auth/login/:provider`
-- Página `/dashboard`: protegida, muestra `merchant.name`, `merchant.email`, `merchant.industry` desde `/auth/me`
+- Página `/dashboard`: protegida, muestra `merchant.name`, `merchant.email` desde `/auth/me`
 - API client base (`lib/api.ts`) con `fetch` + `credentials: 'include'`
 - Hook `useAuth()` con TanStack Query para `/auth/me` (staleTime: 5min)
 - Scripts root: `dev:dashboard`, `build:dashboard`, `lint:dashboard`
@@ -159,7 +159,6 @@ interface AuthResponse {
     id: string;
     name: string;
     email: string;
-    industry: string;
   };
 }
 
