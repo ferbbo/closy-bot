@@ -47,9 +47,9 @@
 - **Excluye:** recomendaciones ML, integraciones Shopify/Woo.
 - **Notas:** precios/stock siempre desde backend (guardrails).
 
-### PR-03.5 — Outbound Sender + Orchestrator básico + Búsqueda catálogo conversacional 🔴 CRÍTICO
+### PR-03.5 — Outbound Sender + Orchestrator básico + Búsqueda catálogo conversacional ✅ MERGED
 - **Objetivo:** habilitar conversación end-to-end (recibir → entender → responder) y búsqueda de catálogo via chat.
-- **Depende de:** PR-03.
+- **Depende de:** PR-03 ✅.
 - **Incluye:**
   - WhatsApp Outbound Sender (enviar mensajes via Meta Cloud API)
   - Orchestrator básico (inbound → identity → router → outbound)
@@ -61,11 +61,11 @@
   - Usuario envía "busco X" → bot responde con productos del catálogo
   - Usuario envía "hola" → bot responde con saludo
   - Test e2e: inbound → outbound response
-- **Issue:** #14 — **BLOCKER para todo el flujo de ventas**
+- **Issue:** #14
 
-### PR-03.6 — LLM Adapter: Groq + System Prompt conversacional 🟡 ENHANCEMENT
+### PR-03.6 — LLM Adapter: Groq + System Prompt conversacional ✅ MERGED
 - **Objetivo:** integrar LLM con arquitectura adapter para respuestas naturales con tono vendedor/persuasivo.
-- **Depende de:** PR-03.5.
+- **Depende de:** PR-03.5 ✅.
 - **Incluye:**
   - Módulo `llm/` con interface `LlmProvider` abstracta
   - `GroqLlmProvider` como implementación inicial (económico para MVP)
@@ -124,9 +124,9 @@
   - Referencia: [Meta Webhooks Getting Started](https://developers.facebook.com/docs/graph-api/webhooks/getting-started)
   - Referencia: [WhatsApp Webhook Components](https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components)
 
-### PR-03.9 — Transactional Outbox: WhatsApp outbound confiable 🔴 CRÍTICO
+### PR-03.9 — Transactional Outbox: WhatsApp outbound confiable ✅ MERGED
 - **Objetivo:** evitar dual-write y garantizar envío eventual de outbound WhatsApp si el commit DB ocurrió (enqueue en outbox + dispatcher async).
-- **Depende de:** PR-03.5 (outbound sender) y PR-03.8 (webhook compliance). (PR-02 recomendado por multi-tenancy/merchantId)
+- **Depende de:** PR-03.5 ✅ (outbound sender) y PR-03.8 ✅ (webhook compliance).
 - **Incluye:**
   - Tabla `OutboxMessage` (Prisma) + índices + dedupeKey
   - `OutboxService.enqueueWhatsAppText(...)` (reemplaza envíos directos)
@@ -138,9 +138,9 @@
   - Webhook ACK rápido (no bloquea por envío)
   - 2 instancias worker sin doble-procesamiento por `SKIP LOCKED`
   - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
-### PR-03.10 — Conversation Memory: historial corto + summary + retención 🟡 ENHANCEMENT
+### PR-03.10 — Conversation Memory: historial corto + summary + retención ✅ MERGED
 - **Objetivo:** habilitar continuidad conversacional "humana" con historial corto acotado (TTL) y resumen+facts long-lived, más jobs de cleanup/sumarización.
-- **Depende de:** PR-03.5 (orchestrator), PR-03.6 (LLM adapter). Opcional: PR-03.9 (patrón scheduler similar).
+- **Depende de:** PR-03.5 ✅ (orchestrator), PR-03.6 ✅ (LLM adapter).
 - **Incluye:**
   - Modelo `MessageLog` (IN + OUT) con `expiresAt` para TTL
   - Campos en `Conversation`: `summary`, `memoryFacts`, `lastIntent`, `lastSummarizedAt`
@@ -161,9 +161,9 @@
 - **Issue:** [#28](https://github.com/ferbbo/closy-bot/issues/28), [#29](https://github.com/ferbbo/closy-bot/issues/29), [#30](https://github.com/ferbbo/closy-bot/issues/30), [#31](https://github.com/ferbbo/closy-bot/issues/31), [#32](https://github.com/ferbbo/closy-bot/issues/32), [#33](https://github.com/ferbbo/closy-bot/issues/33), [#34](https://github.com/ferbbo/closy-bot/issues/34)
 - **Brief:** `docs/plan/pr-briefs/PR-03.10-conversation-memory-retention.md` ✅
 
-### PR-03.11 — Multi-channel per Merchant: Channel model + lookup + dynamic outbound 🔴 CRÍTICO
+### PR-03.11 — Multi-channel per Merchant: Channel model + lookup + dynamic outbound ✅ MERGED
 - **Objetivo:** permitir que cada Merchant tenga múltiples canales WhatsApp (y preparar Instagram), con resolución automática por `phone_number_id` y credenciales por canal.
-- **Depende de:** PR-02 ✅, PR-03.9 ✅ (ambos MERGED).
+- **Depende de:** PR-02 ✅, PR-03.9 ✅.
 - **Incluye:**
   - Modelo `Channel` (Prisma): `type`, `externalId`, `merchantId`, `credentials`, `displayName`, `isActive`
   - Enum `ChannelType { WHATSAPP, INSTAGRAM }`
@@ -186,9 +186,9 @@
   - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
 - **Brief:** `docs/plan/pr-briefs/PR-03.11-multi-channel-merchant.md`
 
-### PR-04 — Carrito: CRUD conversacional persistido
+### PR-04 — Carrito: CRUD conversacional persistido 🔴 CRÍTICO
 - **Objetivo:** crear carrito por customer/merchant, agregar/remover/actualizar qty, y mostrar resumen.
-- **Depende de:** PR-03.5 (PR-03.6 opcional pero recomendado).
+- **Depende de:** PR-03.5 ✅, PR-03.6 ✅ (ambos MERGED).
 - **Incluye:** modelos cart/cart_item + reglas básicas + endpoints/handlers internos.
 - **Excluye:** checkout.
 
@@ -229,13 +229,14 @@
 - **Incluye:** events schema + agregaciones básicas + endpoints admin internos.
 - **Excluye:** dashboard frontend.
 
-### PR-11 — Playbooks: ropa/belleza/minimarket (defaults)
+### PR-11 — Playbooks: ropa/belleza/minimarket (defaults) ✅ MERGED
 - **Objetivo:** configurar defaults por industria (preguntas mínimas, mensajes base, reglas).
-- **Depende de:** PR-02 (merchant), PR-03.6 (LLM prompts) y PR-04/05 (flows).
+- **Depende de:** PR-02 ✅ (merchant), PR-03.6 ✅ (LLM prompts).
 - **Incluye:** seed/config por playbook + selección por merchant + composición de prompts LLM.
 - **Excluye:** editor visual avanzado.
+- **Nota:** Playbooks están configurados y activos. Los flows de cart/checkout (PR-04/05) usarán estos playbooks.
 
-### PR-12 — Auth Social OIDC: Google + Microsoft con sesión PostgreSQL 🟡 ENHANCEMENT
+### PR-12 — Auth Social OIDC: Google + Microsoft con sesión PostgreSQL ✅ MERGED
 - **Objetivo:** habilitar autenticación OIDC para Merchants con sesión server-side para acceso al dashboard (RNF-08).
 - **Depende de:** PR-02 ✅.
 - **Incluye:**
@@ -260,9 +261,9 @@
   - 1 cuenta OIDC = 1 merchant (sin roles por ahora)
   - Session store pattern permite swap a Redis sin cambiar AuthService
 
-### PR-13 — Meta Embedded Signup: WhatsApp Channel Onboarding 🔴 CRÍTICO
+### PR-13 — Meta Embedded Signup: WhatsApp Channel Onboarding ✅ MERGED
 - **Objetivo:** permitir que un merchant con sesión activa conecte su WhatsApp Business Account via Meta Embedded Signup, creando un `Channel` con `wabaId`, `phoneNumberId`, y credentials válidas.
-- **Depende de:** PR-03.11 ✅ (Channel model), PR-12 (Auth OIDC — merchant autenticado requerido).
+- **Depende de:** PR-03.11 ✅ (Channel model), PR-12 ✅ (Auth OIDC).
 - **Incluye:**
   - Módulo `onboarding/` con `MetaOAuthController` y `MetaOAuthService`
   - Endpoints `/onboarding/whatsapp/start` y `/onboarding/whatsapp/callback`
@@ -287,9 +288,9 @@
   - State cookie patrón idéntico a PR-12 (5 min TTL, httpOnly, secure)
   - Si subscription falla: status=connected pero webhookSubscribed=false, retry manual disponible
 
-### PR-14 — Channel Health + Status Management 🟡 ENHANCEMENT
+### PR-14 — Channel Health + Status Management ✅ MERGED
 - **Objetivo:** exponer health check por canal para UI "Fix", con diagnóstico, estado, y operaciones de retry controladas.
-- **Depende de:** PR-13 (Channel con status/webhookSubscribed).
+- **Depende de:** PR-13 ✅ (Channel con status/webhookSubscribed).
 - **Incluye:**
   - Endpoint `GET /channels/:id/health` → `ChannelHealthDto` (status, webhookSubscribed, lastWebhookAt, recentErrors, recommendation)
   - `ChannelHealthService`: `getHealth()`, `retryWebhookSubscription()`, `refreshChannelStatus()`
@@ -323,6 +324,41 @@
 - **DoD específico:**
   - E2E test AC-14 pasa: 2 merchants desde misma IP tienen límites independientes
   - Backwards compatible con throttler existente
+
+### PR-15 — Merchant Settings API: Playbook Config + Profile Update 🟡 ENHANCEMENT
+- **Issue:** [#55](https://github.com/ferbbo/closy-bot/issues/55)
+- **Brief:** [`docs/plan/pr-briefs/PR-15-merchant-settings-api.md`](../blob/main/docs/plan/pr-briefs/PR-15-merchant-settings-api.md)
+- **Objetivo:** exponer endpoints HTTP para que un merchant autenticado pueda ver/actualizar su perfil y playbookConfig (JSON de configuración conversacional).
+- **Depende de:** PR-12 ✅ (Auth OIDC session).
+- **Incluye:**
+  - Módulo `merchant-settings/` con controller y service
+  - Endpoints:
+    - `GET /merchants/me` → info merchant + playbookConfig actual
+    - `PATCH /merchants/me` → actualizar name, industry
+    - `PUT /merchants/me/playbook` → reemplazar playbookConfig completo
+    - `PATCH /merchants/me/playbook` → merge parcial con config existente
+  - DTOs de validación con `class-validator`:
+    - `UpdateMerchantDto` (name, industry)
+    - `UpdatePlaybookConfigDto` (estructura completa validada: llmPrompt, messages, rules, customGuidelines, checkoutQuestions)
+  - Guard: `SessionAuthGuard` en todos los endpoints
+  - Deep merge usando `PlaybookService.mergePlaybookConfig()` existente
+  - Validación de estructura con `PlaybookService.validatePlaybookConfig()`
+  - Tests unit + e2e
+  - Actualizar `docs/BACKEND-EXECUTION-GUIDE.md` con sección "Flujo 4: Configuración Merchant" (cURL examples para pruebas manuales)
+- **Excluye:** UI/frontend, validación semántica avanzada (URLs válidas), historial de cambios/versionado.
+- **DoD específico:**
+  - `GET /merchants/me` retorna merchant con industry y playbookConfig
+  - `PUT /merchants/me/playbook` reemplaza playbookConfig completo
+  - `PATCH /merchants/me/playbook` hace merge con config existente (deep merge)
+  - Sin auth → 401 Unauthorized
+  - Validación fallida → 400 Bad Request con detalles
+  - `BACKEND-EXECUTION-GUIDE.md` incluye cURL examples para todos los endpoints de PR-15
+  - `pnpm lint`, `pnpm test` pasan
+- **Tech notes:**
+  - PUT = reemplaza todo el playbookConfig
+  - PATCH = merge parcial (solo lo que envíes se actualiza)
+  - Estructura validada: `customGuidelines[]`, `llmPrompt{}`, `messages{}`, `rules{}`, `checkoutQuestions[]`
+  - Respuesta incluye config mergeado resultado para confirmar al cliente
 
 ---
 
