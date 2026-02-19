@@ -1,6 +1,6 @@
 # Brief — PR-17 — Catalog Import File Upload
 
-> **Status**: `AMENDED`
+> **Status**: `APPROVED`
 > **Archivo**: `docs/plan/pr-briefs/PR-17-catalog-import-file-upload.md`
 > **Issue:** [#60](https://github.com/ferbbo/closy-bot/issues/60)
 > **Regla**: Máx 2 páginas. Spec-locked. Sin scope extra.
