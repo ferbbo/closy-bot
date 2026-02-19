@@ -13,6 +13,7 @@ import { OutboxDispatcherModule } from './workers/outbox-dispatcher/outbox-dispa
 import { RetentionModule } from './workers/retention/retention.module'; // PR-03.10
 import { SummarizationModule } from './workers/summarization/summarization.module'; // PR-03.10
 import { AuthModule } from './auth/auth.module'; // PR-12
+import { OnboardingModule } from './onboarding/onboarding.module'; // PR-13
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { AuthModule } from './auth/auth.module'; // PR-12
     RetentionModule, // PR-03.10
     SummarizationModule, // PR-03.10
     AuthModule, // PR-12: OIDC Authentication
+    OnboardingModule, // PR-13: Meta Embedded Signup
   ],
 })
 export class AppModule {}

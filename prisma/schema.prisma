@@ -83,6 +83,13 @@ enum ChannelType {
   INSTAGRAM
 }
 
+/// Channel status for connection health (PR-13)
+enum ChannelStatus {
+  pending
+  connected
+  error
+}
+
 /// Customer represents an end-user (identity resolved by phone)
 model Customer {
   id        String    @id @default(cuid())
@@ -278,15 +285,21 @@ model OutboxMessage {
 /// Channel represents a messaging channel (WhatsApp, Instagram, etc.) for a merchant
 /// Each channel has its own credentials and external identifier
 model Channel {
-  id          String      @id @default(cuid())
-  merchantId  String      @map("merchant_id")
-  type        ChannelType
-  externalId  String      @map("external_id") // phone_number_id for WhatsApp, page_id for Instagram
-  displayName String      @map("display_name") // Human-readable name (e.g., "Sucursal Centro")
-  credentials Json // { accessToken, appSecret? } - TODO: encrypt in future
-  isActive    Boolean     @default(true) @map("is_active")
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
+  id                String        @id @default(cuid())
+  merchantId        String        @map("merchant_id")
+  type              ChannelType
+  externalId        String        @map("external_id") // phone_number_id for WhatsApp, page_id for Instagram
+  displayName       String        @map("display_name") // Human-readable name (e.g., "Sucursal Centro")
+  credentials       Json // { accessToken, appSecret?, phoneNumberId?, wabaId? } - TODO: encrypt in future
+  isActive          Boolean       @default(true) @map("is_active")
+  // PR-13: Meta Embedded Signup fields
+  wabaId            String?       @map("waba_id") // WhatsApp Business Account ID
+  status            ChannelStatus @default(pending)
+  statusReason      String?       @map("status_reason") @db.Text
+  webhookSubscribed Boolean       @default(false) @map("webhook_subscribed")
+  lastWebhookAt     DateTime?     @map("last_webhook_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
 
   merchant       Merchant        @relation(fields: [merchantId], references: [id])
   conversations  Conversation[]
