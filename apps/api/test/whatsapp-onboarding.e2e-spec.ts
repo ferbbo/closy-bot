@@ -1,8 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
+import cookieParser from 'cookie-parser';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/persistence/prisma/prisma.service';
+import { MetaEmbeddedSignupProvider } from '../src/onboarding/providers/meta-embedded-signup.provider';
 
 /**
  * E2E tests for WhatsApp Onboarding (Meta Embedded Signup)
@@ -20,6 +22,7 @@ import { PrismaService } from '../src/persistence/prisma/prisma.service';
 describe('WhatsApp Onboarding E2E (PR-13)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+  let mockMetaProvider: jest.Mocked<MetaEmbeddedSignupProvider>;
 
   beforeAll(async () => {
     // Set dummy env vars for module compilation
@@ -27,11 +30,24 @@ describe('WhatsApp Onboarding E2E (PR-13)', () => {
     process.env.META_APP_SECRET = 'test-app-secret';
     process.env.META_CONFIG_ID = 'test-config-id';
 
+    // Create mock for MetaEmbeddedSignupProvider
+    mockMetaProvider = {
+      getAuthorizationUrl: jest.fn(),
+      exchangeCodeForToken: jest.fn(),
+      fetchWabaInfo: jest.fn(),
+      subscribeWebhook: jest.fn(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(MetaEmbeddedSignupProvider)
+      .useValue(mockMetaProvider)
+      .compile();
 
     app = moduleFixture.createNestApplication();
+    app.use(cookieParser());
     app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
     await app.init();
 
@@ -45,6 +61,35 @@ describe('WhatsApp Onboarding E2E (PR-13)', () => {
     if (app) {
       await app.close();
     }
+  });
+
+  beforeEach(() => {
+    // Reset all mocks before each test
+    jest.clearAllMocks();
+
+    // Setup default mock responses
+    mockMetaProvider.getAuthorizationUrl.mockReturnValue(
+      'https://www.facebook.com/v18.0/dialog/oauth?client_id=123&redirect_uri=http://test&state=abc',
+    );
+
+    mockMetaProvider.exchangeCodeForToken.mockResolvedValue({
+      access_token: 'mock-access-token',
+      token_type: 'bearer',
+    });
+
+    mockMetaProvider.fetchWabaInfo.mockResolvedValue({
+      id: 'waba-123',
+      name: 'Test Business',
+      phone_numbers: [
+        {
+          id: 'phone-456',
+          display_phone_number: '+573001234567',
+          verified_name: 'Test Business',
+        },
+      ],
+    });
+
+    mockMetaProvider.subscribeWebhook.mockResolvedValue({ success: true });
   });
 
   describe('AC-11: Authentication required', () => {
@@ -172,7 +217,7 @@ describe('WhatsApp Onboarding E2E (PR-13)', () => {
       expect(credentials.wabaId).toBe('waba-123');
     });
 
-    it('AC-07: should reject callback with state mismatch', async () => {
+    it('AC-07: should reject callback with state mismatch (403 Forbidden)', async () => {
       const cookieState = 'state-1';
       const queryState = 'state-2';
       const code = 'test-auth-code';
@@ -180,10 +225,9 @@ describe('WhatsApp Onboarding E2E (PR-13)', () => {
       const response = await request(app.getHttpServer())
         .get(`/onboarding/whatsapp/callback?code=${code}&state=${queryState}`)
         .set('Cookie', [sessionCookie, `meta_oauth_state=${cookieState}`])
-        .expect(302);
+        .expect(403);
 
-      expect(response.headers.location).toContain('status=error');
-      expect(response.headers.location).toContain('reason=state_mismatch');
+      expect(response.body.message).toContain('Invalid state parameter');
 
       // Verify NO channel created
       const channelCount = await prisma.channel.count({
@@ -273,10 +317,9 @@ describe('WhatsApp Onboarding E2E (PR-13)', () => {
       const response = await request(app.getHttpServer())
         .get(`/onboarding/whatsapp/callback?code=test-code&state=${state}`)
         .set('Cookie', [sessionCookie2, `meta_oauth_state=${state}`])
-        .expect(302);
+        .expect(409);
 
-      expect(response.headers.location).toContain('status=error');
-      expect(response.headers.location).toContain('already_connected');
+      expect(response.body.message).toContain('already connected');
     });
 
     it('AC-13: should update credentials if same merchant reconnects (idempotent)', async () => {

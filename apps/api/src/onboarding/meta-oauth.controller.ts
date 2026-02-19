@@ -13,14 +13,11 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { Response, Request } from 'express';
+import { Response } from 'express';
 import { MetaOAuthService } from './meta-oauth.service';
 import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
+import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { WebhookSubscriptionResponseDto } from './dto/channel-onboarding.response.dto';
-
-interface RequestWithSession extends Request {
-  session?: { merchantId?: string };
-}
 
 /**
  * Controller for Meta Embedded Signup OAuth flow
@@ -45,11 +42,8 @@ export class MetaOAuthController {
    * AC-05: State cookie has correct attributes (httpOnly, Secure in prod, 5min TTL)
    */
   @Get('start')
-  async start(@Req() req: RequestWithSession, @Res() res: Response): Promise<void> {
-    const merchantId = req.session?.merchantId;
-    if (!merchantId) {
-      throw new ForbiddenException('No merchant session found');
-    }
+  async start(@Req() req: AuthenticatedRequest, @Res() res: Response): Promise<void> {
+    const merchantId = req.merchant.id;
 
     const { state, authUrl } = this.oauthService.startOnboarding();
 
@@ -77,13 +71,10 @@ export class MetaOAuthController {
   async callback(
     @Query('code') code: string,
     @Query('state') state: string,
-    @Req() req: RequestWithSession,
+    @Req() req: AuthenticatedRequest,
     @Res() res: Response,
   ): Promise<void> {
-    const merchantId = req.session?.merchantId;
-    if (!merchantId) {
-      throw new ForbiddenException('No merchant session found');
-    }
+    const merchantId = req.merchant.id;
 
     // Validate state (CSRF protection)
     const cookieState = req.cookies[this.cookieName];
@@ -148,12 +139,9 @@ export class MetaOAuthController {
   @Post(':channelId/subscribe-webhook')
   async retryWebhookSubscription(
     @Param('channelId') channelId: string,
-    @Req() req: RequestWithSession,
+    @Req() req: AuthenticatedRequest,
   ): Promise<WebhookSubscriptionResponseDto> {
-    const merchantId = req.session?.merchantId;
-    if (!merchantId) {
-      throw new ForbiddenException('No merchant session found');
-    }
+    const merchantId = req.merchant.id;
 
     this.logger.log(
       `Webhook subscription retry for channel ${channelId} by merchant ${merchantId}`,

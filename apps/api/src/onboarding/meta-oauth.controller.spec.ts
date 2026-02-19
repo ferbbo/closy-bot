@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException } from '@nestjs/common';
 import { MetaOAuthController } from './meta-oauth.controller';
 import { MetaOAuthService } from './meta-oauth.service';
 import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
-import type { Request, Response } from 'express';
+import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
+import type { Response } from 'express';
 
 /**
  * Unit tests for MetaOAuthController
@@ -39,8 +39,8 @@ describe('MetaOAuthController', () => {
   describe('start', () => {
     it('should set state cookie and redirect to Meta OAuth URL', async () => {
       const mockReq = {
-        session: { merchantId: 'merchant-123' },
-      } as unknown as Request;
+        merchant: { id: 'merchant-123' },
+      } as unknown as AuthenticatedRequest;
 
       const mockRes = {
         cookie: jest.fn(),
@@ -65,20 +65,20 @@ describe('MetaOAuthController', () => {
       expect(mockRes.redirect).toHaveBeenCalledWith(302, 'https://facebook.com/oauth');
     });
 
-    it('should throw ForbiddenException if no merchant session', async () => {
-      const mockReq = {} as unknown as Request;
-      const mockRes = {} as unknown as Response;
+    it('should throw if merchant not attached', async () => {
+      const mockReq = {} as unknown as AuthenticatedRequest;
+      const mockRes = { cookie: jest.fn(), redirect: jest.fn() } as unknown as Response;
 
-      await expect(controller.start(mockReq, mockRes)).rejects.toThrow(ForbiddenException);
+      await expect(controller.start(mockReq, mockRes)).rejects.toThrow();
     });
   });
 
   describe('callback', () => {
     it('should handle successful callback and redirect to dashboard', async () => {
       const mockReq = {
-        session: { merchantId: 'merchant-123' },
+        merchant: { id: 'merchant-123' },
         cookies: { meta_oauth_state: 'test-state' },
-      } as unknown as Request;
+      } as unknown as AuthenticatedRequest;
 
       const mockRes = {
         clearCookie: jest.fn(),
@@ -102,9 +102,9 @@ describe('MetaOAuthController', () => {
 
     it('should reject callback with state mismatch (AC-07)', async () => {
       const mockReq = {
-        session: { merchantId: 'merchant-123' },
+        merchant: { id: 'merchant-123' },
         cookies: { meta_oauth_state: 'state-1' },
-      } as unknown as Request;
+      } as unknown as AuthenticatedRequest;
 
       const mockRes = {
         clearCookie: jest.fn(),
@@ -112,18 +112,18 @@ describe('MetaOAuthController', () => {
       } as unknown as Response;
 
       // AC-07: State mismatch should throw 403 Forbidden
-      await expect(
-        controller.callback('test-code', 'state-2', mockReq, mockRes),
-      ).rejects.toThrow('Invalid state parameter (CSRF protection)');
+      await expect(controller.callback('test-code', 'state-2', mockReq, mockRes)).rejects.toThrow(
+        'Invalid state parameter (CSRF protection)',
+      );
 
       expect(mockRes.clearCookie).toHaveBeenCalledWith('meta_oauth_state');
     });
 
     it('should handle callback error and redirect with error reason', async () => {
       const mockReq = {
-        session: { merchantId: 'merchant-123' },
+        merchant: { id: 'merchant-123' },
         cookies: { meta_oauth_state: 'test-state' },
-      } as unknown as Request;
+      } as unknown as AuthenticatedRequest;
 
       const mockRes = {
         clearCookie: jest.fn(),
@@ -141,8 +141,8 @@ describe('MetaOAuthController', () => {
   describe('retryWebhookSubscription', () => {
     it('should retry webhook subscription successfully', async () => {
       const mockReq = {
-        session: { merchantId: 'merchant-123' },
-      } as unknown as Request;
+        merchant: { id: 'merchant-123' },
+      } as unknown as AuthenticatedRequest;
 
       mockOAuthService.retryWebhookSubscription.mockResolvedValue({
         success: true,
@@ -158,12 +158,10 @@ describe('MetaOAuthController', () => {
       );
     });
 
-    it('should throw ForbiddenException if no merchant session', async () => {
-      const mockReq = {} as unknown as Request;
+    it('should throw if merchant not attached', async () => {
+      const mockReq = {} as unknown as AuthenticatedRequest;
 
-      await expect(controller.retryWebhookSubscription('channel-123', mockReq)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(controller.retryWebhookSubscription('channel-123', mockReq)).rejects.toThrow();
     });
   });
 });
