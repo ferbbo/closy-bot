@@ -114,7 +114,7 @@ export class MerchantSettingsService {
    */
   async mergePlaybookConfig(
     merchantId: string,
-    partialConfig: Record<string, unknown>,
+    partialConfig: UpdatePlaybookConfigDto,
   ): Promise<MerchantProfileResponseDto> {
     this.logger.log(`Merging playbookConfig for merchant ${merchantId}`);
 

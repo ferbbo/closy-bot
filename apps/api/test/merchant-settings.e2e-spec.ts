@@ -224,14 +224,8 @@ describe('MerchantSettings (e2e) - PR-15', () => {
       const response = await request(app.getHttpServer())
         .patch('/merchants/me/playbook')
         .set('Cookie', [`session_id=${sessionId}`])
-        .send(partialConfig);
-
-      if (response.status !== 200) {
-        console.log('DEBUG: PATCH failed with status', response.status);
-        console.log('DEBUG: Response body:', JSON.stringify(response.body, null, 2));
-      }
-
-      expect(response.status).toBe(200);
+        .send(partialConfig)
+        .expect(200);
 
       // Check that tone was updated but other fields remain
       expect(response.body.playbookConfig.llmPrompt.tone).toBe('Updated tone via PATCH');
@@ -387,7 +381,7 @@ describe('MerchantSettings (e2e) - PR-15', () => {
       expect(playbookConfig?.['unknownTopLevel']).toBeUndefined();
     });
 
-    it('PATCH /merchants/me/playbook accepts unknown top-level field (MVP: no strict filtering)', async () => {
+    it('PATCH /merchants/me/playbook strips unknown top-level field (brief compliance)', async () => {
       const response = await request(app.getHttpServer())
         .patch('/merchants/me/playbook')
         .set('Cookie', [`session_id=${sessionId}`])
@@ -395,15 +389,17 @@ describe('MerchantSettings (e2e) - PR-15', () => {
           llmPrompt: {
             tone: 'Updated tone',
           },
-          unknownTopLevel: 'will be stored but ignored',
+          unknownTopLevel: 'should be stripped',
         })
         .expect(200);
 
       expect(response.body.playbookConfig.llmPrompt.tone).toBe('Updated tone');
+      expect(response.body.playbookConfig.unknownTopLevel).toBeUndefined();
 
-      // MVP limitation: unknown fields are not stripped, but they don't affect system behavior
-      // PlaybookService only reads known fields, so unknown fields are safely ignored
-      // Strict filtering would require deep schema validation (out of MVP scope)
+      // Verify in DB that unknown key was not persisted
+      const merchant = await prisma.merchant.findUnique({ where: { id: testMerchant.id } });
+      const playbookConfig = merchant?.playbookConfig as Record<string, unknown> | null;
+      expect(playbookConfig?.['unknownTopLevel']).toBeUndefined();
     });
   });
 });

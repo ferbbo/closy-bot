@@ -78,30 +78,63 @@ export class PlaybookService {
   /**
    * Merge custom config with base config
    * PUBLIC: used by MerchantSettingsService for PATCH operations
+   * Only merges known keys (strips unknown). Does not overwrite with undefined.
    */
   mergePlaybookConfig(
     baseConfig: PlaybookConfig,
-    customConfig: Record<string, unknown>,
+    customConfig: Partial<PlaybookConfig>,
   ): PlaybookConfig {
-    // Deep merge implementation (simple version for MVP)
-    // In production, use lodash.merge or similar
-    return {
-      ...baseConfig,
-      ...customConfig,
-      llmPrompt: {
-        ...baseConfig.llmPrompt,
-        ...(customConfig.llmPrompt || {}),
-      },
-      messages: {
-        ...baseConfig.messages,
-        ...(customConfig.messages || {}),
-      },
-      rules: {
-        ...baseConfig.rules,
-        ...(customConfig.rules || {}),
-      },
-      checkoutQuestions: customConfig.checkoutQuestions || baseConfig.checkoutQuestions,
-    };
+    const result: PlaybookConfig = { ...baseConfig };
+
+    // Only merge keys that are defined (not undefined) to avoid overwriting with undefined
+    if (customConfig.industry !== undefined) {
+      result.industry = customConfig.industry;
+    }
+
+    if (customConfig.llmPrompt !== undefined) {
+      result.llmPrompt = { ...baseConfig.llmPrompt };
+      const partial = customConfig.llmPrompt;
+      if (partial.tone !== undefined) result.llmPrompt.tone = partial.tone;
+      if (partial.focusAreas !== undefined) result.llmPrompt.focusAreas = partial.focusAreas;
+      if (partial.commonQuestions !== undefined)
+        result.llmPrompt.commonQuestions = partial.commonQuestions;
+      if (partial.upsellStrategy !== undefined)
+        result.llmPrompt.upsellStrategy = partial.upsellStrategy;
+      if (partial.emojiUsage !== undefined) result.llmPrompt.emojiUsage = partial.emojiUsage;
+    }
+
+    if (customConfig.messages !== undefined) {
+      result.messages = { ...baseConfig.messages };
+      const partial = customConfig.messages;
+      if (partial.greeting !== undefined) result.messages.greeting = partial.greeting;
+      if (partial.addToCartConfirm !== undefined)
+        result.messages.addToCartConfirm = partial.addToCartConfirm;
+      if (partial.noStock !== undefined) result.messages.noStock = partial.noStock;
+      if (partial.upsellTemplate !== undefined)
+        result.messages.upsellTemplate = partial.upsellTemplate;
+      if (partial.checkoutStart !== undefined)
+        result.messages.checkoutStart = partial.checkoutStart;
+    }
+
+    if (customConfig.rules !== undefined) {
+      result.rules = { ...baseConfig.rules };
+      const partial = customConfig.rules;
+      if (partial.askSizeBeforeCart !== undefined)
+        result.rules.askSizeBeforeCart = partial.askSizeBeforeCart;
+      if (partial.askSkinTypeOnSearch !== undefined)
+        result.rules.askSkinTypeOnSearch = partial.askSkinTypeOnSearch;
+      if (partial.autoSubstitutions !== undefined)
+        result.rules.autoSubstitutions = partial.autoSubstitutions;
+      if (partial.upsellEnabled !== undefined) result.rules.upsellEnabled = partial.upsellEnabled;
+      if (partial.maxRecommendations !== undefined)
+        result.rules.maxRecommendations = partial.maxRecommendations;
+    }
+
+    if (customConfig.checkoutQuestions !== undefined) {
+      result.checkoutQuestions = customConfig.checkoutQuestions;
+    }
+
+    return result;
   }
 
   /**
@@ -181,16 +214,17 @@ export class PlaybookService {
 
       const llmPrompt = playbook.llmPrompt as Record<string, unknown>;
 
-      if ('focusAreas' in llmPrompt && !Array.isArray(llmPrompt.focusAreas)) {
+      // Use !== undefined instead of 'in' to validate only when field is sent (not when undefined via DTO transform)
+      if (llmPrompt.focusAreas !== undefined && !Array.isArray(llmPrompt.focusAreas)) {
         throw new BadRequestException('llmPrompt.focusAreas must be an array');
       }
 
-      if ('commonQuestions' in llmPrompt && !Array.isArray(llmPrompt.commonQuestions)) {
+      if (llmPrompt.commonQuestions !== undefined && !Array.isArray(llmPrompt.commonQuestions)) {
         throw new BadRequestException('llmPrompt.commonQuestions must be an array');
       }
 
       if (
-        'emojiUsage' in llmPrompt &&
+        llmPrompt.emojiUsage !== undefined &&
         !['none', 'moderate', 'frequent'].includes(llmPrompt.emojiUsage as string)
       ) {
         throw new BadRequestException(

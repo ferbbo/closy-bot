@@ -71,7 +71,7 @@ export class MerchantSettingsController {
   /**
    * PATCH /merchants/me/playbook
    * Merge partial playbookConfig
-   * Accept any payload (validation happens after merge)
+   * ValidationPipe strips unknown keys (whitelist: true)
    */
   @Patch('me/playbook')
   @UsePipes(
@@ -84,7 +84,7 @@ export class MerchantSettingsController {
   )
   async mergePlaybookConfig(
     @Req() req: AuthenticatedRequest,
-    @Body() partialConfig: Record<string, unknown>,
+    @Body() partialConfig: UpdatePlaybookConfigDto,
   ): Promise<MerchantProfileResponseDto> {
     this.logger.log(`PATCH /merchants/me/playbook - merchant: ${req.merchant.id}`);
     return this.merchantSettingsService.mergePlaybookConfig(req.merchant.id, partialConfig);
