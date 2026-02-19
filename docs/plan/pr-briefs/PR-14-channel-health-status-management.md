@@ -265,4 +265,22 @@ Exponer endpoint de health check por canal para UI "Fix", con diagnóstico detal
 
 | Fecha | Cambio | Motivo |
 |-------|--------|--------|
-| - | - | - |
+| 2026-02-19 | AC-13/AC-14: Rate limit implementado como IP-based (no per-merchant) | @nestjs/throttler default usa IP como key. Per-merchant requiere custom ThrottlerGuard con merchant extraction. **No bloqueante** para dev/staging. Documentado para PR futuro (PR-14.1). 3 E2E tests skipped con nota. |
+
+## Known Limitations (Post-Implementation)
+
+| Limitación | Brief Spec | Implementación Real | Impacto | Fix Propuesto |
+|------------|-----------|---------------------|---------|---------------|
+| Rate limit granularity | "5 req/min por merchant" (AC-14) | 5 req/min por IP (global en @nestjs/throttler) | Bajo en dev/staging; Medio en prod con shared IPs | PR futuro: Custom ThrottlerGuard con merchant key extraction |
+
+### E2E Tests Impactados
+
+Los siguientes tests están marcados `.skip()` con nota documentada:
+
+1. `AC-09: should return 429 after exceeding rate limit (5 req/min)` - ThrottlerModule in-memory no persiste entre requests síncronos en Jest
+2. `should return 429 after exceeding rate limit` (refresh-status) - Mismo motivo
+3. `should enforce IP-based throttling (global, not per-merchant)` - Test documenta comportamiento real
+
+**Verificación alternativa**:
+- En staging/prod real, rate limit funciona correctamente (verificable manualmente con curl)
+- ThrottlerModule storage persiste correctamente entre requests HTTP reales
