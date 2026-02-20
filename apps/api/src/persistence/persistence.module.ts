@@ -10,6 +10,8 @@ import { OutboxRepository } from './repositories/outbox.repository';
 import { OutboxService } from './outbox/outbox.service';
 import { MessageLogRepository } from './repositories/message-log.repository'; // PR-03.10
 import { ChannelRepository } from './repositories/channel.repository'; // PR-03.11
+import { CartRepository } from './repositories/cart.repository'; // PR-04
+import { CartItemRepository } from './repositories/cart-item.repository'; // PR-04
 
 @Global()
 @Module({
@@ -25,6 +27,8 @@ import { ChannelRepository } from './repositories/channel.repository'; // PR-03.
     OutboxService,
     MessageLogRepository, // PR-03.10
     ChannelRepository, // PR-03.11
+    CartRepository, // PR-04
+    CartItemRepository, // PR-04
   ],
   exports: [
     PrismaService,
@@ -38,6 +42,8 @@ import { ChannelRepository } from './repositories/channel.repository'; // PR-03.
     OutboxService,
     MessageLogRepository, // PR-03.10
     ChannelRepository, // PR-03.11
+    CartRepository, // PR-04
+    CartItemRepository, // PR-04
   ],
 })
 export class PersistenceModule {}

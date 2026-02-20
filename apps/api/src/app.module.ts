@@ -13,6 +13,7 @@ import { CatalogManagementModule } from './catalog-management/catalog-management
 import { OutboxDispatcherModule } from './workers/outbox-dispatcher/outbox-dispatcher.module';
 import { RetentionModule } from './workers/retention/retention.module'; // PR-03.10
 import { SummarizationModule } from './workers/summarization/summarization.module'; // PR-03.10
+import { CartCleanupModule } from './workers/cart-cleanup/cart-cleanup.module'; // PR-04
 import { AuthModule } from './auth/auth.module'; // PR-12
 import { OnboardingModule } from './onboarding/onboarding.module'; // PR-13
 import { MerchantSettingsModule } from './merchant-settings/merchant-settings.module'; // PR-15
@@ -38,6 +39,7 @@ import { MerchantSettingsModule } from './merchant-settings/merchant-settings.mo
     OutboxDispatcherModule,
     RetentionModule, // PR-03.10
     SummarizationModule, // PR-03.10
+    CartCleanupModule, // PR-04: Cart expiration cleanup
     AuthModule, // PR-12: OIDC Authentication
     OnboardingModule, // PR-13: Meta Embedded Signup
     MerchantSettingsModule, // PR-15: Merchant Settings API

@@ -171,6 +171,22 @@ export class ProductRepository {
   }
 
   /**
+   * Find product by variant ID (PR-04: for cart operations)
+   */
+  async findByVariantId(variantId: string): Promise<ProductWithVariants | null> {
+    const variant = await this.prisma.productVariant.findUnique({
+      where: { id: variantId },
+      select: { productId: true },
+    });
+
+    if (!variant) {
+      return null;
+    }
+
+    return this.findById(variant.productId);
+  }
+
+  /**
    * Create or update a product variant (upsert by SKU)
    * Note: SKU is required for idempotency
    */

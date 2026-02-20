@@ -5,6 +5,7 @@ import { CatalogService } from './catalog.service';
 import { ImportService } from './import.service';
 import { MerchantResolverService } from './merchant-resolver.service';
 import { PlaybookService } from './playbook.service';
+import { CartService } from './cart.service';
 import { PersistenceModule } from '../persistence/persistence.module';
 
 /**
@@ -18,6 +19,7 @@ import { PersistenceModule } from '../persistence/persistence.module';
  * - CatalogService: product search and retrieval
  * - ImportService: CSV product import with validation
  * - MerchantResolverService: merchant resolution by WhatsApp phone
+ * - CartService: shopping cart CRUD (PR-04)
  *
  * Future responsibilities:
  * - Payment service (payment gateway integration)
@@ -33,6 +35,7 @@ import { PersistenceModule } from '../persistence/persistence.module';
     ImportService,
     MerchantResolverService,
     PlaybookService,
+    CartService,
   ],
   exports: [
     CustomerService,
@@ -41,6 +44,7 @@ import { PersistenceModule } from '../persistence/persistence.module';
     ImportService,
     MerchantResolverService,
     PlaybookService,
+    CartService,
   ],
 })
 export class ServicesModule {}
