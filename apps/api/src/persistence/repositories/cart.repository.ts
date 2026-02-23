@@ -63,6 +63,17 @@ export class CartRepository {
   }
 
   /**
+   * AC-03: Find active cart for customer and merchant (brief naming)
+   * REQ-02: Alias for findActiveCart
+   */
+  async findActiveByCustomerAndMerchant(
+    customerId: string,
+    merchantId: string,
+  ): Promise<Cart | null> {
+    return this.findActiveCart(customerId, merchantId);
+  }
+
+  /**
    * Find active cart for customer and merchant
    * Filters out expired carts even if status is still active
    */

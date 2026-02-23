@@ -107,7 +107,7 @@ export class IntentRouterService {
       };
     }
 
-    // AC-13: Check ADD_TO_CART FIRST (higher priority than SHOW_CART to avoid "agregar al carrito" collision)
+    // AC-13: Check ADD_TO_CART FIRST (higher priority than VIEW_CART to avoid "agregar al carrito" collision)
     if (this.matchesKeywords(normalizedText, this.keywords.ADD_TO_CART)) {
       const productName = this.extractProductName(normalizedText, this.keywords.ADD_TO_CART);
       return {

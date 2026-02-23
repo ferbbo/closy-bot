@@ -88,7 +88,7 @@ describe('CartService', () => {
         {
           provide: MerchantResolverService,
           useValue: {
-            getMerchant: jest.fn().mockResolvedValue({
+            getById: jest.fn().mockResolvedValue({
               id: 'merchant-1',
               playbookConfig: {
                 cartConfig: {

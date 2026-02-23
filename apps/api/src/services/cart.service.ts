@@ -65,7 +65,7 @@ export class CartService {
     }
 
     // AC-13: Get TTL from playbook config, fallback to env var or default 24h
-    const merchant = await this.merchantResolverService.getMerchant(merchantId);
+    const merchant = await this.merchantResolverService.getById(merchantId);
     const ttlHours = merchant.playbookConfig?.cartConfig?.ttlHours ?? this.defaultTtlHours;
 
     // Create new cart with TTL (REQ-17, AC-18)
@@ -194,7 +194,7 @@ export class CartService {
 
     // AC-13: Refresh TTL on cart operations (extend expiresAt)
     const newExpiresAt = new Date();
-    newExpiresAt.setHours(newExpiresAt.getHours() + this.cartTtlHours);
+    newExpiresAt.setHours(newExpiresAt.getHours() + this.defaultTtlHours);
     await this.cartRepository.refreshTTL(cartId, newExpiresAt);
 
     // Return updated cart with items
@@ -258,7 +258,7 @@ export class CartService {
 
     // AC-13: Refresh TTL on cart operations
     const newExpiresAt = new Date();
-    newExpiresAt.setHours(newExpiresAt.getHours() + this.cartTtlHours);
+    newExpiresAt.setHours(newExpiresAt.getHours() + this.defaultTtlHours);
     await this.cartRepository.refreshTTL(cartId, newExpiresAt);
 
     const updatedCart = await this.cartRepository.findByIdWithItems(cartId);
@@ -280,7 +280,7 @@ export class CartService {
 
     // AC-13: Refresh TTL on cart operations
     const newExpiresAt = new Date();
-    newExpiresAt.setHours(newExpiresAt.getHours() + this.cartTtlHours);
+    newExpiresAt.setHours(newExpiresAt.getHours() + this.defaultTtlHours);
     await this.cartRepository.refreshTTL(cartId, newExpiresAt);
 
     const updatedCart = await this.cartRepository.findByIdWithItems(cartId);
