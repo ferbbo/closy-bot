@@ -93,6 +93,17 @@ export class CartRepository {
   }
 
   /**
+   * Refresh TTL (expiresAt) for active cart
+   * AC-13: Update expiresAt on cart operations (create/update)
+   */
+  async refreshTTL(id: string, expiresAt: Date): Promise<Cart> {
+    return this.prisma.cart.update({
+      where: { id },
+      data: { expiresAt },
+    });
+  }
+
+  /**
    * Find expired carts
    */
   async findExpiredCarts(): Promise<Cart[]> {

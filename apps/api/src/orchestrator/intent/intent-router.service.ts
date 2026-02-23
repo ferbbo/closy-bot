@@ -115,6 +115,18 @@ export class IntentRouterService {
       };
     }
 
+    // AC-13: Check ADD_TO_CART FIRST (higher priority than SHOW_CART to avoid "agregar al carrito" collision)
+    if (this.matchesKeywords(normalizedText, this.keywords.ADD_TO_CART)) {
+      const productName = this.extractProductName(normalizedText, this.keywords.ADD_TO_CART);
+      return {
+        intent: 'ADD_TO_CART',
+        confidence: 0.85,
+        entities: {
+          productName,
+        },
+      };
+    }
+
     // AC-14: Check SHOW_CART (high confidence for explicit cart keywords)
     if (this.matchesKeywords(normalizedText, this.keywords.SHOW_CART)) {
       return {
@@ -148,18 +160,6 @@ export class IntentRouterService {
       const productName = this.extractProductName(normalizedText, this.keywords.REMOVE_FROM_CART);
       return {
         intent: 'REMOVE_FROM_CART',
-        confidence: 0.75,
-        entities: {
-          productName,
-        },
-      };
-    }
-
-    // AC-13: Check ADD_TO_CART (must have add keyword + product name)
-    if (this.matchesKeywords(normalizedText, this.keywords.ADD_TO_CART)) {
-      const productName = this.extractProductName(normalizedText, this.keywords.ADD_TO_CART);
-      return {
-        intent: 'ADD_TO_CART',
         confidence: 0.75,
         entities: {
           productName,

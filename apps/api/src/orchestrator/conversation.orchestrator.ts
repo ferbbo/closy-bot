@@ -180,7 +180,12 @@ export class ConversationOrchestrator {
         // PR-04: Cart intents (AC-10, AC-11, AC-12)
         case 'ADD_TO_CART':
           const productQuery = intentResult.entities?.productName || input.text;
-          response = await this.cartFlow.handleAddToCart(customer.id, merchant.id, productQuery);
+          response = await this.cartFlow.handleAddToCart(
+            customer.id,
+            merchant.id,
+            productQuery,
+            input.text,
+          );
           break;
 
         case 'SHOW_CART':

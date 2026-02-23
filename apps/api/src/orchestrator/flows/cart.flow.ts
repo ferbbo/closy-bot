@@ -23,14 +23,25 @@ export class CartFlow {
    * @param customerId - Customer ID
    * @param merchantId - Merchant ID
    * @param productQuery - Product name/description extracted from message
+   * @param fullText - Full message text for quantity extraction
    * @returns Formatted response message
    */
   async handleAddToCart(
     customerId: string,
     merchantId: string,
     productQuery: string,
+    fullText?: string,
   ): Promise<string> {
     this.logger.log(`Adding to cart for customer ${customerId}: "${productQuery}"`);
+
+    // Extract quantity from message (e.g., "quiero 2 camisas", "agregar 5", default 1)
+    const quantityMatch = fullText?.match(/\b(\d+)\b/);
+    const quantity = quantityMatch ? parseInt(quantityMatch[1], 10) : 1;
+
+    // Validate quantity range
+    if (quantity < 1 || quantity > 99) {
+      return `❌ La cantidad debe estar entre 1 y 99 unidades.`;
+    }
 
     try {
       // Get or create active cart
@@ -76,9 +87,9 @@ export class CartFlow {
         return `*${product.name}* tiene varias opciones:\n\n${variantList}\n\n¿Cuál variante quieres? Responde con el nombre.`;
       }
 
-      // Add single variant to cart (quantity = 1)
+      // Add single variant to cart with parsed quantity
       const variant = availableVariants[0];
-      await this.cartService.addItem(cart.id, variant.id, 1);
+      await this.cartService.addItem(cart.id, variant.id, quantity);
 
       // Get updated cart summary
       const summary = await this.cartService.getCartSummary(cart.id);

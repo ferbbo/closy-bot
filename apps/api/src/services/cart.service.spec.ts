@@ -63,6 +63,7 @@ describe('CartService', () => {
             findByIdWithItems: jest.fn(),
             findActiveCart: jest.fn(),
             updateStatus: jest.fn(),
+            refreshTTL: jest.fn().mockResolvedValue(mockCart),
             findExpiredCarts: jest.fn(),
           },
         },
@@ -167,6 +168,32 @@ describe('CartService', () => {
           priceSnapshot: new Decimal(25),
         }),
       );
+    });
+
+    it('AC-05: should increment quantity if item already exists', async () => {
+      const existingItem = {
+        id: 'item-1',
+        cartId: 'cart-1',
+        variantId: 'variant-1',
+        quantity: 2,
+        priceSnapshot: new Decimal(25),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      productRepository.findByVariantId.mockResolvedValue(mockProduct);
+      cartItemRepository.findByCartAndVariant.mockResolvedValue(existingItem);
+      cartItemRepository.updateQuantity.mockResolvedValue({ ...existingItem, quantity: 5 });
+      cartRepository.findByIdWithItems.mockResolvedValue({
+        ...mockCart,
+        items: [existingItem],
+      });
+
+      await service.addItem('cart-1', 'variant-1', 3);
+
+      // Should update existing item to 2 + 3 = 5
+      expect(cartItemRepository.updateQuantity).toHaveBeenCalledWith('item-1', 5);
+      expect(cartItemRepository.create).not.toHaveBeenCalled();
     });
 
     it('AC-17: should validate stock', async () => {

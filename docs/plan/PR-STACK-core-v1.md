@@ -276,6 +276,8 @@
 
 > **Visión de producto:** "Tienda en WhatsApp lista en 10 minutos" — WhatsApp-first + dashboard mínimo (torre de control).
 >
+> **Principio de routing:** **Template-first + LLM fallback** — los flows determinísticos (templates) SIEMPRE ejecutan primero para intents conocidos. El LLM solo participa como fallback para intents no reconocidos y como herramienta de asistencia puntual (summaries, reclasificación). Esto minimiza costos LLM desde el primer lanzamiento.
+>
 > **Prioridad:** P0 = Bloquea lanzamiento | P1 = Necesario para onboarding completo | P2 = Mejora post-lanzamiento
 >
 > **Regla:** Cada fase dentro de un bloque se ejecuta secuencialmente. PRs dentro de una misma fase son paralelizables.
@@ -283,8 +285,9 @@
 ```mermaid
 graph TD
     subgraph "BLOQUE 1 — Pedidos P0"
-        PR04[PR-04 Cart] --> PR05[PR-05 Checkout]
-        PR045[PR-04.5 MerchantConfig] --> PR05
+        PR04[PR-04 Cart] --> PR0351[PR-03.5.1 Template-First Router]
+        PR045[PR-04.5 MerchantConfig] --> PR05[PR-05 Checkout]
+        PR0351 --> PR05
         PR05 --> PR051[PR-05.1 Merchant Commands]
         PR05 --> PR06[PR-06 Payments]
     end
@@ -313,11 +316,10 @@ graph TD
         PR10[PR-10 Analytics]
         PR141[PR-14.1 Throttler]
     end
-    subgraph "BLOQUE 7 — Template Engine P2"
-        PR20[PR-20 TemplatePack] --> PR22[PR-22 Render]
-        PR21[PR-21 ContextPack] --> PR23[PR-23 Route Decision]
-        PR22 --> PR23
-        PR23 --> PR24[PR-24 Intent Expansion]
+    subgraph "BLOQUE 7 — Template Formalization P2"
+        PR20[PR-20 TemplatePack DB] --> PR22[PR-22 Handlebars Render]
+        PR21[PR-21 ContextPack] --> PR22
+        PR22 --> PR24[PR-24 Intent Expansion 12+]
         PR24 --> PR25[PR-25 Telemetry + Rollout]
     end
 ```
@@ -353,6 +355,51 @@ graph TD
   - `unitPrice` se captura al momento de agregar (snapshot), no se recalcula
   - Cart se asocia a `Conversation` activa (customerId + merchantId)
   - Cart `active` → máximo 1 por customer+merchant
+
+##### PR-03.5.1 — Template-First Router: Orchestrator Rewrite 🔴 CRÍTICO NUEVO
+- **Objetivo:** invertir la lógica del orchestrator para que flows determinísticos (templates) ejecuten SIEMPRE primero. El LLM solo participa como fallback acotado para intents UNKNOWN. Minimiza costos LLM desde día 1.
+- **Depende de:** PR-03.5 ✅ (orchestrator), PR-03.6 ✅ (LLM adapter), PR-04 (Cart, para tener todos los flows determinísticos).
+- **Incluye:**
+  - `RouteDecisionService` (nuevo servicio):
+    ```
+    classifyAndRoute(text, context) →
+      1. IntentRouter.classify(text) → { intent, confidence }
+      2. Si intent !== UNKNOWN && confidence >= threshold → TEMPLATE_ROUTE
+      3. Si intent === UNKNOWN && LLM_INTENT_ASSIST=true → LLM reclasifica (prompt corto) → retry
+      4. Si sigue UNKNOWN → LLM_FALLBACK_ROUTE (si flag activo) o GENERIC_RESPONSE
+    ```
+  - Rewrite `ConversationOrchestrator.process()`:
+    - Elimina toggle binario `if (this.llmEnabled) { LLM para todo }` 
+    - Nuevo flujo: `Message → RouteDecision → TEMPLATE_ROUTE (flow) | LLM_FALLBACK_ROUTE`
+    - Flows determinísticos: `GreetingFlow`, `HelpFlow`, `SearchCatalogFlow`, `CartFlow` (y futuros `CheckoutFlow`, `PostSaleFlow`)
+    - Todos los intents conocidos SIEMPRE ejecutan su flow determinístico, nunca pasan por LLM
+  - Feature flags granulares (reemplazan `LLM_ENABLED` monolítico):
+    - `LLM_INTENT_ASSIST` (default: `false`): LLM ayuda a reclasificar intents UNKNOWN con prompt corto
+    - `LLM_FALLBACK_ENABLED` (default: `false`): LLM genera respuesta para UNKNOWN sin template match
+    - `LLM_SUMMARY_ENABLED` (default: `false`): LLM genera summaries para handoff (PR-08)
+    - Backward compat: `LLM_ENABLED=true` actúa como alias de todos los flags en `true`
+  - `INTENT_CONFIDENCE_THRESHOLD` env var (default: `0.7`)
+  - Actualizar `.env.example` con nuevos flags
+  - Tests unit + e2e
+- **Excluye:** TemplatePack en DB, Handlebars render, telemetry de routing, UI.
+- **DoD específico:**
+  - Con todos los flags LLM en `false`: bot funciona 100% sin LLM (costo $0)
+  - Intents determinísticos (GREETING, SEARCH, CART, etc.) NUNCA generan call LLM
+  - Intent UNKNOWN + `LLM_INTENT_ASSIST=true` → LLM reclasifica → si match → flow determinístico
+  - Intent UNKNOWN + `LLM_FALLBACK_ENABLED=true` → LLM genera respuesta
+  - Intent UNKNOWN + ambos flags `false` → respuesta genérica ("No entendí, escribe ayuda")
+  - LLM falla/timeout → graceful fallback a respuesta genérica
+  - `pnpm lint`, `pnpm test` pasan
+- **Consumer experience:**
+  - Sin cambio para el usuario final (mismos flujos conversacionales)
+  - Merchant nota respuestas más rápidas (sin latencia LLM en 80%+ de mensajes)
+  - Admin puede activar LLM gradualmente por flag
+- **Tech notes:**
+  - `RouteDecisionService` es inyectable, testeable, y se formaliza en Bloque 7
+  - `IntentRouter` keyword-based sigue siendo la primera línea de clasificación
+  - LLM para intent assist usa prompt corto y barato (solo clasificación, no generación)
+  - Los flows son los "templates" de V1 — en Bloque 7 (P2) se migran a Handlebars/DB
+  - Modelo de costos: de ~100 LLM calls/100 msgs → ~15-20 (solo UNKNOWN), reducción 80-100%
 
 ##### PR-04.5 — MerchantConfig: políticas, métodos de pago, envío + presets 🔴 NUEVO
 - **Objetivo:** persistir configuración operativa del merchant (métodos de pago aceptados, política de envío, política de devolución) con presets por industria.
@@ -391,8 +438,8 @@ graph TD
 #### Fase 1.2
 
 ##### PR-05 — Checkout: captura de datos + creación de orden + notificación merchant 🔴 CRÍTICO
-- **Objetivo:** iniciar checkout desde carrito, capturar datos mínimos, crear orden, y notificar al merchant por WhatsApp.
-- **Depende de:** PR-04, PR-04.5.
+- **Objetivo:** iniciar checkout desde carrito, capturar datos mínimos, crear orden, y notificar al merchant por WhatsApp. **100% template-first** — el LLM NO participa en el flujo de checkout.
+- **Depende de:** PR-04, PR-04.5, PR-03.5.1 (Template-First Router).
 - **Incluye:**
   - Modelos Prisma:
     - `Order` (orderCode, status enum: `pending_payment`/`confirmed`/`paid`/`shipped`/`delivered`/`cancelled`, customerId, merchantId, totalAmount, shippingAddress, customerName, customerPhone, paymentMethod, notes)
@@ -423,6 +470,7 @@ graph TD
   - `checkoutQuestions` del playbook definen qué campos preguntar
   - MerchantNotificationService usa OutboxMessage (misma infra que outbound)
   - Para notificar al merchant necesita su phone number (campo existente en Merchant)
+  - **Template-first:** `CheckoutFlow` es 100% determinístico — mensajes de cada paso (pedir nombre, dirección, método de pago, confirmación) son constantes/templates en el flow, no generados por LLM
 
 #### Fase 1.3 (paralelizable)
 
@@ -501,14 +549,15 @@ graph TD
 #### Fase 2.1 (paralelizable)
 
 ##### PR-07 — Postventa: estado de pedido + tickets simples 🟡
-- **Objetivo:** cliente consulta estado de pedido y crea tickets (faltante/dañado/retraso).
+- **Objetivo:** cliente consulta estado de pedido y crea tickets (faltante/dañado/retraso). **Template-first** — flows determinísticos con templates para cada situación.
 - **Depende de:** PR-06.
 - **Incluye:**
   - Modelo Prisma: `Ticket` (orderId, type: `missing`/`damaged`/`delay`/`other`, status: `open`/`resolved`/`closed`, description, customerId, merchantId)
   - `PostSaleService`: `getOrderStatus()`, `createTicket()`
-  - Flow conversacional:
-    - "¿Cómo va mi pedido?" → bot busca último pedido o pide orderCode → muestra estado
-    - "Tengo un problema" → bot clasifica → crea ticket + notifica merchant
+  - `PostSaleFlow` (determinístico, template-first):
+    - "¿Cómo va mi pedido?" → bot busca último pedido o pide orderCode → muestra estado con template
+    - "Tengo un problema" → bot clasifica por keywords → crea ticket + notifica merchant con template
+  - Templates de respuesta para cada estado: `confirmed`, `preparing`, `shipped`, `delivered`
   - Notificación al merchant vía WhatsApp: `"Ticket abierto para ORD-001: {tipo}"`
   - Notificación al cliente cuando merchant resuelve (via PR-05.1 o futuro)
   - Intents nuevos: `ORDER_STATUS`, `CREATE_TICKET`
@@ -546,16 +595,18 @@ graph TD
 #### Fase 2.2
 
 ##### PR-08 — Handoff humano: resumen estructurado + registro 🟡
-- **Objetivo:** detectar necesidad de handoff y generar resumen con contexto completo.
+- **Objetivo:** detectar necesidad de handoff y generar resumen con contexto completo. Detección es **template-first** (keyword + threshold). Summary usa LLM **solo si** `LLM_SUMMARY_ENABLED=true`, con fallback a summary determinístico.
 - **Depende de:** PR-07.
 - **Incluye:**
   - Modelo Prisma: `Handoff` (conversationId, reason, summary JSON, status: `pending`/`active`/`resolved`)
   - `HandoffService`: `detectHandoff()`, `createHandoff()`, `generateSummary()`
-  - Detección: intent `HANDOFF` (cliente pide hablar con persona) o escalation automática (3+ loops sin resolución)
-  - Summary estructurado (generado por LLM):
-    ```json
-    { "intent": "...", "cartSnapshot": [...], "currentStep": "...", "customerInfo": {...}, "conversationHighlights": "..." }
-    ```
+  - Detección (determinística): intent `HANDOFF` (cliente pide hablar con persona) o escalation automática (3+ loops sin resolución)
+  - Summary dual:
+    - **Determinístico (default):** construido desde datos en DB (cart snapshot, último intent, conversation metadata)
+      ```json
+      { "intent": "...", "cartSnapshot": [...], "currentStep": "...", "customerInfo": {...}, "highlights": "últimos 3 mensajes" }
+      ```
+    - **LLM-assisted (si `LLM_SUMMARY_ENABLED=true`):** LLM genera `conversationHighlights` más naturales
   - Notificación al merchant vía WhatsApp: `"Se requiere atención humana para ORD-001:\n{resumen}"`
   - Activa `handoffActive` en Conversation (integra con PR-05.2 relay)
   - Intent nuevo: `HANDOFF`
@@ -563,7 +614,9 @@ graph TD
 - **Excluye:** UI inbox, assignment a agentes, SLA tracking.
 - **DoD específico:**
   - Cliente dice "quiero hablar con alguien" → handoff creado + merchant notificado
-  - Summary incluye: intent, carrito, paso, datos del cliente
+  - Summary incluye: intent, carrito, paso, datos del cliente (sin LLM)
+  - Con `LLM_SUMMARY_ENABLED=true`: summary tiene highlights generados por LLM
+  - Con `LLM_SUMMARY_ENABLED=false`: summary funciona 100% sin LLM
   - Merchant puede responder via relay (PR-05.2)
   - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
 
@@ -766,40 +819,39 @@ graph TD
 
 ---
 
-### BLOQUE 7 — Template Engine (P2)
+### BLOQUE 7 — Template Formalization (P2)
 
-> Template-first + LLM fallback. Solo implementar después de que flujo completo funcione con LLM.
-> Diseño detallado en conversación de arquitectura (template engine PR-stack).
+> Formaliza y optimiza el patrón template-first que ya funciona desde PR-03.5.1.
+> Los flows hardcoded (GreetingFlow, CartFlow, CheckoutFlow, etc.) se migran a templates editables en DB.
+> El `RouteDecisionService` lightweight de PR-03.5.1 se expande con Handlebars render y más intents.
 
-##### PR-20 — TemplatePack: schema + seed por industria
-- **Depende de:** PR-11 ✅ (Playbooks).
+##### PR-20 — TemplatePack: schema DB + seed por industria
+- **Depende de:** PR-11 ✅ (Playbooks), PR-03.5.1 (Template-First Router).
 - **Incluye:** modelos `TemplatePack`, `TemplateVariant` (Prisma), seed con templates base por situación e industria.
 - **Excluye:** render engine, UI editor.
+- **Nota:** Migra los mensajes hardcoded de flows (GreetingFlow, CartFlow, etc.) a registros en DB editables por merchant.
 
 ##### PR-21 — ContextPack Builder: datos estructurados para templates
-- **Depende de:** PR-04, PR-05 (necesita Cart/Order para contexto).
+- **Depende de:** PR-04 ✅ (Cart), PR-05 (Order).
 - **Incluye:** `ContextPackBuilder` que construye `{ customer, cart, order, merchant, catalog }` desde SQL.
 - **Excluye:** render, decisión de ruta.
 
 ##### PR-22 — Template Render: Handlebars + formateo WhatsApp
-- **Depende de:** PR-20.
+- **Depende de:** PR-20, PR-21.
 - **Incluye:** `TemplateRenderService` con Handlebars, helpers monetarios (`{{currency}}`, `{{plural}}`), formateo WhatsApp.
-- **Excluye:** decisión template vs LLM.
-
-##### PR-23 — Route Decision: template vs LLM
-- **Depende de:** PR-21, PR-22.
-- **Incluye:** `RouteDecisionService`: intent mapeado + template disponible + context completo → template; else → LLM fallback.
-- **Excluye:** telemetry, feature flags.
+- **Nota:** Reemplaza los string templates hardcoded de flows por Handlebars compilados. `RouteDecisionService` (de PR-03.5.1) se extiende para usar rendered templates.
+- **Excluye:** UI editor de templates.
 
 ##### PR-24 — Intent Router Expansion: 12+ intents
-- **Depende de:** PR-23.
-- **Incluye:** expansión IntentRouter a 12+ intents, `INTENT_TO_SITUATION` mapping, LLM-assisted classification.
+- **Depende de:** PR-22.
+- **Incluye:** expansión IntentRouter a 12+ intents, `INTENT_TO_SITUATION` mapping, LLM-assisted classification mejorada.
 - **Excluye:** rollout gradual.
 
-##### PR-25 — Telemetry + Feature Flag Rollout
+##### PR-25 — Telemetry + Rollout gradual
 - **Depende de:** PR-24.
-- **Incluye:** `TEMPLATE_FIRST_ENABLED` feature flag, telemetry (route taken, latency, fallback rate), rollout gradual por merchant.
-- **Excluye:** dashboard de métricas.
+- **Incluye:** telemetry (route taken, latency, LLM fallback rate), métricas por merchant, dashboards de routing.
+- **Excluye:** dashboard frontend de métricas.
+- **Nota:** `TEMPLATE_FIRST_ENABLED` ya no es feature flag (es el default desde PR-03.5.1). Aquí se mide el rendimiento para optimizar.
 
 ---
 
@@ -807,24 +859,35 @@ graph TD
 
 | Bloque | Prioridad | PRs | Dependencia previa | Paralelizable con |
 |--------|-----------|-----|-------------------|-------------------|
-| 1. Pedidos | P0 | PR-04, PR-04.5, PR-05, PR-05.1, PR-06 | Infra mergeada ✅ | Bloque 3 |
+| 1. Pedidos | P0 | PR-04, **PR-03.5.1**, PR-04.5, PR-05, PR-05.1, PR-06 | Infra mergeada ✅ | Bloque 3 |
 | 2. Operación | P0 | PR-07, PR-05.2, PR-08 | Bloque 1 | Bloque 3 |
 | 3. Dashboard Base | P1 | PR-FE-00, PR-15, PR-16, PR-17, PR-FE-01 | Infra mergeada ✅ | Bloques 1-2 |
 | 4. Onboarding | P1 | PR-OB-01, PR-FE-OB | PR-04.5 + PR-FE-01 | — |
 | 5. Dashboard UIs | P1 | PR-FE-03, PR-FE-04, PR-FE-05, PR-FE-02 | PR-FE-01 + APIs backend | — |
 | 6. Mejoras | P2 | PR-09, PR-10, PR-14.1 | Bloques 1-2 | — |
-| 7. Template Engine | P2 | PR-20 a PR-25 | Bloques 1-2 | Bloque 6 |
+| 7. Template Formalization | P2 | PR-20, PR-21, PR-22, PR-24, PR-25 | Bloques 1-2 | Bloque 6 |
 
-> **Critical path:** Bloque 1 → Bloque 2 → Lanzamiento MVP WhatsApp-only.
+> **Principio de diseño:** Template-first + LLM fallback desde el primer lanzamiento. Con todos los flags LLM apagados, el bot funciona al 100% ($0 costo LLM). El LLM es un acelerador opcional, no una dependencia.
+>
+> **Critical path:** PR-04 → PR-03.5.1 → PR-05 → PR-06 → Bloque 2 → Lanzamiento MVP WhatsApp-only.
 >
 > **Paralelo:** Bloque 3 puede avanzar simultáneamente con Bloques 1-2 (APIs backend no dependen de Cart/Order).
 >
+> **Modelo de costos LLM por 100 mensajes:**
+> | Configuración | Calls LLM | Costo estimado |
+> |---------------|-----------|----------------|
+> | Todos flags LLM `false` (default) | 0 | $0.00 |
+> | `LLM_INTENT_ASSIST=true` | ~15-20 | $0.01-0.03 |
+> | `LLM_INTENT_ASSIST` + `LLM_FALLBACK_ENABLED` | ~15-20 | $0.02-0.05 |
+> | `LLM_ENABLED=true` (todos activos) | ~15-20 | $0.02-0.05 |
+>
 > **Orden recomendado para Planner:**
 > 1. Generar briefs de PR-04 + PR-04.5 (Fase 1.1 — paralelizables)
-> 2. Generar brief de PR-05 (Fase 1.2)
-> 3. Generar briefs de PR-05.1 + PR-06 (Fase 1.3 — paralelizables)
-> 4. Continuar con Bloque 2: PR-07, PR-05.2, PR-08
-> 5. Bloque 3 en paralelo cuando haya capacidad
+> 2. Generar brief de PR-03.5.1 (Template-First Router — **blocker** para PR-05)
+> 3. Generar brief de PR-05 (Fase 1.2 — debe diseñarse template-first)
+> 4. Generar briefs de PR-05.1 + PR-06 (Fase 1.3 — paralelizables)
+> 5. Continuar con Bloque 2: PR-07, PR-05.2, PR-08 (todos template-first)
+> 6. Bloque 3 en paralelo cuando haya capacidad
 
 ---
 

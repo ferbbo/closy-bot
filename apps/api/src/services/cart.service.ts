@@ -185,6 +185,11 @@ export class CartService {
       }
     }
 
+    // AC-13: Refresh TTL on cart operations (extend expiresAt)
+    const newExpiresAt = new Date();
+    newExpiresAt.setHours(newExpiresAt.getHours() + this.cartTtlHours);
+    await this.cartRepository.refreshTTL(cartId, newExpiresAt);
+
     // Return updated cart with items
     const updatedCart = await this.cartRepository.findByIdWithItems(cartId);
     if (!updatedCart) {
@@ -244,6 +249,11 @@ export class CartService {
     await this.cartItemRepository.updateQuantity(itemId, quantity);
     this.logger.log(`Updated item ${itemId} quantity to ${quantity} in cart ${cartId}`);
 
+    // AC-13: Refresh TTL on cart operations
+    const newExpiresAt = new Date();
+    newExpiresAt.setHours(newExpiresAt.getHours() + this.cartTtlHours);
+    await this.cartRepository.refreshTTL(cartId, newExpiresAt);
+
     const updatedCart = await this.cartRepository.findByIdWithItems(cartId);
     return updatedCart;
   }
@@ -260,6 +270,11 @@ export class CartService {
 
     await this.cartItemRepository.delete(itemId);
     this.logger.log(`Removed item ${itemId} from cart ${cartId}`);
+
+    // AC-13: Refresh TTL on cart operations
+    const newExpiresAt = new Date();
+    newExpiresAt.setHours(newExpiresAt.getHours() + this.cartTtlHours);
+    await this.cartRepository.refreshTTL(cartId, newExpiresAt);
 
     const updatedCart = await this.cartRepository.findByIdWithItems(cartId);
     if (!updatedCart) {
