@@ -168,6 +168,27 @@ describe('IntentRouterService', () => {
       });
     });
 
+    describe('AC-09: UPDATE_CART intent detection', () => {
+      it('should detect UPDATE_CART', () => {
+        const result = service.classify('cambiar cantidad camiseta a 3');
+        expect(result.intent).toBe('UPDATE_CART');
+        expect(result.confidence).toBeGreaterThan(0.7);
+      });
+
+      it('should detect variations', () => {
+        const variations = [
+          'actualizar camiseta a 5',
+          'modificar cantidad zapatos',
+          'cambiar a 2 unidades',
+        ];
+
+        variations.forEach((text) => {
+          const result = service.classify(text);
+          expect(result.intent).toBe('UPDATE_CART');
+        });
+      });
+    });
+
     describe('Intent priority', () => {
       it('SHOW_CART should have higher priority than SEARCH', () => {
         const result = service.classify('ver productos en carrito');

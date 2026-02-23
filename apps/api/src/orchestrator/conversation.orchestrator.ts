@@ -192,6 +192,19 @@ export class ConversationOrchestrator {
           response = await this.cartFlow.handleRemoveItem(customer.id, merchant.id, removeQuery);
           break;
 
+        case 'UPDATE_CART':
+          const updateQuery = intentResult.entities?.productName || input.text;
+          // Extract quantity from text (e.g., "cambiar a 3", "poner 5", "actualizar a 2")
+          const quantityMatch = input.text.match(/\b(\d+)\b/);
+          const newQuantity = quantityMatch ? parseInt(quantityMatch[1], 10) : 1;
+          response = await this.cartFlow.handleUpdateQuantity(
+            customer.id,
+            merchant.id,
+            updateQuery,
+            newQuantity,
+          );
+          break;
+
         case 'CLEAR_CART':
           response = await this.cartFlow.handleClearCart(customer.id, merchant.id);
           break;

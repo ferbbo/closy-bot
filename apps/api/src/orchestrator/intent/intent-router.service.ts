@@ -4,6 +4,7 @@ export type IntentType =
   | 'SEARCH_PRODUCT'
   | 'ADD_TO_CART'
   | 'SHOW_CART'
+  | 'UPDATE_CART'
   | 'REMOVE_FROM_CART'
   | 'CLEAR_CART'
   | 'GREETING'
@@ -56,6 +57,7 @@ export class IntentRouterService {
       'cancelar pedido',
       'eliminar todo',
     ],
+    UPDATE_CART: ['cambiar', 'actualizar', 'modificar', 'cambiar cantidad', 'ajustar'],
     REMOVE_FROM_CART: ['remover', 'quitar', 'eliminar', 'sacar'],
     ADD_TO_CART: [
       'agregar',
@@ -126,6 +128,18 @@ export class IntentRouterService {
       return {
         intent: 'CLEAR_CART',
         confidence: 0.8,
+      };
+    }
+
+    // AC-09: Check UPDATE_CART (must have update keyword + product reference + quantity)
+    if (this.matchesKeywords(normalizedText, this.keywords.UPDATE_CART)) {
+      const productName = this.extractProductName(normalizedText, this.keywords.UPDATE_CART);
+      return {
+        intent: 'UPDATE_CART',
+        confidence: 0.75,
+        entities: {
+          productName,
+        },
       };
     }
 
