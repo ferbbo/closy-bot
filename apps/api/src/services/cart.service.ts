@@ -4,6 +4,7 @@ import { CartStatus } from '@prisma/client';
 import { CartRepository, CartWithItems } from '../persistence/repositories/cart.repository';
 import { CartItemRepository } from '../persistence/repositories/cart-item.repository';
 import { ProductRepository } from '../persistence/repositories/product.repository';
+import { MerchantResolverService } from './merchant-resolver.service';
 
 /**
  * CartSummary DTO for conversational display
@@ -33,20 +34,22 @@ export interface CartSummary {
 @Injectable()
 export class CartService {
   private readonly logger = new Logger(CartService.name);
-  private readonly cartTtlHours: number;
+  private readonly defaultTtlHours: number;
 
   constructor(
     private readonly cartRepository: CartRepository,
     private readonly cartItemRepository: CartItemRepository,
     private readonly productRepository: ProductRepository,
+    private readonly merchantResolverService: MerchantResolverService,
     private readonly configService: ConfigService,
   ) {
-    this.cartTtlHours = this.configService.get<number>('CART_TTL_HOURS', 24);
+    this.defaultTtlHours = this.configService.get<number>('CART_TTL_HOURS', 24);
   }
 
   /**
    * AC-03: Create or get active cart for customer/merchant
    * REQ-03: Returns existing active cart or creates new one with TTL
+   * AC-13: TTL configurable by playbook (default 24h)
    */
   async createOrGetActiveCart(customerId: string, merchantId: string): Promise<CartWithItems> {
     // Check for existing active cart
@@ -61,9 +64,13 @@ export class CartService {
       }
     }
 
+    // AC-13: Get TTL from playbook config, fallback to env var or default 24h
+    const merchant = await this.merchantResolverService.getMerchant(merchantId);
+    const ttlHours = merchant.playbookConfig?.cartConfig?.ttlHours ?? this.defaultTtlHours;
+
     // Create new cart with TTL (REQ-17, AC-18)
     const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + this.cartTtlHours);
+    expiresAt.setHours(expiresAt.getHours() + ttlHours);
 
     const newCart = await this.cartRepository.create({
       customer: { connect: { id: customerId } },
@@ -73,7 +80,7 @@ export class CartService {
     });
 
     this.logger.log(
-      `Created new cart ${newCart.id} for customer ${customerId}, expires at ${expiresAt.toISOString()}`,
+      `Created new cart ${newCart.id} for customer ${customerId}, TTL ${ttlHours}h, expires at ${expiresAt.toISOString()}`,
     );
 
     // Return with empty items
@@ -311,16 +318,6 @@ export class CartService {
       total,
       itemCount,
     };
-  }
-
-  /**
-   * AC-09: Clear cart and mark as abandoned
-   * REQ-08: Removes all items and changes status to abandoned
-   */
-  async clearCart(cartId: string): Promise<void> {
-    await this.cartItemRepository.deleteByCartId(cartId);
-    await this.cartRepository.updateStatus(cartId, CartStatus.abandoned);
-    this.logger.log(`Cleared cart ${cartId} and marked as abandoned`);
   }
 
   /**

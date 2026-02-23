@@ -134,10 +134,10 @@ describe('IntentRouterService', () => {
       });
     });
 
-    describe('AC-14: SHOW_CART intent detection', () => {
-      it('should detect SHOW_CART', () => {
+    describe('AC-14: VIEW_CART intent detection', () => {
+      it('should detect VIEW_CART', () => {
         const result = service.classify('ver carrito');
-        expect(result.intent).toBe('SHOW_CART');
+        expect(result.intent).toBe('VIEW_CART');
         expect(result.confidence).toBeGreaterThan(0.8);
       });
 
@@ -146,7 +146,7 @@ describe('IntentRouterService', () => {
 
         variations.forEach((text) => {
           const result = service.classify(text);
-          expect(result.intent).toBe('SHOW_CART');
+          expect(result.intent).toBe('VIEW_CART');
         });
       });
     });
@@ -190,9 +190,9 @@ describe('IntentRouterService', () => {
     });
 
     describe('Intent priority', () => {
-      it('SHOW_CART should have higher priority than SEARCH', () => {
+      it('VIEW_CART should have higher priority than SEARCH', () => {
         const result = service.classify('ver productos en carrito');
-        expect(result.intent).toBe('SHOW_CART');
+        expect(result.intent).toBe('VIEW_CART');
       });
 
       it('ADD_TO_CART should have higher priority than SEARCH', () => {

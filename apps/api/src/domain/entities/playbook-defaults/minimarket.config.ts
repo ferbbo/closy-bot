@@ -41,4 +41,7 @@ export const MinimarketPlaybookDefaults: PlaybookConfig = {
     upsellEnabled: true,
     maxRecommendations: 5,
   },
+  cartConfig: {
+    ttlHours: 24, // PR-04: Cart expires after 24 hours
+  },
 };

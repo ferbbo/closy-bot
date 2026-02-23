@@ -188,7 +188,7 @@ export class ConversationOrchestrator {
           );
           break;
 
-        case 'SHOW_CART':
+        case 'VIEW_CART':
           response = await this.cartFlow.handleShowCart(customer.id, merchant.id);
           break;
 
@@ -208,10 +208,6 @@ export class ConversationOrchestrator {
             updateQuery,
             newQuantity,
           );
-          break;
-
-        case 'CLEAR_CART':
-          response = await this.cartFlow.handleClearCart(customer.id, merchant.id);
           break;
 
         case 'UNKNOWN':

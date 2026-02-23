@@ -48,4 +48,7 @@ export const RopaPlaybookDefaults: PlaybookConfig = {
     upsellEnabled: true,
     maxRecommendations: 4,
   },
+  cartConfig: {
+    ttlHours: 24, // PR-04: Cart expires after 24 hours
+  },
 };

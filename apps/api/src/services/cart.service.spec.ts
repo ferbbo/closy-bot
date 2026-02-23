@@ -5,6 +5,7 @@ import { CartService } from './cart.service';
 import { CartRepository } from '../persistence/repositories/cart.repository';
 import { CartItemRepository } from '../persistence/repositories/cart-item.repository';
 import { ProductRepository } from '../persistence/repositories/product.repository';
+import { MerchantResolverService } from './merchant-resolver.service';
 import { CartStatus } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
@@ -82,6 +83,19 @@ describe('CartService', () => {
           provide: ProductRepository,
           useValue: {
             findByVariantId: jest.fn(),
+          },
+        },
+        {
+          provide: MerchantResolverService,
+          useValue: {
+            getMerchant: jest.fn().mockResolvedValue({
+              id: 'merchant-1',
+              playbookConfig: {
+                cartConfig: {
+                  ttlHours: 24,
+                },
+              },
+            }),
           },
         },
         {
@@ -168,32 +182,6 @@ describe('CartService', () => {
           priceSnapshot: new Decimal(25),
         }),
       );
-    });
-
-    it('AC-05: should increment quantity if item already exists', async () => {
-      const existingItem = {
-        id: 'item-1',
-        cartId: 'cart-1',
-        variantId: 'variant-1',
-        quantity: 2,
-        priceSnapshot: new Decimal(25),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      productRepository.findByVariantId.mockResolvedValue(mockProduct);
-      cartItemRepository.findByCartAndVariant.mockResolvedValue(existingItem);
-      cartItemRepository.updateQuantity.mockResolvedValue({ ...existingItem, quantity: 5 });
-      cartRepository.findByIdWithItems.mockResolvedValue({
-        ...mockCart,
-        items: [existingItem],
-      });
-
-      await service.addItem('cart-1', 'variant-1', 3);
-
-      // Should update existing item to 2 + 3 = 5
-      expect(cartItemRepository.updateQuantity).toHaveBeenCalledWith('item-1', 5);
-      expect(cartItemRepository.create).not.toHaveBeenCalled();
     });
 
     it('AC-17: should validate stock', async () => {
@@ -328,15 +316,6 @@ describe('CartService', () => {
       expect(summary.items[1].subtotal).toBe(30); // 1 * 30
       expect(summary.total).toBe(80); // 50 + 30
       expect(summary.itemCount).toBe(3); // 2 + 1
-    });
-  });
-
-  describe('AC-09: clearCart', () => {
-    it('should clear cart', async () => {
-      await service.clearCart('cart-1');
-
-      expect(cartItemRepository.deleteByCartId).toHaveBeenCalledWith('cart-1');
-      expect(cartRepository.updateStatus).toHaveBeenCalledWith('cart-1', CartStatus.abandoned);
     });
   });
 

@@ -22,9 +22,8 @@ describe('CartFlow', () => {
             createOrGetActiveCart: jest.fn(),
             addItem: jest.fn(),
             getCartSummary: jest.fn(),
-            removeItem: jest.fn(),
             updateQuantity: jest.fn(),
-            clearCart: jest.fn(),
+            removeItem: jest.fn(),
           },
         },
         {

@@ -113,8 +113,8 @@ export class CartFlow {
   }
 
   /**
-   * AC-11: Handle SHOW_CART intent
-   * REQ-10: Shows cart summary in WhatsApp-friendly format
+   * AC-08: Handle VIEW_CART intent
+   * REQ-05: Shows cart summary in WhatsApp-friendly format
    *
    * @param customerId - Customer ID
    * @param merchantId - Merchant ID
@@ -261,26 +261,6 @@ ${updatedSummary.items.length > 0 ? `Total actualizado: *$${updatedSummary.total
       }
 
       return '❌ Error al actualizar cantidad. Intenta de nuevo.';
-    }
-  }
-
-  /**
-   * Handle CLEAR_CART intent
-   * Clears cart and marks as abandoned
-   */
-  async handleClearCart(customerId: string, merchantId: string): Promise<string> {
-    this.logger.log(`Clearing cart for customer ${customerId}`);
-
-    try {
-      const cart = await this.cartService.createOrGetActiveCart(customerId, merchantId);
-      await this.cartService.clearCart(cart.id);
-
-      return `✅ Carrito vaciado correctamente
-
-Escribe "buscar" cuando quieras empezar de nuevo.`;
-    } catch (error) {
-      this.logger.error(`Failed to clear cart: ${error.message}`, error.stack);
-      return '❌ Error al vaciar el carrito. Intenta de nuevo.';
     }
   }
 

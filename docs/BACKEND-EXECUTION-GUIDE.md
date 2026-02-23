@@ -16,11 +16,6 @@ Copiar `.env.example` a `.env` y configurar:
 # Base de datos
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/closy_bot?schema=public"
 
-# CORS (PR-FE-00) - Para dashboard frontend
-# Comma-separated list de orígenes permitidos
-# Default dev: http://localhost:3001 (Next.js dashboard)
-CORS_ORIGINS="http://localhost:3001"
-
 # Auth OIDC (PR-12)
 AUTH_REDIRECT_URL="http://localhost:3000"
 AUTH_COOKIE_DOMAIN=""  # vacío para localhost
@@ -545,13 +540,12 @@ El endpoint JSON (`/api/catalog/import`) sigue funcional pero retorna headers de
 | Respuestas LLM | PR-03.6 | ✅ Funcional (si `LLM_ENABLED=true`) |
 | Catálogo CRUD/Import | PR-03.7 | ✅ Funcional |
 | Catalog Import File Upload | PR-17 | ✅ Funcional (multipart/form-data) |
+| Carrito CRUD conversacional | PR-04 | ✅ Funcional (ADD_TO_CART, VIEW_CART, UPDATE_CART, REMOVE_FROM_CART) |
 
 ### ❌ Flujos Pendientes (ver PR-STACK)
 
 | Flujo | PR Requerido | Descripción |
 |-------|--------------|-------------|
-| Agregar al carrito | PR-04 | Intent `ADD_TO_CART` + modelos Cart/CartItem |
-| Ver carrito | PR-04 | Intent `VIEW_CART` + flow |
 | Checkout | PR-05 | Captura datos + crear Order |
 | Confirmar pago | PR-06 | Webhook + fallback `PAGADO` |
 | Estado pedido | PR-07 | Intent `ORDER_STATUS` + flow |
@@ -1085,259 +1079,6 @@ La firma `X-Hub-Signature-256` no coincide.
 
 **Modo dev:** Si `WHATSAPP_APP_SECRET` no está configurado, se permite el request con warning.
 
-### CORS: "Access to fetch blocked" (browser console)
-
-El browser bloquea requests cross-origin.
-
-**Diagnóstico:**
-
-```bash
-# Verificar CORS preflight
-curl -X OPTIONS http://localhost:3000/auth/me \
-  -H "Origin: http://localhost:3001" \
-  -H "Access-Control-Request-Method: GET" \
-  -v
-
-# Deben aparecer headers:
-# Access-Control-Allow-Origin: http://localhost:3001
-# Access-Control-Allow-Credentials: true
-```
-
-**Soluciones comunes:**
-
-| Problema | Solución |
-|----------|----------|
-| Origen no permitido | Agregar a `CORS_ORIGINS` en `.env` |
-| Falta `credentials: include` | Agregar en fetch del frontend |
-| Cookie no se envía | Verificar `SameSite`, `Domain` de la cookie |
-| Headers bloqueados | Verificar `allowedHeaders` en CORS config |
-
-**Ejemplo configuración producción:**
-
-```bash
-# .env producción
-CORS_ORIGINS="https://dashboard.closybot.com,https://admin.closybot.com"
-```
-
----
-
-## Flujo 6: Cart Conversacional (PR-04)
-
-### Descripción
-
-Sistema de carrito de compras conversacional que permite a customers agregar, ver, actualizar y remover productos via mensajes WhatsApp. El carrito tiene TTL de 24h (configurable) y persiste estado en PostgreSQL.
-
-### Modelos
-
-```prisma
-enum CartStatus {
-  active     // Currently active cart
-  abandoned  // TTL expired or manually cleared
-  completed  // Converted to Order
-}
-
-model Cart {
-  id         String     @id @default(cuid())
-  customerId String
-  merchantId String
-  status     CartStatus @default(active)
-  expiresAt  DateTime   // TTL: now + 24h default
-  items      CartItem[]
-}
-
-model CartItem {
-  id            String  @id @default(cuid())
-  cartId        String
-  variantId     String
-  quantity      Int     // 1-99
-  priceSnapshot Decimal // Captured at add time
-  
-  @@unique([cartId, variantId]) // Idempotency
-}
-```
-
-**Guardrails**:
-- `priceSnapshot` capturado desde `ProductVariant.price` (bot NO inventa precios)
-- Stock validado antes de agregar/actualizar
-- Unique constraint `(cartId, variantId)` previene duplicados
-
-### Intents Conversacionales
-
-| Intent | Keywords Ejemplo | Handler |
-|--------|------------------|---------|
-| ADD_TO_CART | "agregar", "quiero", "añadir", "comprar" | `CartFlow.handleAddToCart()` |
-| SHOW_CART | "ver carrito", "mi carrito", "qué tengo" | `CartFlow.handleShowCart()` |
-| UPDATE_CART | "cambiar cantidad", "actualizar", "modificar" | `CartFlow.handleUpdateQuantity()` |
-| REMOVE_FROM_CART | "quitar", "eliminar", "remover", "sacar" | `CartFlow.handleRemoveItem()` |
-| CLEAR_CART | "vaciar carrito", "cancelar pedido" | `CartFlow.handleClearCart()` |
-
-### Ejemplos de Mensajes WhatsApp
-
-#### 1. Agregar Producto al Carrito
-
-**Customer:**
-```
-Quiero 2 camisas rojas
-```
-
-**Bot Response:**
-```
-✅ Agregado al carrito
-
-📦 Camisa Algodón - Rojo Talla M
-💰 $25.00
-
-🛒 Total en tu carrito: $50.00 (2 productos)
-
-Escribe "ver carrito" para revisar o "buscar" para agregar más productos.
-```
-
-#### 2. Ver Carrito
-
-**Customer:**
-```
-ver mi carrito
-```
-
-**Bot Response:**
-```
-🛒 Tu carrito (3 productos)
-
-📦 Camisa Algodón
-   Rojo Talla M
-   2x $25.00 = $50.00
-
-📦 Zapatos Deportivos
-   Negro Talla 42
-   1x $80.00 = $80.00
-
-💰 Total: $130.00
-
-✏️ Para modificar cantidades o remover items, escríbeme qué quieres cambiar.
-```
-
-#### 3. Actualizar Cantidad
-
-**Customer:**
-```
-cambiar camisas a 3
-```
-
-**Bot Response:**
-```
-✅ Cantidad actualizada
-
-📦 Camisa Algodón - Rojo Talla M
-➡️ Ahora tienes 3 unidades
-
-🛒 Total: $155.00
-```
-
-#### 4. Remover Item
-
-**Customer:**
-```
-quitar zapatos
-```
-
-**Bot Response:**
-```
-✅ Zapatos Deportivos - Negro Talla 42 removido del carrito
-
-Total actualizado: $75.00
-```
-
-#### 5. Vaciar Carrito
-
-**Customer:**
-```
-cancelar todo
-```
-
-**Bot Response:**
-```
-✅ Carrito vaciado correctamente
-
-Escribe "buscar" cuando quieras empezar de nuevo.
-```
-
-### Comportamiento TTL
-
-- **Expiración**: Carritos con `expiresAt < now()` son marcados como `abandoned` por job periódico
-- **Default**: 24 horas desde creación/última actualización
-- **Configurable**: Variable de entorno `CART_TTL_HOURS`
-- **Al agregar item a cart expirado**: Se crea nuevo cart `active` con nuevo TTL
-
-### Edge Cases
-
-#### Stock Insuficiente
-
-**Customer:**
-```
-agregar 10 camisas
-```
-
-**Bot (si stock < 10):**
-```
-😔 Stock insuficiente. Solo quedan 5 unidades de Camisa Algodón - Rojo Talla M
-```
-
-#### Producto No Encontrado
-
-**Customer:**
-```
-agregar pantalones azules
-```
-
-**Bot:**
-```
-😔 No encontré "pantalones azules"
-
-Escribe "buscar" para ver el catálogo.
-```
-
-#### Carrito Vacío
-
-**Customer:**
-```
-ver carrito
-```
-
-**Bot:**
-```
-🛒 Tu carrito está vacío
-
-Escribe "buscar" para explorar productos o simplemente dime qué necesitas.
-```
-
-### Testing
-
-#### Unit Tests
-
-```bash
-# All cart tests (repositories, services, flows)
-pnpm test cart
-
-# Intent classification
-pnpm test intent-router
-```
-
-#### Manual Testing via WhatsApp
-
-1. Enviar mensaje WhatsApp al número configurado
-2. Bot detecta intent automáticamente
-3. Respuestas formateadas para WhatsApp (emojis, saltos de línea)
-
-### Notas de Implementación
-
-**Multi-tenancy:** Todos los carritos filtrados automáticamente por `(customerId, merchantId)`.
-
-**Idempotencia:** Agregar mismo `variantId` dos veces → incrementa `quantity` (no crea CartItem duplicado).
-
-**Price Snapshot:** Precio capturado al momento de agregar. Si precio cambia después, carrito mantiene snapshot. Checkout puede recalcular y notificar diferencia.
-
-**Quantity Limits:** Min 1, Max 99 unidades por CartItem.
-
 ---
 
 ## Próximos Pasos
@@ -1347,7 +1088,7 @@ Para completar el flujo de ventas transaccional, implementar:
 1. **PR-05 — Checkout** (🔴 CRÍTICO)
    - Modelo `Order`, `OrderItem`
    - Captura de datos (nombre, dirección)
-   - Métodos de pago
+      - Métodos de pago
 
 2. **PR-06 — Pagos**
    - Modelo `Payment`

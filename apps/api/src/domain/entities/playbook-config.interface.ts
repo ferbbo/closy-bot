@@ -12,6 +12,7 @@ export interface PlaybookConfig {
   checkoutQuestions: CheckoutQuestion[];
   messages: PlaybookMessages;
   rules: PlaybookRules;
+  cartConfig?: CartConfig; // PR-04: Cart-specific configuration
 }
 
 export interface LlmPromptConfig {
@@ -66,4 +67,13 @@ export interface PlaybookRules {
   upsellEnabled: boolean;
   /** Max number of product recommendations */
   maxRecommendations: number;
+}
+
+/**
+ * CartConfig (PR-04)
+ * Cart-specific configuration per industry playbook
+ */
+export interface CartConfig {
+  /** Cart TTL in hours (default 24) */
+  ttlHours: number;
 }
