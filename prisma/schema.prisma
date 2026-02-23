@@ -66,6 +66,7 @@ model Merchant {
   channels       Channel[]   // PR-03.11: Multi-channel support
   identities     MerchantIdentity[] // PR-12: OIDC identities
   sessions       Session[]   // PR-12: Auth sessions
+  carts          Cart[]      // PR-04: Shopping carts
 
   @@map("merchants")
 }
@@ -100,6 +101,7 @@ model Customer {
   updatedAt DateTime  @updatedAt @map("updated_at")
 
   conversations Conversation[]
+  carts         Cart[]         // PR-04: Shopping carts
 
   @@map("customers")
   @@index([phone])
@@ -217,7 +219,8 @@ model ProductVariant {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  product Product @relation(fields: [productId], references: [id])
+  product   Product    @relation(fields: [productId], references: [id])
+  cartItems CartItem[] // PR-04: Cart items
 
   @@map("product_variants")
   @@unique([productId, sku]) // Ensure SKU is unique per product
@@ -361,10 +364,56 @@ model Session {
 }
 
 // ============================================================================
+// PR-04: Cart & CartItem (conversational e-commerce)
+// ============================================================================
+
+/// CartStatus enum for cart lifecycle
+enum CartStatus {
+  active
+  abandoned
+  completed
+}
+
+/// Cart represents a shopping cart for a customer
+model Cart {
+  id         String     @id @default(cuid())
+  customerId String     @map("customer_id")
+  merchantId String     @map("merchant_id")
+  status     CartStatus @default(active)
+  expiresAt  DateTime   @map("expires_at")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  customer Customer   @relation(fields: [customerId], references: [id])
+  merchant Merchant   @relation(fields: [merchantId], references: [id])
+  items    CartItem[]
+
+  @@map("carts")
+  @@index([customerId, merchantId, status])
+  @@index([expiresAt])
+}
+
+/// CartItem represents a line item in a cart
+model CartItem {
+  id            String   @id @default(cuid())
+  cartId        String   @map("cart_id")
+  variantId     String   @map("variant_id")
+  quantity      Int
+  priceSnapshot Decimal  @db.Decimal(10, 2) @map("price_snapshot") // Price at add time
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  cart    Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@unique([cartId, variantId]) // Idempotency: 1 entry per variant in cart
+  @@map("cart_items")
+  @@index([cartId])
+}
+
+// ============================================================================
 // Future entities (Core V1 MVP)
 // ============================================================================
-// - Cart (cart_id, customer, items, status, expires_at)
-// - CartItem (cart, product, variant, quantity, price)
 // - Order (order_id, customer, cart_snapshot, status, payment_method)
 // - Payment (payment_id, payment_intent_id UNIQUE for idempotency, order, status)
 // - Ticket (ticket_id, customer, order?, type, status, description)

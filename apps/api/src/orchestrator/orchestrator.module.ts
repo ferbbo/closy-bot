@@ -4,6 +4,7 @@ import { IntentRouterService } from './intent/intent-router.service';
 import { SearchCatalogFlow } from './flows/search-catalog.flow';
 import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
+import { CartFlow } from './flows/cart.flow'; // PR-04
 import { ServicesModule } from '../services/services.module';
 import { LlmModule } from '../llm/llm.module';
 import { PersistenceModule } from '../persistence/persistence.module'; // PR-03.10
@@ -16,13 +17,14 @@ import { CommonModule } from '../common/common.module'; // PR-03.10 AC-06
  *
  * Responsibilities:
  * - Intent classification (keyword-based for MVP)
- * - Flow execution (greeting, help, search)
+ * - Flow execution (greeting, help, search, cart - PR-04)
  * - Merchant and customer resolution
  * - Conversation orchestration
  * - LLM-powered responses (when enabled)
  *
  * PR-11: Removed PlaybookService (now imported via ServicesModule in P2 fix)
  * PR-03.10: Imports PersistenceModule and CommonModule for conversation memory
+ * PR-04: Added CartFlow for conversational cart operations
  */
 @Module({
   imports: [ServicesModule, LlmModule, PersistenceModule, CommonModule],
@@ -32,6 +34,7 @@ import { CommonModule } from '../common/common.module'; // PR-03.10 AC-06
     SearchCatalogFlow,
     GreetingFlow,
     HelpFlow,
+    CartFlow, // PR-04
   ],
   exports: [ConversationOrchestrator],
 })

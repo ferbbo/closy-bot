@@ -1,12 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
 
-export type IntentType = 'SEARCH_PRODUCT' | 'GREETING' | 'HELP' | 'UNKNOWN';
+export type IntentType =
+  | 'SEARCH_PRODUCT'
+  | 'ADD_TO_CART'
+  | 'SHOW_CART'
+  | 'REMOVE_FROM_CART'
+  | 'CLEAR_CART'
+  | 'GREETING'
+  | 'HELP'
+  | 'UNKNOWN';
 
 export interface IntentResult {
   intent: IntentType;
   confidence: number;
   entities?: {
     query?: string; // extracted search query
+    productName?: string; // extracted product name for cart operations
   };
 }
 
@@ -31,6 +40,33 @@ export class IntentRouterService {
       'saludos',
     ],
     HELP: ['ayuda', 'cómo funciona', 'menú', 'opciones', 'qué puedo hacer', 'comandos'],
+    SHOW_CART: [
+      'carrito',
+      'ver carrito',
+      'mostrar carrito',
+      'qué tengo',
+      'mi carrito',
+      'pedido',
+      'ver pedido',
+    ],
+    CLEAR_CART: [
+      'vaciar carrito',
+      'limpiar carrito',
+      'borrar carrito',
+      'cancelar pedido',
+      'eliminar todo',
+    ],
+    REMOVE_FROM_CART: ['remover', 'quitar', 'eliminar', 'sacar'],
+    ADD_TO_CART: [
+      'agregar',
+      'añadir',
+      'agrega',
+      'añade',
+      'dame',
+      'quiero comprar',
+      'quiero',
+      'me llevo',
+    ],
     SEARCH_PRODUCT: [
       'busco',
       'quiero',
@@ -77,12 +113,52 @@ export class IntentRouterService {
       };
     }
 
+    // AC-14: Check SHOW_CART (high confidence for explicit cart keywords)
+    if (this.matchesKeywords(normalizedText, this.keywords.SHOW_CART)) {
+      return {
+        intent: 'SHOW_CART',
+        confidence: 0.85,
+      };
+    }
+
+    // Check CLEAR_CART
+    if (this.matchesKeywords(normalizedText, this.keywords.CLEAR_CART)) {
+      return {
+        intent: 'CLEAR_CART',
+        confidence: 0.8,
+      };
+    }
+
+    // AC-15: Check REMOVE_FROM_CART (must have remove keyword + product reference)
+    if (this.matchesKeywords(normalizedText, this.keywords.REMOVE_FROM_CART)) {
+      const productName = this.extractProductName(normalizedText, this.keywords.REMOVE_FROM_CART);
+      return {
+        intent: 'REMOVE_FROM_CART',
+        confidence: 0.75,
+        entities: {
+          productName,
+        },
+      };
+    }
+
+    // AC-13: Check ADD_TO_CART (must have add keyword + product name)
+    if (this.matchesKeywords(normalizedText, this.keywords.ADD_TO_CART)) {
+      const productName = this.extractProductName(normalizedText, this.keywords.ADD_TO_CART);
+      return {
+        intent: 'ADD_TO_CART',
+        confidence: 0.75,
+        entities: {
+          productName,
+        },
+      };
+    }
+
     // Check SEARCH_PRODUCT
     if (this.matchesKeywords(normalizedText, this.keywords.SEARCH_PRODUCT)) {
       const query = this.extractSearchQuery(normalizedText);
       return {
         intent: 'SEARCH_PRODUCT',
-        confidence: 0.8,
+        confidence: 0.7,
         entities: {
           query,
         },
@@ -128,5 +204,34 @@ export class IntentRouterService {
     }
 
     return query;
+  }
+
+  /**
+   * Extract product name from cart operation messages
+   * Removes action keywords (agregar, quitar, etc.)
+   */
+  private extractProductName(text: string, actionKeywords: string[]): string {
+    let productName = text;
+
+    // Remove action keywords
+    for (const keyword of actionKeywords) {
+      productName = productName.replace(new RegExp(`\\b${keyword}\\b`, 'gi'), '');
+    }
+
+    // Remove common filler words
+    const fillerWords = ['al carrito', 'del carrito', 'de', 'la', 'el', 'un', 'una'];
+    for (const word of fillerWords) {
+      productName = productName.replace(new RegExp(`\\b${word}\\b`, 'gi'), '');
+    }
+
+    // Clean up whitespace
+    productName = productName.trim().replace(/\s+/g, ' ');
+
+    // If empty, return original text
+    if (productName.length < 2) {
+      return text;
+    }
+
+    return productName;
   }
 }

@@ -63,7 +63,7 @@ describe('IntentRouterService', () => {
     it('should classify product search with different variations', () => {
       const searches = [
         'busco zapatillas',
-        'quiero una camisa',
+        // 'quiero una camisa', // Removed: "quiero" now triggers ADD_TO_CART (AC-13)
         'tienes pantalones',
         'necesito zapatos',
         'mostrar camisas',
@@ -103,6 +103,81 @@ describe('IntentRouterService', () => {
       expect(result.entities?.query).not.toContain('busco');
       expect(result.entities?.query).toContain('zapatillas');
       expect(result.entities?.query).toContain('nike');
+    });
+
+    // PR-04: Cart intent tests
+    describe('AC-13: ADD_TO_CART intent detection', () => {
+      it('should detect ADD_TO_CART', () => {
+        const result = service.classify('agregar camiseta roja');
+        expect(result.intent).toBe('ADD_TO_CART');
+        expect(result.confidence).toBeGreaterThan(0.7);
+      });
+
+      it('should extract product name', () => {
+        const result = service.classify('quiero agregar camiseta roja talla M');
+        expect(result.intent).toBe('ADD_TO_CART');
+        expect(result.entities?.productName).toContain('camiseta');
+      });
+
+      it('should detect variations', () => {
+        const variations = [
+          'añadir producto',
+          'agrega camiseta',
+          'quiero comprar zapatos',
+          'me llevo la blusa',
+        ];
+
+        variations.forEach((text) => {
+          const result = service.classify(text);
+          expect(result.intent).toBe('ADD_TO_CART');
+        });
+      });
+    });
+
+    describe('AC-14: SHOW_CART intent detection', () => {
+      it('should detect SHOW_CART', () => {
+        const result = service.classify('ver carrito');
+        expect(result.intent).toBe('SHOW_CART');
+        expect(result.confidence).toBeGreaterThan(0.8);
+      });
+
+      it('should detect variations', () => {
+        const variations = ['carrito', 'mostrar carrito', 'qué tengo', 'mi carrito', 'ver pedido'];
+
+        variations.forEach((text) => {
+          const result = service.classify(text);
+          expect(result.intent).toBe('SHOW_CART');
+        });
+      });
+    });
+
+    describe('AC-15: REMOVE_FROM_CART intent detection', () => {
+      it('should detect REMOVE_FROM_CART', () => {
+        const result = service.classify('quitar camiseta');
+        expect(result.intent).toBe('REMOVE_FROM_CART');
+        expect(result.confidence).toBeGreaterThan(0.7);
+      });
+
+      it('should detect variations', () => {
+        const variations = ['remover producto', 'eliminar camiseta', 'sacar zapatos'];
+
+        variations.forEach((text) => {
+          const result = service.classify(text);
+          expect(result.intent).toBe('REMOVE_FROM_CART');
+        });
+      });
+    });
+
+    describe('Intent priority', () => {
+      it('SHOW_CART should have higher priority than SEARCH', () => {
+        const result = service.classify('ver productos en carrito');
+        expect(result.intent).toBe('SHOW_CART');
+      });
+
+      it('ADD_TO_CART should have higher priority than SEARCH', () => {
+        const result = service.classify('quiero agregar producto');
+        expect(result.intent).toBe('ADD_TO_CART');
+      });
     });
   });
 });

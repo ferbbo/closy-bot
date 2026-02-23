@@ -9,6 +9,7 @@ import type { MerchantPlaybookData } from '../services/playbook.service';
 import { SearchCatalogFlow } from './flows/search-catalog.flow';
 import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
+import { CartFlow } from './flows/cart.flow'; // PR-04
 import { LlmService } from '../llm/llm.service';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10 AC-06
@@ -56,6 +57,7 @@ export class ConversationOrchestrator {
     private readonly searchCatalogFlow: SearchCatalogFlow,
     private readonly greetingFlow: GreetingFlow,
     private readonly helpFlow: HelpFlow,
+    private readonly cartFlow: CartFlow, // PR-04
     private readonly llmService: LlmService,
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
     private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
@@ -173,6 +175,25 @@ export class ConversationOrchestrator {
         case 'SEARCH_PRODUCT':
           const query = intentResult.entities?.query || input.text;
           response = await this.searchCatalogFlow.handle(merchant.id, query);
+          break;
+
+        // PR-04: Cart intents (AC-10, AC-11, AC-12)
+        case 'ADD_TO_CART':
+          const productQuery = intentResult.entities?.productName || input.text;
+          response = await this.cartFlow.handleAddToCart(customer.id, merchant.id, productQuery);
+          break;
+
+        case 'SHOW_CART':
+          response = await this.cartFlow.handleShowCart(customer.id, merchant.id);
+          break;
+
+        case 'REMOVE_FROM_CART':
+          const removeQuery = intentResult.entities?.productName || input.text;
+          response = await this.cartFlow.handleRemoveItem(customer.id, merchant.id, removeQuery);
+          break;
+
+        case 'CLEAR_CART':
+          response = await this.cartFlow.handleClearCart(customer.id, merchant.id);
           break;
 
         case 'UNKNOWN':
