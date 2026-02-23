@@ -25,7 +25,9 @@
 
 ---
 
-## Stack
+## PRs Mergeados (histórico)
+
+> Registro de PRs ya completados. Los PRs pendientes están en la sección **Roadmap de Ejecución** abajo.
 
 ### PR-01 — Inbound WhatsApp: normalización + dedupe persistido ✅ MERGED
 - **Objetivo:** recibir webhook inbound, normalizar mensaje y asegurar "exactly-once" lógico vía dedupe por `message_id`.
@@ -186,49 +188,6 @@
   - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
 - **Brief:** `docs/plan/pr-briefs/PR-03.11-multi-channel-merchant.md`
 
-### PR-04 — Carrito: CRUD conversacional persistido 🔴 CRÍTICO
-- **Objetivo:** crear carrito por customer/merchant, agregar/remover/actualizar qty, y mostrar resumen.
-- **Depende de:** PR-03.5 ✅, PR-03.6 ✅ (ambos MERGED).
-- **Incluye:** modelos cart/cart_item + reglas básicas + endpoints/handlers internos.
-- **Excluye:** checkout.
-
-### PR-05 — Checkout: captura de datos mínimos + creación de orden
-- **Objetivo:** iniciar checkout desde carrito, capturar nombre/dirección/ciudad y crear `order`.
-- **Depende de:** PR-04.
-- **Incluye:** order + order_items + estados `pending_payment` / `confirmed_cod`.
-- **Excluye:** confirmación de pago por webhook.
-
-### PR-06 — Pagos: webhook idempotente + fallback comando `PAGADO`
-- **Objetivo:** confirmar pagos por webhook idempotente (`payment_intent_id`) y fallback `PAGADO`.
-- **Depende de:** PR-05.
-- **Incluye:** modelo payment + constraint unique + transición `order -> paid` exactamente una vez.
-- **Excluye:** conciliación avanzada, múltiples proveedores complejos.
-- **DoD específico:** webhook duplicado no duplica transiciones.
-
-### PR-07 — Postventa: estado de pedido + tickets simples
-- **Objetivo:** consultar estado de pedido y crear tickets (faltante/dañado/retraso) con evidencia opcional.
-- **Depende de:** PR-06.
-- **Incluye:** ticket model + endpoints/handlers + adjuntos mínimos.
-- **Excluye:** SLA avanzado, workflows complejos.
-
-### PR-08 — Handoff humano: resumen estructurado + registro
-- **Objetivo:** detectar handoff y generar resumen con contexto (intención, carrito, paso, datos).
-- **Depende de:** PR-07.
-- **Incluye:** evento/tabla handoff + función de resumen + payload estructurado.
-- **Excluye:** UI de inbox (puede quedar stub + persistencia).
-
-### PR-09 — Carrito abandonado: 1–2 recordatorios con límites
-- **Objetivo:** detectar abandono y enviar recordatorios (máx 2) respetando ventanas/horarios.
-- **Depende de:** PR-06 (al menos checkout/pago) y PR-01 (outbound send).
-- **Incluye:** job/scheduler mínimo + límites por conversación.
-- **Excluye:** campañas masivas, segmentación avanzada.
-
-### PR-10 — Analytics: eventos de embudo + endpoints mínimos
-- **Objetivo:** emitir y persistir eventos del funnel y exponer métricas mínimas.
-- **Depende de:** PR-06.
-- **Incluye:** events schema + agregaciones básicas + endpoints admin internos.
-- **Excluye:** dashboard frontend.
-
 ### PR-11 — Playbooks: ropa/belleza/minimarket (defaults) ✅ MERGED
 - **Objetivo:** configurar defaults por industria (preguntas mínimas, mensajes base, reglas).
 - **Depende de:** PR-02 ✅ (merchant), PR-03.6 ✅ (LLM prompts).
@@ -311,24 +270,334 @@
   - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
 - **Known Limitations:** Rate limit es por IP (no per-merchant). Ver PR-14.1 para mejora.
 
-### PR-14.1 — Custom Throttler: Rate Limit per Merchant 🟢 FUTURE
-- **Objetivo:** implementar rate limiting por merchant (no por IP) para endpoints de channel health retry.
-- **Depende de:** PR-14.
-- **Incluye:**
-  - Custom `ThrottlerGuard` que usa `req.merchant.id` como key (en lugar de IP)
-  - Override en controller con `@SkipThrottle()` para health GET (solo aplica a POSTs)
-  - Custom storage que trackea por merchant ID
-  - Update E2E tests actualmente skipped
-- **Excluye:** distributed rate limiting (Redis), dashboard de métricas.
-- **Prioridad:** BAJA para V1 MVP (solo relevante si múltiples merchants comparten IP en producción)
-- **DoD específico:**
-  - E2E test AC-14 pasa: 2 merchants desde misma IP tienen límites independientes
-  - Backwards compatible con throttler existente
+---
 
-### PR-15 — Merchant Settings API: Playbook Config + Profile Update 🟡 ENHANCEMENT
+## Roadmap de Ejecución — Bloques Ordenados
+
+> **Visión de producto:** "Tienda en WhatsApp lista en 10 minutos" — WhatsApp-first + dashboard mínimo (torre de control).
+>
+> **Prioridad:** P0 = Bloquea lanzamiento | P1 = Necesario para onboarding completo | P2 = Mejora post-lanzamiento
+>
+> **Regla:** Cada fase dentro de un bloque se ejecuta secuencialmente. PRs dentro de una misma fase son paralelizables.
+
+```mermaid
+graph TD
+    subgraph "BLOQUE 1 — Pedidos P0"
+        PR04[PR-04 Cart] --> PR05[PR-05 Checkout]
+        PR045[PR-04.5 MerchantConfig] --> PR05
+        PR05 --> PR051[PR-05.1 Merchant Commands]
+        PR05 --> PR06[PR-06 Payments]
+    end
+    subgraph "BLOQUE 2 — Operación P0"
+        PR06 --> PR07[PR-07 Post-sale]
+        PR051 --> PR052[PR-05.2 Message Relay]
+        PR07 --> PR08[PR-08 Handoff]
+    end
+    subgraph "BLOQUE 3 — Dashboard Base P1"
+        PRFE00[PR-FE-00 CORS] --> PRFE01[PR-FE-01 Frontend]
+        PR15[PR-15 Settings API]
+        PR16[PR-16 Channel List]
+        PR17[PR-17 File Upload]
+    end
+    subgraph "BLOQUE 4 — Onboarding P1"
+        PROB01[PR-OB-01 Wizard API] --> PRFEOB[PR-FE-OB Wizard UI]
+        PRFE01 --> PRFEOB
+    end
+    subgraph "BLOQUE 5 — Dashboard UIs P1"
+        PRFE01 --> PRFE03[PR-FE-03 Channels UI]
+        PRFE01 --> PRFE04[PR-FE-04 Catalog UI]
+        PRFE01 --> PRFE05[PR-FE-05 Settings UI]
+    end
+    subgraph "BLOQUE 6 — Mejoras P2"
+        PR09[PR-09 Cart Abandoned]
+        PR10[PR-10 Analytics]
+        PR141[PR-14.1 Throttler]
+    end
+    subgraph "BLOQUE 7 — Template Engine P2"
+        PR20[PR-20 TemplatePack] --> PR22[PR-22 Render]
+        PR21[PR-21 ContextPack] --> PR23[PR-23 Route Decision]
+        PR22 --> PR23
+        PR23 --> PR24[PR-24 Intent Expansion]
+        PR24 --> PR25[PR-25 Telemetry + Rollout]
+    end
+```
+
+---
+
+### BLOQUE 1 — Flujo de Pedidos (P0 CRITICAL)
+
+> Sin esto no hay negocio. Habilita: buscar → carrito → checkout → pedido → pago.
+
+#### Fase 1.1 (paralelizable)
+
+##### PR-04 — Carrito: CRUD conversacional persistido 🔴 CRÍTICO
+- **Objetivo:** crear carrito por customer/merchant, agregar/remover/actualizar qty, y mostrar resumen.
+- **Depende de:** PR-03.5 ✅, PR-03.6 ✅.
+- **Incluye:**
+  - Modelos Prisma: `Cart` (status: `active`/`merged`/`abandoned`/`converted`), `CartItem` (productId, variantId, qty, unitPrice, snapshotName)
+  - `CartService`: `getOrCreateCart()`, `addItem()`, `removeItem()`, `updateQty()`, `getCartSummary()`, `clearCart()`
+  - `CartRepository` con queries multi-tenant (by customerId + merchantId)
+  - Flows conversacionales: `add-to-cart.flow.ts`, `view-cart.flow.ts`, `remove-from-cart.flow.ts`
+  - Validación de stock al agregar (consulta CatalogService)
+  - Snapshot de precio al agregar (no depende de cambios futuros en catálogo)
+  - Integración con IntentRouter: nuevos intents `ADD_TO_CART`, `VIEW_CART`, `REMOVE_FROM_CART`
+  - Tests unit + e2e
+- **Excluye:** checkout, order, payment, cupones/descuentos.
+- **DoD específico:**
+  - Cliente dice "agrega X" → item en cart + confirmación con resumen
+  - Cliente dice "ver carrito" → resumen formateado (items, qtys, subtotal)
+  - Stock insuficiente → mensaje claro sin agregar
+  - Cart persiste entre reinicios de servidor
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+- **Tech notes:**
+  - `unitPrice` se captura al momento de agregar (snapshot), no se recalcula
+  - Cart se asocia a `Conversation` activa (customerId + merchantId)
+  - Cart `active` → máximo 1 por customer+merchant
+
+##### PR-04.5 — MerchantConfig: políticas, métodos de pago, envío + presets 🔴 NUEVO
+- **Objetivo:** persistir configuración operativa del merchant (métodos de pago aceptados, política de envío, política de devolución) con presets por industria.
+- **Depende de:** PR-02 ✅ (Merchant), PR-11 ✅ (Playbooks pattern).
+- **Incluye:**
+  - Modelo Prisma: `MerchantConfig` (1:1 con Merchant)
+    - `paymentMethods`: JSON array — `[{ type: 'cod' | 'transfer' | 'payment_link', label, instructions?, bankInfo? }]`
+    - `shippingConfig`: JSON — `{ zones?: [], flatRate?: number, freeAbove?: number, estimatedDays?: string }`
+    - `returnPolicy`: string (texto libre, mostrado en checkout/post-sale)
+    - `currency`: string (default `'COP'`)
+    - `orderCodePrefix`: string (default `'ORD'`)
+    - `autoConfirmCod`: boolean (default `true`)
+  - `MerchantConfigService`: `getOrCreateConfig()`, `updateConfig()`, `getConfigWithDefaults()`
+  - Industry presets (como playbooks): defaults para ropa, belleza, minimarket
+    - Ropa: COD + transfer, envío flat rate, 5 días hábiles
+    - Belleza: COD + transfer + payment_link, envío gratis >$50k
+    - Minimarket: COD only, delivery same-day, no devoluciones
+  - Seed que crea MerchantConfig junto con merchant
+  - Endpoints API (Session auth):
+    - `GET /merchants/me/config` → config actual con defaults aplicados
+    - `PATCH /merchants/me/config` → actualizar campos específicos
+  - Tests unit + e2e
+  - Actualizar `BACKEND-EXECUTION-GUIDE.md`
+- **Excluye:** payment gateway integration, shipping provider integration, cálculo de envío dinámico.
+- **DoD específico:**
+  - Al crear merchant → MerchantConfig se crea con presets de industria
+  - `GET /merchants/me/config` retorna config con defaults
+  - `PATCH /merchants/me/config` actualiza solo campos enviados
+  - Checkout (PR-05) puede consultar `paymentMethods` y `shippingConfig`
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+- **Tech notes:**
+  - Patrón similar a PlaybookConfig pero como tabla separada (no JSON en Merchant)
+  - JSON fields validados con DTOs `class-validator`
+  - Presets se aplican en `getConfigWithDefaults()` si campo es null
+
+#### Fase 1.2
+
+##### PR-05 — Checkout: captura de datos + creación de orden + notificación merchant 🔴 CRÍTICO
+- **Objetivo:** iniciar checkout desde carrito, capturar datos mínimos, crear orden, y notificar al merchant por WhatsApp.
+- **Depende de:** PR-04, PR-04.5.
+- **Incluye:**
+  - Modelos Prisma:
+    - `Order` (orderCode, status enum: `pending_payment`/`confirmed`/`paid`/`shipped`/`delivered`/`cancelled`, customerId, merchantId, totalAmount, shippingAddress, customerName, customerPhone, paymentMethod, notes)
+    - `OrderItem` (orderId, productId, variantId, qty, unitPrice, snapshotName)
+  - `CheckoutService`: `startCheckout()`, `captureField()`, `createOrder()`
+  - Checkout flow conversacional (multi-step):
+    1. "Quiero pagar" → bot pregunta nombre (si no lo tiene)
+    2. Bot pregunta dirección
+    3. Bot muestra resumen + métodos de pago (desde MerchantConfig)
+    4. Cliente confirma → Order creada
+  - Generación de `orderCode` secuencial por merchant (ej: `ORD-001`)
+  - `MerchantNotificationService`: envía WhatsApp al merchant con nuevo pedido
+    - Formato: `"Nuevo pedido ORD-001\n{items}\nTotal: $X\nCliente: {name}\nDirección: {address}"`
+  - Cart status → `converted` al crear order
+  - Intent nuevo: `CHECKOUT`
+  - Tests unit + e2e
+  - Actualizar `BACKEND-EXECUTION-GUIDE.md`
+- **Excluye:** payment gateway, shipping tracking, historial de cambios de estado.
+- **DoD específico:**
+  - Checkout conversacional captura nombre + dirección → crea Order
+  - Order tiene orderCode único por merchant
+  - Merchant recibe WhatsApp con detalle del pedido
+  - Cart se marca `converted`
+  - Métodos de pago mostrados vienen de MerchantConfig
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+- **Tech notes:**
+  - Checkout state se persiste en `Conversation.metadata` (step actual + datos parciales)
+  - `checkoutQuestions` del playbook definen qué campos preguntar
+  - MerchantNotificationService usa OutboxMessage (misma infra que outbound)
+  - Para notificar al merchant necesita su phone number (campo existente en Merchant)
+
+#### Fase 1.3 (paralelizable)
+
+##### PR-05.1 — Merchant Commands: pipeline de operaciones WhatsApp 🔴 NUEVO P0
+- **Objetivo:** permitir que el merchant administre pedidos desde WhatsApp (confirmar, rechazar, marcar pagado, marcar enviado, ver pendientes).
+- **Depende de:** PR-05.
+- **Incluye:**
+  - Bifurcación en `ConversationOrchestrator`:
+    - Detectar si `senderPhone === merchant.phone` → ruta admin
+    - Crear/resolver `Conversation` con tipo `MERCHANT_ADMIN` (vs `CUSTOMER`)
+  - Enum `ConversationType`: `CUSTOMER`, `MERCHANT_ADMIN`
+  - Campo `Conversation.type` (default: `CUSTOMER`)
+  - `MerchantCommandParser`: parsear comandos del merchant
+    - `confirmar <orderCode>` → confirma pedido
+    - `rechazar <orderCode> [motivo]` → rechaza + notifica cliente
+    - `pagado <orderCode>` → marca como paid (transferencias manuales)
+    - `enviado <orderCode>` → marca como shipped + notifica cliente
+    - `pedido <orderCode>` → ver detalle de pedido
+    - `pendientes` → listar pedidos pending
+    - `hoy` → resumen del día (pedidos, total)
+    - `ayuda` → lista de comandos disponibles
+  - `MerchantCommandService`: ejecuta transiciones de estado en Order
+  - Notificación al cliente cuando merchant cambia estado:
+    - `"Tu pedido ORD-001 ha sido confirmado"`
+    - `"Tu pedido ORD-001 ha sido enviado"`
+    - `"Tu pedido ORD-001 fue rechazado: {motivo}"`
+  - Campo `Merchant.botPaused` (boolean, default `false`) + comandos `pausar bot` / `activar bot`
+  - Tests unit + e2e
+- **Excluye:** UI dashboard para pedidos, roles/permisos, multi-admin.
+- **DoD específico:**
+  - Merchant envía "confirmar ORD-001" → Order status `confirmed` + cliente notificado
+  - Merchant envía "pendientes" → lista de pedidos pending_payment + confirmed
+  - Merchant envía "hoy" → resumen con conteo y total
+  - Orchestrator bifurca correctamente merchant vs customer
+  - `pausar bot` → mensajes de clientes NO se procesan por bot (se acumulan)
+  - `activar bot` → se reactiva procesamiento
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+- **Tech notes:**
+  - Detección merchant: `inboundMessage.from === merchant.phone` (phone en tabla Merchant)
+  - Si merchant no tiene phone registrado → funcionalidad deshabilitada
+  - Comandos case-insensitive, con/sin acento (`confirmar` = `Confirmar`)
+  - `botPaused` solo afecta mensajes de clientes, no respuestas a merchant commands
+  - State transitions validadas (no puede enviar si no está confirmado)
+
+##### PR-06 — Pagos: webhook idempotente + fallback comando `PAGADO` 🔴 CRÍTICO
+- **Objetivo:** confirmar pagos por webhook idempotente (`payment_intent_id`) y fallback textual `PAGADO`.
+- **Depende de:** PR-05.
+- **Incluye:**
+  - Modelo Prisma: `Payment` (orderId, amount, method, status, externalId, paymentIntentId unique, confirmedAt)
+  - `PaymentService`: `confirmPayment()`, `processWebhook()`, `processFallbackCommand()`
+  - Webhook endpoint: `POST /webhooks/payments` con signature validation
+  - Idempotencia: constraint unique en `paymentIntentId` → retry safe
+  - Fallback: cliente envía `"PAGADO"` → bot pide confirmar → Payment created
+  - Transición: Order `pending_payment` → `paid` exactamente una vez
+  - Notificación al merchant: `"Pago confirmado para ORD-001"`
+  - Intent nuevo: `CONFIRM_PAYMENT`
+  - Tests unit + e2e (webhook duplicado, fallback, idempotencia)
+- **Excluye:** múltiples gateways, partial payments, refunds, conciliación avanzada.
+- **DoD específico:**
+  - Webhook idempotente: mismo `payment_intent_id` NO duplica transición
+  - Fallback `"PAGADO"`: crea Payment + transición order
+  - Merchant notificado de pagos confirmados
+  - Order ya pagada + nuevo webhook → 200 OK sin efecto
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+- **Tech notes:**
+  - `paymentIntentId` unique en tabla Payment → DB-level idempotency
+  - Para fallback `PAGADO`, se crea `paymentIntentId` = `manual_{orderId}_{timestamp}`
+  - Webhook signature: configurable por provider (header + secret en env)
+
+---
+
+### BLOQUE 2 — Operación + Postventa (P0)
+
+> Merchant puede operar pedidos, cliente puede consultar estado, handoff a humano cuando se necesita.
+
+#### Fase 2.1 (paralelizable)
+
+##### PR-07 — Postventa: estado de pedido + tickets simples 🟡
+- **Objetivo:** cliente consulta estado de pedido y crea tickets (faltante/dañado/retraso).
+- **Depende de:** PR-06.
+- **Incluye:**
+  - Modelo Prisma: `Ticket` (orderId, type: `missing`/`damaged`/`delay`/`other`, status: `open`/`resolved`/`closed`, description, customerId, merchantId)
+  - `PostSaleService`: `getOrderStatus()`, `createTicket()`
+  - Flow conversacional:
+    - "¿Cómo va mi pedido?" → bot busca último pedido o pide orderCode → muestra estado
+    - "Tengo un problema" → bot clasifica → crea ticket + notifica merchant
+  - Notificación al merchant vía WhatsApp: `"Ticket abierto para ORD-001: {tipo}"`
+  - Notificación al cliente cuando merchant resuelve (via PR-05.1 o futuro)
+  - Intents nuevos: `ORDER_STATUS`, `CREATE_TICKET`
+  - Tests unit + e2e
+- **Excluye:** SLA, workflows complejos, adjuntos de evidencia (V1).
+- **DoD específico:**
+  - Cliente pregunta estado → respuesta con status actual del pedido
+  - Cliente reporta problema → ticket creado + merchant notificado
+  - Sin pedido activo → mensaje claro
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+
+##### PR-05.2 — Message Relay: merchant ↔ cliente vía bot 🟡 NUEVO
+- **Objetivo:** permitir que merchant envíe mensajes directos a un cliente (y viceversa en handoff) vía el bot como intermediario.
+- **Depende de:** PR-05.1.
+- **Incluye:**
+  - Comando merchant: `msg <orderCode> <texto>` → bot envía mensaje al cliente
+  - Formato cliente recibe: `"Mensaje de {merchantName}: {texto}"`
+  - Formato merchant recibe respuesta: `"Cliente ORD-001 dice: {texto}"`
+  - Campo `Conversation.handoffActive` (boolean) — cuando true, mensajes del cliente se relayean al merchant
+  - Comando merchant: `handoff <orderCode>` → activa relay
+  - Comando merchant: `cerrar handoff` → desactiva relay, bot retoma
+  - Log de mensajes relayed en MessageLog (trazabilidad)
+  - Tests unit + e2e
+- **Excluye:** grupo WhatsApp, multi-admin, media relay (solo texto V1).
+- **DoD específico:**
+  - Merchant envía `"msg ORD-001 Tu pedido sale mañana"` → cliente recibe mensaje
+  - Cliente responde en handoff → merchant recibe respuesta
+  - `cerrar handoff` → bot retoma conversación normal
+  - `pnpm lint`, `pnpm test` pasan
+- **Tech notes:**
+  - Relay usa OutboxMessage (misma infra)
+  - `handoffActive` en Conversation controla si bot procesa o relayea
+  - Mensajes relayed se marcan con `source: 'relay'` en MessageLog
+
+#### Fase 2.2
+
+##### PR-08 — Handoff humano: resumen estructurado + registro 🟡
+- **Objetivo:** detectar necesidad de handoff y generar resumen con contexto completo.
+- **Depende de:** PR-07.
+- **Incluye:**
+  - Modelo Prisma: `Handoff` (conversationId, reason, summary JSON, status: `pending`/`active`/`resolved`)
+  - `HandoffService`: `detectHandoff()`, `createHandoff()`, `generateSummary()`
+  - Detección: intent `HANDOFF` (cliente pide hablar con persona) o escalation automática (3+ loops sin resolución)
+  - Summary estructurado (generado por LLM):
+    ```json
+    { "intent": "...", "cartSnapshot": [...], "currentStep": "...", "customerInfo": {...}, "conversationHighlights": "..." }
+    ```
+  - Notificación al merchant vía WhatsApp: `"Se requiere atención humana para ORD-001:\n{resumen}"`
+  - Activa `handoffActive` en Conversation (integra con PR-05.2 relay)
+  - Intent nuevo: `HANDOFF`
+  - Tests unit + e2e
+- **Excluye:** UI inbox, assignment a agentes, SLA tracking.
+- **DoD específico:**
+  - Cliente dice "quiero hablar con alguien" → handoff creado + merchant notificado
+  - Summary incluye: intent, carrito, paso, datos del cliente
+  - Merchant puede responder via relay (PR-05.2)
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+
+---
+
+### BLOQUE 3 — Dashboard Base + APIs Backend (P1)
+
+> Torre de control para el merchant. APIs backend pueden empezar en paralelo con Bloques 1-2.
+
+#### Fase 3.1 (paralelizable — APIs backend sin dependencias de Bloque 1-2)
+
+##### PR-FE-00 — Backend CORS: Habilitar cross-origin para dashboard 🔵 INFRASTRUCTURE
+- **Objetivo:** configurar CORS en NestJS para permitir requests desde frontend dashboard.
+- **Depende de:** Ninguno.
+- **Incluye:**
+  - Configuración CORS en `main.ts` con `app.enableCors()`
+  - Env vars: `CORS_ORIGINS` (comma-separated)
+  - Defaults: `http://localhost:3001` para dev
+  - Credentials: `true` (para cookies de sesión)
+  - Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS
+  - Allowed headers: Content-Type, Cookie, x-api-key, Authorization
+  - Exposed headers: Set-Cookie
+  - Actualizar `.env.example`
+  - Tests E2E
+- **Excluye:** rate limiting por origen, CORS dinámico.
+- **DoD específico:**
+  - Requests desde `localhost:3001` con cookies funcionan
+  - Origen no permitido → bloqueado
+  - `pnpm lint`, `pnpm test` pasan
+
+##### PR-15 — Merchant Settings API: Playbook Config + Profile Update 🟡
 - **Issue:** [#55](https://github.com/ferbbo/closy-bot/issues/55)
 - **Brief:** [`docs/plan/pr-briefs/PR-15-merchant-settings-api.md`](../blob/main/docs/plan/pr-briefs/PR-15-merchant-settings-api.md)
-- **Objetivo:** exponer endpoints HTTP para que un merchant autenticado pueda ver/actualizar su perfil y playbookConfig (JSON de configuración conversacional).
+- **Objetivo:** endpoints HTTP para ver/actualizar perfil y playbookConfig del merchant.
 - **Depende de:** PR-12 ✅ (Auth OIDC session).
 - **Incluye:**
   - Módulo `merchant-settings/` con controller y service
@@ -337,202 +606,225 @@
     - `PATCH /merchants/me` → actualizar name, industry
     - `PUT /merchants/me/playbook` → reemplazar playbookConfig completo
     - `PATCH /merchants/me/playbook` → merge parcial con config existente
-  - DTOs de validación con `class-validator`:
-    - `UpdateMerchantDto` (name, industry)
-    - `UpdatePlaybookConfigDto` (estructura completa validada: llmPrompt, messages, rules, customGuidelines, checkoutQuestions)
-  - Guard: `SessionAuthGuard` en todos los endpoints
-  - Deep merge usando `PlaybookService.mergePlaybookConfig()` existente
-  - Validación de estructura con `PlaybookService.validatePlaybookConfig()`
-  - Tests unit + e2e
-  - Actualizar `docs/BACKEND-EXECUTION-GUIDE.md` con sección "Flujo 4: Configuración Merchant" (cURL examples para pruebas manuales)
-- **Excluye:** UI/frontend, validación semántica avanzada (URLs válidas), historial de cambios/versionado.
-- **DoD específico:**
-  - `GET /merchants/me` retorna merchant con industry y playbookConfig
-  - `PUT /merchants/me/playbook` reemplaza playbookConfig completo
-  - `PATCH /merchants/me/playbook` hace merge con config existente (deep merge)
-  - Sin auth → 401 Unauthorized
-  - Validación fallida → 400 Bad Request con detalles
-  - `BACKEND-EXECUTION-GUIDE.md` incluye cURL examples para todos los endpoints de PR-15
-  - `pnpm lint`, `pnpm test` pasan
-- **Tech notes:**
-  - PUT = reemplaza todo el playbookConfig
-  - PATCH = merge parcial (solo lo que envíes se actualiza)
-  - Estructura validada: `customGuidelines[]`, `llmPrompt{}`, `messages{}`, `rules{}`, `checkoutQuestions[]`
-  - Respuesta incluye config mergeado resultado para confirmar al cliente
-
-### PR-16 — Channel List API: Listar channels del merchant 🟢 ENHANCEMENT
-- **Objetivo:** exponer endpoint para que un merchant autenticado pueda listar todos sus channels conectados, habilitando visibilidad de canales en UI futura.
-- **Depende de:** PR-14 ✅ (Channel Health).
-- **Incluye:**
-  - Endpoint `GET /channels` → lista todos los channels del merchant autenticado
-  - `ChannelListService.getChannels(merchantId)` usando `ChannelRepository.findByMerchantId()` existente
-  - DTO: `ChannelListItemDto` (id, type, displayName, status, webhookSubscribed, lastWebhookAt, createdAt)
+  - DTOs de validación con `class-validator`
   - Guard: `SessionAuthGuard`
+  - Deep merge usando `PlaybookService.mergePlaybookConfig()`
   - Tests unit + e2e
-  - Fix documentación en `BACKEND-EXECUTION-GUIDE.md` (actualmente referencia endpoint inexistente)
-- **Excluye:** filtrado avanzado, paginación, sorting (MVP), CRUD de channels (solo lectura).
+  - Actualizar `BACKEND-EXECUTION-GUIDE.md`
+- **Excluye:** UI/frontend, historial de cambios.
 - **DoD específico:**
-  - `GET /channels` retorna lista de channels del merchant autenticado
-  - Sin auth → 401 Unauthorized
-  - Merchant sin channels → `[]` (array vacío, 200 OK)
-  - Solo retorna channels con `isActive=true`
+  - CRUD playbook funciona con deep merge
+  - Sin auth → 401, validación fallida → 400
   - `pnpm lint`, `pnpm test` pasan
-- **Tech notes:**
-  - Reutiliza `ChannelRepository.findByMerchantId()` ya implementado en PR-03.11
-  - Controlador puede extender `ChannelHealthController` o ser separado (`ChannelListController`)
-  - DTO excluye `credentials` por seguridad (no exponer accessToken)
-- **Prioridad:** BAJA — no bloquea flujos principales (merchant recibe channelId en callback de onboarding)
 
-### PR-17 — Catalog Import File Upload: multipart/form-data 🟡 IMPROVEMENT
-- **Objetivo:** permitir upload de archivo CSV real via `multipart/form-data` para UX drag & drop en UI.
-- **Depende de:** PR-03.7 ✅ (Catalog Management API).
+##### PR-16 — Channel List API 🟢
+- **Objetivo:** endpoint para listar channels del merchant autenticado.
+- **Depende de:** PR-14 ✅.
 - **Incluye:**
-  - Endpoint `POST /api/catalog/import-file` con `@UseInterceptors(FileInterceptor('file'))`
-  - Validación de extensión `.csv` y tamaño máximo (5MB MVP)
-  - Parseo de `file.buffer.toString('utf-8')` → reutiliza `ImportService.importFromCSV()`
-  - Guard: `ApiKeyAuthGuard` (igual que endpoint actual)
-  - Deprecation header en endpoint actual (`/api/catalog/import`)
-  - Tests unit + e2e (upload real con supertest)
-  - Actualizar `BACKEND-EXECUTION-GUIDE.md` con cURL correcto
-- **Excluye:** streaming para archivos grandes, validación de encoding (asume UTF-8), preview antes de import.
+  - Endpoint `GET /channels` con `SessionAuthGuard`
+  - DTO: `ChannelListItemDto` (excluye `credentials` por seguridad)
+  - Tests unit + e2e
+  - Fix documentación en `BACKEND-EXECUTION-GUIDE.md`
+- **Excluye:** CRUD channels, paginación.
 - **DoD específico:**
-  - `POST /api/catalog/import-file` acepta `multipart/form-data` con campo `file`
-  - Archivo `.csv` válido → 200 + stats (created, updated, errors)
-  - Archivo no-CSV → 400 Bad Request
-  - Archivo > 5MB → 413 Payload Too Large
-  - Endpoint actual sigue funcionando (backwards compatible)
+  - Lista channels `isActive=true` del merchant
+  - Sin auth → 401, sin channels → `[]`
   - `pnpm lint`, `pnpm test` pasan
-- **Tech notes:**
-  - NestJS: `@nestjs/platform-express` con Multer ya incluido
-  - `FileInterceptor('file')` + `@UploadedFile() file: Express.Multer.File`
-  - Límite configurable via env: `CATALOG_IMPORT_MAX_SIZE_MB=5`
-  - cURL correcto: `curl -X POST -H "x-api-key: ..." -F "file=@catalog.csv" /api/catalog/import-file`
-- **Prioridad:** MEDIA — mejora UX significativa para onboarding de merchants
+
+##### PR-17 — Catalog Import File Upload: multipart/form-data 🟡
+- **Objetivo:** upload CSV real via `multipart/form-data` para UX drag & drop.
+- **Depende de:** PR-03.7 ✅.
+- **Incluye:**
+  - Endpoint `POST /api/catalog/import-file` con `FileInterceptor`
+  - Validación extensión `.csv` + tamaño máximo 5MB
+  - Guard: `ApiKeyAuthGuard`
+  - Tests unit + e2e
+  - Actualizar `BACKEND-EXECUTION-GUIDE.md`
+- **Excluye:** streaming, preview.
+- **DoD específico:**
+  - cURL funciona: `curl -F "file=@catalog.csv" ...`
+  - `.csv` válido → 200 + stats; no-CSV → 400; >5MB → 413
+  - `pnpm lint`, `pnpm test` pasan
+
+#### Fase 3.2
+
+##### PR-FE-01 — Frontend Bootstrap: Next.js + shadcn + TanStack Query 🔵
+- **Objetivo:** package `@closy-bot/dashboard` con login + dashboard placeholder.
+- **Depende de:** PR-12 ✅, PR-FE-00.
+- **Incluye:**
+  - Next.js 14 App Router + TypeScript 5.x + Tailwind + shadcn/ui
+  - TanStack Query v5 + React Hook Form + Zod
+  - Middleware auth (cookie via `/auth/me`)
+  - Páginas: `/login`, `/dashboard`
+  - Hook `useAuth()` + API client base con `credentials: 'include'`
+  - Scripts: `pnpm dev:dashboard`, `pnpm build:dashboard`
+- **Excluye:** Auth.js/NextAuth, Zustand, UI channels/catalog.
+- **DoD específico:**
+  - Login redirect funciona end-to-end
+  - `/dashboard` muestra info del merchant
+  - `pnpm build`, `pnpm lint` pasan
 
 ---
 
-## Frontend Stack
+### BLOQUE 4 — Onboarding Completo (P1)
 
-### PR-FE-00 — Backend CORS: Habilitar cross-origin para dashboard 🔵 INFRASTRUCTURE
-- **Objetivo:** configurar CORS en NestJS para permitir requests desde el frontend dashboard en localhost:3001 (dev) y dominio de producción.
-- **Depende de:** Ninguno.
+> Cumplir la promesa "tienda lista en 10 minutos".
+
+#### Fase 4.1
+
+##### PR-OB-01 — Onboarding Wizard API: progress tracker + presets + activación 🟡 NUEVO
+- **Objetivo:** API que guía al merchant por los pasos de setup y trackea progreso, con presets por industria para acelerar configuración.
+- **Depende de:** PR-12 ✅ (Auth), PR-11 ✅ (Playbooks), PR-04.5 (MerchantConfig).
 - **Incluye:**
-  - Configuración CORS en `main.ts` con `app.enableCors()`
-  - Env vars: `CORS_ORIGINS` (comma-separated list de orígenes permitidos)
-  - Defaults: `http://localhost:3001` para dev
-  - Credentials: `true` (para cookies de sesión)
-  - Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS
-  - Allowed headers: Content-Type, Cookie, x-api-key, Authorization
-  - Exposed headers: Set-Cookie
-  - Actualizar `.env.example`
-  - Tests E2E: verificar headers CORS en response
-- **Excluye:** rate limiting por origen, CORS dinámico por merchant.
+  - `OnboardingService`: calcula progreso dinámicamente (no tabla extra)
+    - Steps: `profile` (name + industry), `channel` (WhatsApp connected), `catalog` (≥1 product), `config` (payment methods set), `test` (test message sent)
+  - Endpoint `GET /onboarding/progress`:
+    ```json
+    { "completedSteps": ["profile", "channel"], "pendingSteps": ["catalog", "config", "test"], "percentage": 40, "nextStep": "catalog" }
+    ```
+  - Endpoint `POST /onboarding/apply-preset` → aplica preset de industria a PlaybookConfig + MerchantConfig
+  - Endpoint `POST /onboarding/activate` → marca merchant como `active` (habilita bot)
+  - Campo `Merchant.status`: `onboarding` | `active` | `paused`
+  - Orchestrator: si `merchant.status !== 'active'` → responde "Tienda en configuración"
+  - Guard: `SessionAuthGuard`
+  - Tests unit + e2e
+- **Excluye:** UI wizard (PR-FE-OB), gamification, onboarding por WhatsApp.
 - **DoD específico:**
-  - `OPTIONS /auth/me` retorna headers `Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials`
-  - Requests desde `localhost:3001` con cookies funcionan
-  - Requests desde origen no permitido → bloqueado
-  - `pnpm lint`, `pnpm test` pasan
+  - `GET /onboarding/progress` calcula pasos correctos dinámicamente
+  - `POST /onboarding/apply-preset` aplica playbook + config de industria
+  - `POST /onboarding/activate` valida mínimo y cambia status
+  - Bot no responde si merchant no está active
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
 - **Tech notes:**
-  - NestJS: `app.enableCors({ origin: process.env.CORS_ORIGINS?.split(','), credentials: true })`
-  - Producción: agregar dominio real a `CORS_ORIGINS`
-- **Prioridad:** ALTA — bloquea PR-FE-01
+  - Progreso calculado, no almacenado (queries a tablas existentes)
+  - Preset = merge de PlaybookConfig defaults + MerchantConfig defaults por industria
+  - `activate` valida mínimo: channel connected + ≥1 product + payment method configurado
 
-### PR-FE-01 — Frontend Bootstrap: Next.js + shadcn + TanStack Query 🔵 NEW
-- **Objetivo:** crear package `@closy-bot/dashboard` con stack frontend mínimo y primera página funcional (login redirect + dashboard placeholder).
-- **Depende de:** PR-12 ✅ (Auth OIDC backend), PR-FE-00 (CORS).
+#### Fase 4.2
+
+##### PR-FE-OB — Onboarding Wizard UI 🔵 NUEVO
+- **Objetivo:** wizard step-by-step en dashboard para setup inicial del merchant.
+- **Depende de:** PR-OB-01, PR-FE-01.
 - **Incluye:**
-  - Package `@closy-bot/dashboard` en `apps/dashboard/`
-  - Next.js 14 App Router + TypeScript 5.x
-  - Tailwind CSS 3.4 + shadcn/ui (Button, Card, Form, Input base)
-  - TanStack Query v5 provider + QueryClientProvider
-  - React Hook Form + Zod configurados
-  - Middleware Next.js auth (verifica cookie via `/auth/me`, redirect a `/login` si 401)
-  - Layout base con sidebar placeholder
-  - Páginas:
-    - `/login` — botones "Google" y "Microsoft" que redirigen a `{API_URL}/auth/login/:provider`
-    - `/dashboard` — protected, muestra merchant info (nombre, email, industry)
-  - API client base (`lib/api.ts`) con `fetch` + `credentials: 'include'`
-  - Hook `useAuth()` con TanStack Query para `/auth/me`
-  - Scripts root: `pnpm dev:dashboard`, `pnpm build:dashboard`, `pnpm lint:dashboard`
-  - `.env.example` con `NEXT_PUBLIC_API_URL=http://localhost:3000`
-  - Actualizar `pnpm-workspace.yaml` con `apps/dashboard`
-- **Excluye:**
-  - Auth.js/NextAuth (usa backend existente)
-  - Zustand (TanStack Query maneja server state)
-  - OpenAPI client generator (PR-FE-02)
-  - BFF route handlers complejos
-  - UI de channels/catalog/playbook (PRs posteriores)
-- **Consumer Experience:**
-  - Dev: `pnpm dev:dashboard` → http://localhost:3001
-  - Login: Click "Google" → redirect `localhost:3000/auth/login/google` → callback → redirect `/dashboard`
-  - Logout: Click "Logout" → POST `/auth/logout` → redirect `/login`
+  - Página `/onboarding` con stepper visual
+  - Steps: Perfil → Conectar WhatsApp → Subir catálogo → Configurar pagos → Test → Activar
+  - Cada step consume endpoints existentes (PR-13, PR-17, PR-04.5)
+  - Progress bar via `GET /onboarding/progress`
+  - Botón "Activar tienda" → `POST /onboarding/activate`
+- **Excluye:** onboarding por WhatsApp, preview de conversación.
 - **DoD específico:**
-  - `pnpm --filter @closy-bot/dashboard dev` arranca en puerto 3001
-  - `pnpm --filter @closy-bot/dashboard build` completa sin errores
-  - Login redirect funciona end-to-end con backend local
-  - `/dashboard` muestra nombre y email del merchant (GET `/auth/me`)
-  - Middleware redirige a `/login` si no autenticado (cookie ausente o inválida)
-  - shadcn components instalados: Button, Card, Form, Input
-  - `pnpm lint` pasa (ESLint config con Next.js rules)
-  - Responsive básico (mobile-first)
-- **Tech notes:**
-  - Port 3001 (Next.js) vs 3000 (NestJS backend)
-  - Cookie `session_id` se envía automáticamente con `credentials: 'include'`
-  - TanStack Query: `staleTime: 5min` para `/auth/me` (reduce requests)
-  - Middleware pattern: `middleware.ts` en root, matcher para rutas protegidas
-  - shadcn CLI: `pnpm dlx shadcn-ui@latest init`
-- **Prioridad:** ALTA — habilita desarrollo de UI para todos los flujos
+  - Wizard completo funciona end-to-end
+  - Progress se actualiza en tiempo real
+  - Merchant puede completar setup en ≤10 minutos
 
-### PR-FE-02 — OpenAPI Client Generation 🔵 FUTURE
-- **Objetivo:** generar cliente TypeScript tipado desde OpenAPI spec del backend.
-- **Depende de:** PR-FE-01, backend expone OpenAPI spec (`@nestjs/swagger`).
-- **Incluye:**
-  - NestJS Swagger module configurado (si no existe)
-  - Script `pnpm generate:api-client` usando `openapi-typescript-codegen` o `@hey-api/openapi-ts`
-  - Cliente tipado en `apps/dashboard/src/lib/api-client/`
-  - Integración con TanStack Query hooks
-  - CI: regenerar en cambios al backend
-- **Excluye:** cambios funcionales al backend.
-- **DoD específico:**
-  - `pnpm generate:api-client` genera tipos desde `/api-docs`
-  - Hooks TanStack Query usan tipos generados
-  - `pnpm lint`, `pnpm typecheck` pasan
-- **Prioridad:** MEDIA — mejora DX pero no bloquea MVP
+---
 
-### PR-FE-03 — Dashboard: Channels UI 🔵 FUTURE
-- **Objetivo:** UI para listar channels y ver health status.
-- **Depende de:** PR-FE-01, PR-16 ✅ (Channel List API), PR-14 ✅ (Channel Health).
-- **Incluye:**
-  - Página `/dashboard/channels`
-  - Lista de channels con status badge (connected/error)
-  - Botón "Add WhatsApp" → redirect `/onboarding/whatsapp/start`
-  - Panel de health con retry buttons
-  - TanStack Query hooks para `/channels` y `/channels/:id/health`
+### BLOQUE 5 — Dashboard UIs (P1)
+
+> Todas dependen de PR-FE-01 + sus APIs backend respectivas.
+
+##### PR-FE-03 — Dashboard: Channels UI 🔵
+- **Depende de:** PR-FE-01, PR-16, PR-14 ✅.
+- **Incluye:** página `/dashboard/channels`, lista con status badges, botón "Add WhatsApp", health panel.
 - **Excluye:** CRUD channels, Instagram.
-- **Prioridad:** MEDIA
 
-### PR-FE-04 — Dashboard: Catalog UI 🔵 FUTURE
-- **Objetivo:** UI para upload CSV y ver lista de productos.
-- **Depende de:** PR-FE-01, PR-17 ✅ (File Upload).
-- **Incluye:**
-  - Página `/dashboard/catalog`
-  - Drag & drop zone para CSV (`react-dropzone`)
-  - Upload con progreso visual
-  - Tabla de productos con búsqueda
-  - Import stats (created/updated/errors)
-- **Excluye:** CRUD individual de productos, editor de variantes.
-- **Prioridad:** MEDIA
+##### PR-FE-04 — Dashboard: Catalog UI 🔵
+- **Depende de:** PR-FE-01, PR-17.
+- **Incluye:** página `/dashboard/catalog`, drag & drop CSV upload, tabla productos, import stats.
+- **Excluye:** CRUD individual, editor variantes.
 
-### PR-FE-05 — Dashboard: Playbook Settings UI 🔵 FUTURE
-- **Objetivo:** UI para configurar playbook JSON del merchant.
-- **Depende de:** PR-FE-01, PR-15 ✅ (Merchant Settings API).
-- **Incluye:**
-  - Página `/dashboard/settings`
-  - Form con secciones: Profile, Messages, Rules, Guidelines
-  - Deep merge con PATCH endpoint
-  - Validación Zod client-side (reutiliza schemas)
-- **Excluye:** editor visual avanzado, preview de conversación.
-- **Prioridad:** BAJA
+##### PR-FE-05 — Dashboard: Playbook Settings UI 🔵
+- **Depende de:** PR-FE-01, PR-15.
+- **Incluye:** página `/dashboard/settings`, form secciones (Profile, Messages, Rules, Guidelines).
+- **Excluye:** editor visual avanzado, preview conversación.
+
+##### PR-FE-02 — OpenAPI Client Generation 🔵 FUTURE
+- **Depende de:** PR-FE-01, backend expone OpenAPI spec (`@nestjs/swagger`).
+- **Incluye:** NestJS Swagger + script codegen + tipos en dashboard.
+- **Prioridad:** MEDIA — mejora DX, no bloquea MVP.
+
+---
+
+### BLOQUE 6 — Mejoras + Automatización (P2)
+
+> Post-lanzamiento. Requieren flujo de pedidos completo (Bloques 1-2).
+
+##### PR-09 — Carrito abandonado: 1–2 recordatorios con límites
+- **Depende de:** PR-06 (checkout/pago completo).
+- **Incluye:** job/scheduler, detección abandono, máx 2 recordatorios, ventanas horarias.
+- **Excluye:** campañas masivas, segmentación avanzada.
+
+##### PR-10 — Analytics: eventos de embudo + endpoints mínimos
+- **Depende de:** PR-06.
+- **Incluye:** events schema, agregaciones básicas, endpoints admin.
+- **Excluye:** dashboard frontend de analytics.
+
+##### PR-14.1 — Custom Throttler: Rate Limit per Merchant 🟢
+- **Depende de:** PR-14 ✅.
+- **Incluye:** Custom `ThrottlerGuard` por merchant ID, tests.
+- **Prioridad:** BAJA — solo relevante si múltiples merchants comparten IP.
+
+---
+
+### BLOQUE 7 — Template Engine (P2)
+
+> Template-first + LLM fallback. Solo implementar después de que flujo completo funcione con LLM.
+> Diseño detallado en conversación de arquitectura (template engine PR-stack).
+
+##### PR-20 — TemplatePack: schema + seed por industria
+- **Depende de:** PR-11 ✅ (Playbooks).
+- **Incluye:** modelos `TemplatePack`, `TemplateVariant` (Prisma), seed con templates base por situación e industria.
+- **Excluye:** render engine, UI editor.
+
+##### PR-21 — ContextPack Builder: datos estructurados para templates
+- **Depende de:** PR-04, PR-05 (necesita Cart/Order para contexto).
+- **Incluye:** `ContextPackBuilder` que construye `{ customer, cart, order, merchant, catalog }` desde SQL.
+- **Excluye:** render, decisión de ruta.
+
+##### PR-22 — Template Render: Handlebars + formateo WhatsApp
+- **Depende de:** PR-20.
+- **Incluye:** `TemplateRenderService` con Handlebars, helpers monetarios (`{{currency}}`, `{{plural}}`), formateo WhatsApp.
+- **Excluye:** decisión template vs LLM.
+
+##### PR-23 — Route Decision: template vs LLM
+- **Depende de:** PR-21, PR-22.
+- **Incluye:** `RouteDecisionService`: intent mapeado + template disponible + context completo → template; else → LLM fallback.
+- **Excluye:** telemetry, feature flags.
+
+##### PR-24 — Intent Router Expansion: 12+ intents
+- **Depende de:** PR-23.
+- **Incluye:** expansión IntentRouter a 12+ intents, `INTENT_TO_SITUATION` mapping, LLM-assisted classification.
+- **Excluye:** rollout gradual.
+
+##### PR-25 — Telemetry + Feature Flag Rollout
+- **Depende de:** PR-24.
+- **Incluye:** `TEMPLATE_FIRST_ENABLED` feature flag, telemetry (route taken, latency, fallback rate), rollout gradual por merchant.
+- **Excluye:** dashboard de métricas.
+
+---
+
+## Resumen de Ejecución
+
+| Bloque | Prioridad | PRs | Dependencia previa | Paralelizable con |
+|--------|-----------|-----|-------------------|-------------------|
+| 1. Pedidos | P0 | PR-04, PR-04.5, PR-05, PR-05.1, PR-06 | Infra mergeada ✅ | Bloque 3 |
+| 2. Operación | P0 | PR-07, PR-05.2, PR-08 | Bloque 1 | Bloque 3 |
+| 3. Dashboard Base | P1 | PR-FE-00, PR-15, PR-16, PR-17, PR-FE-01 | Infra mergeada ✅ | Bloques 1-2 |
+| 4. Onboarding | P1 | PR-OB-01, PR-FE-OB | PR-04.5 + PR-FE-01 | — |
+| 5. Dashboard UIs | P1 | PR-FE-03, PR-FE-04, PR-FE-05, PR-FE-02 | PR-FE-01 + APIs backend | — |
+| 6. Mejoras | P2 | PR-09, PR-10, PR-14.1 | Bloques 1-2 | — |
+| 7. Template Engine | P2 | PR-20 a PR-25 | Bloques 1-2 | Bloque 6 |
+
+> **Critical path:** Bloque 1 → Bloque 2 → Lanzamiento MVP WhatsApp-only.
+>
+> **Paralelo:** Bloque 3 puede avanzar simultáneamente con Bloques 1-2 (APIs backend no dependen de Cart/Order).
+>
+> **Orden recomendado para Planner:**
+> 1. Generar briefs de PR-04 + PR-04.5 (Fase 1.1 — paralelizables)
+> 2. Generar brief de PR-05 (Fase 1.2)
+> 3. Generar briefs de PR-05.1 + PR-06 (Fase 1.3 — paralelizables)
+> 4. Continuar con Bloque 2: PR-07, PR-05.2, PR-08
+> 5. Bloque 3 en paralelo cuando haya capacidad
 
 ---
 
