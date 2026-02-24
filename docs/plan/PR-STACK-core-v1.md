@@ -617,7 +617,7 @@ graph TD
 
 #### Fase 1.2
 
-##### PR-05 — Checkout: captura de datos + creación de orden + notificación merchant 🔴 CRÍTICO
+##### PR-05 — Checkout: captura de datos + creación de orden + notificación merchant ✅ MERGED
 - **Objetivo:** iniciar checkout desde carrito, capturar datos mínimos, crear orden, y notificar al merchant por WhatsApp. **100% template-first** — el LLM NO participa en el flujo de checkout.
 - **Depende de:** PR-04, PR-04.5, PR-03.5.1 (Template-First Router).
 - **Incluye:**
