@@ -350,7 +350,12 @@ Un **motor de ventas conversacionales** (WhatsApp-first) para PYMEs de retail/e-
 
 * V1: guardrails estrictos para evitar inventos.
 * Contra: puede sentirse “menos inteligente” en casos abiertos.
+### 7.6 Template-first vs LLM-first
 
+* **Decisión:** Template-first (flows determinísticos priorizados, LLM como fallback).
+* **Razón:** Cero costo LLM en intents conocidos; latencia predecible; control total sobre respuestas transaccionales.
+* **A favor:** Lanzamiento sin dependencia de API LLM; fácil debug; costos bajos.
+* **Contra:** Menos "inteligente" para casos no mapeados; requiere mantener keywords/patterns.
 ---
 
 ## 8) Stack tecnológico recomendado (Node.js + TypeScript)
@@ -426,11 +431,15 @@ baseSystemPrompt (guardrails universales)
 - Validación de outputs para detectar anomalías
 - Logs de prompts sospechosos (sin PII)
 
-**Feature Flags:**
-- `LLM_ENABLED`: toggle global para activar/desactivar LLM
+**Feature Flags (granulares):**
+- `LLM_INTENT_ASSIST`: usar LLM para clasificar intents UNKNOWN (default: false en MVP)
+- `LLM_FALLBACK_ENABLED`: usar LLM para componer respuestas cuando flow no tiene template (default: false en MVP)
+- `LLM_SUMMARY_ENABLED`: usar LLM para resúmenes de handoff (default: true)
 - `LLM_PROVIDER`: selección de provider (`groq` | `openai` | futuro)
 - `LLM_MODEL`: modelo específico a usar
 - `LLM_TIMEOUT_MS`: timeout para requests (default 30s)
+
+**Nota MVP:** Con flags en false, el sistema opera 100% template-based. Se activan gradualmente post-lanzamiento para medir impacto en conversión y costos.
 
 **Configuración requerida:**
 ```env
@@ -469,10 +478,11 @@ LLM_MAX_TOKENS=500
 8. Agent inbox (humano)
 9. Analytics (event tracking)
 
-### 9.2 Regla de oro
+### 9.2 Reglas de oro
 
-* El LLM conversa y redacta.
-* Las decisiones transaccionales se ejecutan con **tools + estado persistido**.
+1. **Template-first:** Los flows determinísticos (GreetingFlow, CartFlow, CheckoutFlow, etc.) se ejecutan primero para intents conocidos. El LLM solo interviene como fallback para UNKNOWN/AMBIGUOUS.
+2. **Transacciones sin LLM:** Las decisiones de negocio (precios, stock, pagos, estados) NUNCA dependen del LLM — se ejecutan con **tools + estado persistido en PostgreSQL**.
+3. **Escalado progresivo:** LLM features se activan gradualmente con feature flags una vez validado el template-first.
 
 ---
 
