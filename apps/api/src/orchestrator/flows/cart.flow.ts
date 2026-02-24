@@ -4,7 +4,7 @@ import { CatalogService } from '../../services/catalog.service';
 
 /**
  * CartFlow
- * Handles conversational cart operations (add, show, remove, clear)
+ * Handles conversational cart operations (add, view, update, remove)
  * PR-04: Cart CRUD conversational
  */
 @Injectable()
@@ -44,9 +44,6 @@ export class CartFlow {
     }
 
     try {
-      // Get or create active cart
-      const cart = await this.cartService.createOrGetActiveCart(customerId, merchantId);
-
       // Search for product matching query
       const products = await this.catalogService.searchProducts(merchantId, productQuery, 5);
 
@@ -87,12 +84,17 @@ export class CartFlow {
         return `*${product.name}* tiene varias opciones:\n\n${variantList}\n\n¿Cuál variante quieres? Responde con el nombre.`;
       }
 
-      // Add single variant to cart with parsed quantity
+      // Add single variant to cart with parsed quantity (AC-04: addItem creates cart if needed)
       const variant = availableVariants[0];
-      await this.cartService.addItem(cart.id, variant.id, quantity);
+      const updatedCart = await this.cartService.addItem(
+        customerId,
+        merchantId,
+        variant.id,
+        quantity,
+      );
 
       // Get updated cart summary
-      const summary = await this.cartService.getCartSummary(cart.id);
+      const summary = await this.cartService.getCartSummary(updatedCart.id);
 
       return this.formatAddConfirmation(
         product.name,

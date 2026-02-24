@@ -18,6 +18,7 @@ describe('CartService', () => {
   let cartRepository: jest.Mocked<CartRepository>;
   let cartItemRepository: jest.Mocked<CartItemRepository>;
   let productRepository: jest.Mocked<ProductRepository>;
+  let merchantResolverService: jest.Mocked<MerchantResolverService>;
 
   const mockCart = {
     id: 'cart-1',
@@ -61,6 +62,7 @@ describe('CartService', () => {
           provide: CartRepository,
           useValue: {
             create: jest.fn(),
+            findById: jest.fn().mockResolvedValue(mockCart), // AC-13: For refreshCartTTL helper
             findByIdWithItems: jest.fn(),
             findActiveCart: jest.fn(),
             updateStatus: jest.fn(),
@@ -111,6 +113,7 @@ describe('CartService', () => {
     cartRepository = module.get(CartRepository);
     cartItemRepository = module.get(CartItemRepository);
     productRepository = module.get(ProductRepository);
+    merchantResolverService = module.get(MerchantResolverService);
   });
 
   describe('AC-03: createOrGetActiveCart', () => {
@@ -170,12 +173,25 @@ describe('CartService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
+      // AC-04: Mock cart creation/retrieval
+      cartRepository.findActiveCart.mockResolvedValue(null); // No existing cart
+      cartRepository.create.mockResolvedValue(mockCart);
       cartRepository.findByIdWithItems.mockResolvedValue({
         ...mockCart,
         items: [],
       });
+      merchantResolverService.getById.mockResolvedValue({
+        id: 'merchant-1',
+        name: 'Test Merchant',
+        whatsappNumber: '+test',
+        apiKey: 'test',
+        industry: null,
+        playbookConfig: { cartConfig: { ttlHours: 24 } },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
 
-      await service.addItem('cart-1', 'variant-1', 1);
+      await service.addItem('customer-1', 'merchant-1', 'variant-1', 1);
 
       expect(cartItemRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -189,9 +205,27 @@ describe('CartService', () => {
         ...mockProduct,
         variants: [{ ...mockVariant, stock: 2 }],
       });
+      // AC-04: Mock cart creation/retrieval
+      cartRepository.findActiveCart.mockResolvedValue(null); // No existing cart
+      cartRepository.create.mockResolvedValue(mockCart);
+      cartRepository.findByIdWithItems.mockResolvedValue({ ...mockCart, items: [] });
+      merchantResolverService.getById.mockResolvedValue({
+        id: 'merchant-1',
+        name: 'Test Merchant',
+        whatsappNumber: '+test',
+        apiKey: 'test',
+        industry: null,
+        playbookConfig: { cartConfig: { ttlHours: 24 } },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
 
-      await expect(service.addItem('cart-1', 'variant-1', 5)).rejects.toThrow(BadRequestException);
-      await expect(service.addItem('cart-1', 'variant-1', 5)).rejects.toThrow('Stock insuficiente');
+      await expect(service.addItem('customer-1', 'merchant-1', 'variant-1', 5)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.addItem('customer-1', 'merchant-1', 'variant-1', 5)).rejects.toThrow(
+        'Stock insuficiente',
+      );
     });
   });
 

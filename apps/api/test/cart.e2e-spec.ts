@@ -288,9 +288,9 @@ describe('Cart (e2e)', () => {
         data: { stock: 0 },
       });
 
-      await expect(cartService.addItem('any-cart-id', testVariant.id, 1)).rejects.toThrow(
-        'Stock insuficiente',
-      );
+      await expect(
+        cartService.addItem(testCustomer.id, testMerchant.id, testVariant.id, 1),
+      ).rejects.toThrow('Stock insuficiente');
 
       // Restore stock
       await prisma.productVariant.update({
@@ -302,11 +302,10 @@ describe('Cart (e2e)', () => {
 
   describe('AC-02: Idempotency via unique constraint', () => {
     it('should not create duplicate items for same variant', async () => {
-      const cart = await cartService.createOrGetActiveCart(testCustomer.id, testMerchant.id);
-
+      // AC-04: addItem now creates cart internally, no need for explicit createOrGetActiveCart
       // Add same variant twice
-      await cartService.addItem(cart.id, testVariant.id, 1);
-      await cartService.addItem(cart.id, testVariant.id, 1);
+      await cartService.addItem(testCustomer.id, testMerchant.id, testVariant.id, 1);
+      const cart = await cartService.addItem(testCustomer.id, testMerchant.id, testVariant.id, 1);
 
       // Should only have one item with quantity = 2
       const updatedCart = await cartService.getCart(cart.id);

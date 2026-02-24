@@ -94,19 +94,33 @@ export class CartService {
 
   /**
    * AC-04, AC-05, AC-16, AC-17: Add item to cart with stock validation and price snapshot
-   * REQ-04: Validates stock and captures real price from ProductVariant
+   * REQ-04: Creates cart if not exists, validates stock, captures real price from ProductVariant
    *
    * Guardrails:
    * - priceSnapshot always from variant.price (no manual override)
    * - Stock validated before adding
+   * - Creates cart automatically if customer doesn't have active cart
    *
+   * @param customerId - Customer ID (FK to Customer.id)
+   * @param merchantId - Merchant ID
+   * @param variantId - Product variant ID
+   * @param quantity - Quantity to add (min 1)
    * @throws BadRequestException if stock insufficient
    * @throws NotFoundException if variant not found
    */
-  async addItem(cartId: string, variantId: string, quantity: number): Promise<CartWithItems> {
+  async addItem(
+    customerId: string,
+    merchantId: string,
+    variantId: string,
+    quantity: number,
+  ): Promise<CartWithItems> {
     if (quantity < 1) {
       throw new BadRequestException('Quantity must be at least 1');
     }
+
+    // AC-04: Get or create active cart (brief requirement)
+    const cart = await this.createOrGetActiveCart(customerId, merchantId);
+    const cartId = cart.id;
 
     // Fetch variant to validate stock and get real price (REQ-15, AC-16)
     const product = await this.productRepository.findByVariantId(variantId);
@@ -193,9 +207,7 @@ export class CartService {
     }
 
     // AC-13: Refresh TTL on cart operations (extend expiresAt)
-    const newExpiresAt = new Date();
-    newExpiresAt.setHours(newExpiresAt.getHours() + this.defaultTtlHours);
-    await this.cartRepository.refreshTTL(cartId, newExpiresAt);
+    await this.refreshCartTTL(cartId);
 
     // Return updated cart with items
     const updatedCart = await this.cartRepository.findByIdWithItems(cartId);
@@ -257,9 +269,7 @@ export class CartService {
     this.logger.log(`Updated item ${itemId} quantity to ${quantity} in cart ${cartId}`);
 
     // AC-13: Refresh TTL on cart operations
-    const newExpiresAt = new Date();
-    newExpiresAt.setHours(newExpiresAt.getHours() + this.defaultTtlHours);
-    await this.cartRepository.refreshTTL(cartId, newExpiresAt);
+    await this.refreshCartTTL(cartId);
 
     const updatedCart = await this.cartRepository.findByIdWithItems(cartId);
     return updatedCart;
@@ -269,6 +279,28 @@ export class CartService {
    * AC-07: Remove item from cart
    * REQ-06: Deletes item by ID
    */
+  /**
+   * AC-13: Helper to refresh cart TTL respecting playbook config
+   * Reads merchant TTL config and extends expiresAt
+   */
+  private async refreshCartTTL(cartId: string): Promise<void> {
+    const cart = await this.cartRepository.findById(cartId);
+    if (!cart) {
+      throw new NotFoundException(`Cart ${cartId} not found`);
+    }
+
+    const merchant = await this.merchantResolverService.getById(cart.merchantId);
+    const ttlHours = merchant.playbookConfig?.cartConfig?.ttlHours ?? this.defaultTtlHours;
+
+    const newExpiresAt = new Date();
+    newExpiresAt.setHours(newExpiresAt.getHours() + ttlHours);
+    await this.cartRepository.refreshTTL(cartId, newExpiresAt);
+
+    this.logger.log(
+      `Refreshed cart ${cartId} TTL with ${ttlHours}h, expires at ${newExpiresAt.toISOString()}`,
+    );
+  }
+
   async removeItem(cartId: string, itemId: string): Promise<CartWithItems> {
     const item = await this.cartItemRepository.findById(itemId);
     if (!item || item.cartId !== cartId) {
@@ -279,9 +311,7 @@ export class CartService {
     this.logger.log(`Removed item ${itemId} from cart ${cartId}`);
 
     // AC-13: Refresh TTL on cart operations
-    const newExpiresAt = new Date();
-    newExpiresAt.setHours(newExpiresAt.getHours() + this.defaultTtlHours);
-    await this.cartRepository.refreshTTL(cartId, newExpiresAt);
+    await this.refreshCartTTL(cartId);
 
     const updatedCart = await this.cartRepository.findByIdWithItems(cartId);
     if (!updatedCart) {

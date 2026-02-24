@@ -1061,7 +1061,7 @@ Sistema de carrito de compras conversacional integrado con WhatsApp. Permite a l
 ```prisma
 model Cart {
   id          String      @id @default(cuid())
-  customerId  String      // WhatsApp phone number
+  customerId  String      // FK to Customer.id (Customer.phone holds actual number)
   merchantId  String
   status      CartStatus  @default(active) // active | abandoned | completed
   expiresAt   DateTime    // TTL: default 24h desde última interacción
@@ -1069,7 +1069,7 @@ model Cart {
   updatedAt   DateTime    @updatedAt
   
   items       CartItem[]
-  
+  customer    Customer    @relation(fields: [customerId], references: [id])
   merchant    Merchant    @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   
   @@index([customerId, merchantId, status])
@@ -1093,14 +1093,14 @@ model CartItem {
   variantId     String
   quantity      Int      // 1-99
   priceSnapshot Decimal  // Precio al momento de agregar (inmutable)
-  addedAt       DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
   
   cart          Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
   variant       ProductVariant @relation(fields: [variantId], references: [id])
   
   @@unique([cartId, variantId])  // Evita duplicados (se incrementa qty)
   @@index([cartId])
-  @@index([variantId])
   @@map("cart_items")
 }
 ```
@@ -1511,8 +1511,8 @@ LIMIT 1;
   - AC-04: Price snapshot (test unitario)
   - AC-05: Increment quantity en duplicados (test unitario)
   - AC-06: Stock validation (test unitario)
-  - AC-07: RemoveItem (test unitario)
-  - AC-08: Cart summary con totales (test unitario)
+  - AC-07: AddToCartFlow agrega producto y responde confirmación (test flow)
+  - AC-08: ViewCartFlow muestra items con formato WhatsApp + subtotal (test flow)
   - AC-09: UpdateQuantity flow (test conversacional)
   - AC-10: AddToCart flow con quantity extraction (test conversacional)
   - AC-11: ViewCart flow (test conversacional)
