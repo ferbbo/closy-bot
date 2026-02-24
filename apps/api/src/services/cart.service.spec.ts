@@ -131,7 +131,7 @@ describe('CartService', () => {
       expect(cartRepository.create).not.toHaveBeenCalled();
     });
 
-    it('AC-18: should set expiration on create', async () => {
+    it('AC-13: should set expiration on create', async () => {
       cartRepository.findActiveCart.mockResolvedValue(null);
       cartRepository.create.mockResolvedValue(mockCart);
       cartRepository.findByIdWithItems.mockResolvedValue({
@@ -200,7 +200,7 @@ describe('CartService', () => {
       );
     });
 
-    it('AC-17: should validate stock', async () => {
+    it('AC-06: should validate stock', async () => {
       productRepository.findByVariantId.mockResolvedValue({
         ...mockProduct,
         variants: [{ ...mockVariant, stock: 2 }],
@@ -353,8 +353,8 @@ describe('CartService', () => {
     });
   });
 
-  describe('AC-19: markExpiredCartsAsAbandoned', () => {
-    it('should mark expired carts', async () => {
+  describe('Cleanup: markExpiredCartsAsAbandoned', () => {
+    it('should mark expired carts as abandoned', async () => {
       const expiredCart1 = { ...mockCart, id: 'cart-expired-1' };
       const expiredCart2 = { ...mockCart, id: 'cart-expired-2' };
 

@@ -337,7 +337,7 @@ graph TD
 - **Depende de:** PR-03.5 ✅, PR-03.6 ✅.
 - **Incluye:**
   - Modelos Prisma: `Cart` (status: `active`/`merged`/`abandoned`/`converted`), `CartItem` (productId, variantId, qty, unitPrice, snapshotName)
-  - `CartService`: `getOrCreateCart()`, `addItem()`, `removeItem()`, `updateQty()`, `getCartSummary()`, `clearCart()`
+  - `CartService`: `getOrCreateCart()`, `addItem()`, `removeItem()`, `updateQty()`, `getCartSummary()`
   - `CartRepository` con queries multi-tenant (by customerId + merchantId)
   - Flows conversacionales: `add-to-cart.flow.ts`, `view-cart.flow.ts`, `remove-from-cart.flow.ts`
   - Validación de stock al agregar (consulta CatalogService)

@@ -1426,9 +1426,9 @@ Bot: Tu carrito está vacío.
 
 ```bash
 # Tests unitarios
-pnpm test cart.service.spec.ts      # 9 tests (AC-03 a AC-08, AC-18, AC-19)
+pnpm test cart.service.spec.ts      # 9 tests (AC-03, AC-04, AC-06, AC-13, cleanup)
 pnpm test cart.repository.spec.ts   # 6 tests (AC-03)
-pnpm test cart.flow.spec.ts         # 10 tests (AC-10, AC-11, AC-12, AC-09)
+pnpm test cart.flow.spec.ts         # 10 tests (AC-07, AC-08, AC-09, AC-10, AC-11, AC-12)
 
 # Tests de integración
 pnpm test conversation.orchestrator.spec.ts  # AC-12 routing
