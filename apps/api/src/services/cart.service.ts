@@ -276,7 +276,7 @@ export class CartService {
   }
 
   /**
-   * AC-07: Remove item from cart
+   * Remove item from cart by CartItem ID
    * REQ-06: Deletes item by ID
    */
   /**
@@ -322,7 +322,7 @@ export class CartService {
   }
 
   /**
-   * AC-08: Get cart summary with totals
+   * Get cart summary with calculated totals (subtotal, total, itemCount)
    * REQ-07: Returns items with calculated subtotal and total
    */
   async getCartSummary(cartId: string): Promise<CartSummary> {

@@ -275,7 +275,7 @@ describe('CartService', () => {
     });
   });
 
-  describe('AC-07: removeItem', () => {
+  describe('Service: removeItem', () => {
     it('should remove item', async () => {
       cartItemRepository.findById.mockResolvedValue({
         id: 'item-1',
@@ -297,7 +297,7 @@ describe('CartService', () => {
     });
   });
 
-  describe('AC-08: getCartSummary', () => {
+  describe('Service: getCartSummary', () => {
     it('should calculate totals', async () => {
       cartRepository.findByIdWithItems.mockResolvedValue({
         ...mockCart,

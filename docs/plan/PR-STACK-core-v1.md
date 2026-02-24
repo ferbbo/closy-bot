@@ -285,9 +285,13 @@
 ```mermaid
 graph TD
     subgraph "BLOQUE 1 — Pedidos P0"
-        PR04[PR-04 Cart] --> PR0351[PR-03.5.1 Template-First Router]
+        PR04[PR-04 Cart] --> PR0351[PR-03.5.1 Router V2 + Template-First]
+        PR04 --> PRGAP1[PR-GAP-1 Flows + botPersonality]
+        PR0351 --> PR0352[PR-03.5.2 Catálogo FTS]
+        PR0351 --> PRGAP2[PR-GAP-2 FAQ Flow]
         PR045[PR-04.5 MerchantConfig] --> PR05[PR-05 Checkout]
         PR0351 --> PR05
+        PRGAP1 --> PR05
         PR05 --> PR051[PR-05.1 Merchant Commands]
         PR05 --> PR06[PR-06 Payments]
     end
@@ -310,6 +314,8 @@ graph TD
         PRFE01 --> PRFE03[PR-FE-03 Channels UI]
         PRFE01 --> PRFE04[PR-FE-04 Catalog UI]
         PRFE01 --> PRFE05[PR-FE-05 Settings UI]
+        PRFE01 --> PRFE06[PR-FE-06 Orders UI]
+        PR05 --> PRFE06
     end
     subgraph "BLOQUE 6 — Mejoras P2"
         PR09[PR-09 Cart Abandoned]
@@ -329,6 +335,8 @@ graph TD
 ### BLOQUE 1 — Flujo de Pedidos (P0 CRITICAL)
 
 > Sin esto no hay negocio. Habilita: buscar → carrito → checkout → pedido → pago.
+>
+> **PRs paralelizables en Fase 1.1:** PR-03.5.1 (Router V2), PR-03.5.2 (FTS), PR-GAP-1 (Messages+Personality), PR-04.5 (MerchantConfig) pueden ejecutarse en paralelo después de PR-04. PR-GAP-2 (FAQ) depende de PR-03.5.1.
 
 #### Fase 1.1 (paralelizable)
 
@@ -356,33 +364,68 @@ graph TD
   - Cart se asocia a `Conversation` activa (customerId + merchantId)
   - Cart `active` → máximo 1 por customer+merchant
 
-##### PR-03.5.1 — Template-First Router: Orchestrator Rewrite 🔴 CRÍTICO NUEVO
-- **Objetivo:** invertir la lógica del orchestrator para que flows determinísticos (templates) ejecuten SIEMPRE primero. El LLM solo participa como fallback acotado para intents UNKNOWN. Minimiza costos LLM desde día 1.
+##### PR-03.5.1 — Template-First Router + IntentRouter V2 🔴 CRÍTICO NUEVO
+- **Objetivo:** (1) Invertir la lógica del orchestrator para que flows determinísticos ejecuten SIEMPRE primero. (2) Mejorar IntentRouter con scoring, confidence real, normalización y resolución de colisiones. (3) Minimizar costos LLM desde día 1.
 - **Depende de:** PR-03.5 ✅ (orchestrator), PR-03.6 ✅ (LLM adapter), PR-04 (Cart, para tener todos los flows determinísticos).
 - **Incluye:**
-  - `RouteDecisionService` (nuevo servicio):
-    ```
-    classifyAndRoute(text, context) →
-      1. IntentRouter.classify(text) → { intent, confidence }
-      2. Si intent !== UNKNOWN && confidence >= threshold → TEMPLATE_ROUTE
-      3. Si intent === UNKNOWN && LLM_INTENT_ASSIST=true → LLM reclasifica (prompt corto) → retry
-      4. Si sigue UNKNOWN → LLM_FALLBACK_ROUTE (si flag activo) o GENERIC_RESPONSE
-    ```
-  - Rewrite `ConversationOrchestrator.process()`:
-    - Elimina toggle binario `if (this.llmEnabled) { LLM para todo }` 
-    - Nuevo flujo: `Message → RouteDecision → TEMPLATE_ROUTE (flow) | LLM_FALLBACK_ROUTE`
-    - Flows determinísticos: `GreetingFlow`, `HelpFlow`, `SearchCatalogFlow`, `CartFlow` (y futuros `CheckoutFlow`, `PostSaleFlow`)
-    - Todos los intents conocidos SIEMPRE ejecutan su flow determinístico, nunca pasan por LLM
-  - Feature flags granulares (reemplazan `LLM_ENABLED` monolítico):
-    - `LLM_INTENT_ASSIST` (default: `false`): LLM ayuda a reclasificar intents UNKNOWN con prompt corto
-    - `LLM_FALLBACK_ENABLED` (default: `false`): LLM genera respuesta para UNKNOWN sin template match
-    - `LLM_SUMMARY_ENABLED` (default: `false`): LLM genera summaries para handoff (PR-08)
-    - Backward compat: `LLM_ENABLED=true` actúa como alias de todos los flags en `true`
+
+  **A) Interfaces/contratos formales (nuevos tipos):**
+  - `IntentKey` = union type expandido (GREETING, SEARCH_PRODUCT, ADD_TO_CART, VIEW_CART, UPDATE_CART, REMOVE_FROM_CART, HELP, CHECKOUT, QUERY_FAQ, HANDOFF, UNKNOWN, AMBIGUOUS)
+  - `IntentDecision { intent: IntentKey, confidence: 'HIGH'|'MED'|'LOW', reason: string, signals: string[], missingSlots: string[] }`
+  - `RouteDecision { route: 'TEMPLATE'|'LLM_FALLBACK'|'GENERIC', intent: IntentKey, reason: string }`
+  - Reemplaza `IntentResult` actual con estructura más rica
+
+  **B) IntentRouter V2 (mejora interna — mismo archivo):**
+  - Normalización de texto: lowercase + strip tildes (`búsco` → `busco`) + colapsar espacios + trim
+  - Scoring por intent: cada keyword tiene peso (ej: `"quiero comprar"` = 3 pts, `"quiero"` = 1 pt)
+  - Confidence calculada (no hardcoded): 
+    - `HIGH` si score > threshold_high (default 5)
+    - `MED` si score > threshold_low (default 2)
+    - `LOW` si score <= threshold_low
+  - Resolución de colisiones por score total (no por cascada fija)
+  - Context-aware: si `lastIntent === 'SEARCH_PRODUCT'` y dice `"ese"/"el primero"/"quiero"` → ADD_TO_CART
+  - `AMBIGUOUS` como subtipo de UNKNOWN (múltiples intents con score similar, diff < 2)
+
+  **C) RouteDecisionService (nuevo servicio):**
+  ```
+  classifyAndRoute(text, context) →
+    1. IntentRouter.classify(text, context.lastIntent) → IntentDecision
+    2. Si intent !== UNKNOWN/AMBIGUOUS && confidence >= HIGH|MED → TEMPLATE_ROUTE
+    3. Si intent === UNKNOWN && LLM_INTENT_ASSIST=true → LLM reclasifica (prompt corto) → retry
+    4. Si sigue UNKNOWN → LLM_FALLBACK_ROUTE (si flag activo) o GENERIC_RESPONSE
+  ```
+
+  **D) Rewrite ConversationOrchestrator.process():**
+  - Elimina toggle binario `if (this.llmEnabled) { LLM para todo }`
+  - Nuevo flujo: `Message → RouteDecision → TEMPLATE_ROUTE (flow) | LLM_FALLBACK_ROUTE`
+  - Flows determinísticos: `GreetingFlow`, `HelpFlow`, `SearchCatalogFlow`, `CartFlow`, `FaqFlow` (y futuros `CheckoutFlow`, `PostSaleFlow`)
+  - Todos los intents conocidos SIEMPRE ejecutan su flow determinístico, nunca pasan por LLM
+
+  **E) Feature flags granulares (reemplazan LLM_ENABLED monolítico):**
+  - `LLM_INTENT_ASSIST` (default: `false`): LLM ayuda a reclasificar intents UNKNOWN/AMBIGUOUS con prompt corto
+  - `LLM_FALLBACK_ENABLED` (default: `false`): LLM genera respuesta para UNKNOWN sin template match
+  - `LLM_SUMMARY_ENABLED` (default: `false`): LLM genera summaries para handoff (PR-08)
+  - Backward compat: `LLM_ENABLED=true` actúa como alias de todos los flags en `true`
+
+  **F) LLM fallback selectivo (triggers adicionales):**
+  - `AMBIGUOUS` con confidence LOW → LLM intenta desambiguar
+  - Tercer intento consecutivo sin resolución en misma conversación → LLM
+
+  **G) Logging/telemetry ligero:**
+  - Log structured por request: `{ intent, confidence, signals, route, latencyMs }`
+  - Métricas contables: `template_route_count`, `llm_fallback_count`, `unknown_count`
+  - (No OpenTelemetry/Prometheus — eso es Bloque 7 PR-25)
+
   - `INTENT_CONFIDENCE_THRESHOLD` env var (default: `0.7`)
   - Actualizar `.env.example` con nuevos flags
   - Tests unit + e2e
-- **Excluye:** TemplatePack en DB, Handlebars render, telemetry de routing, UI.
+- **Excluye:** TemplatePack en DB, Handlebars render, telemetry dashboard, ContextPack formal, session slots complejos (beyond lastIntent).
 - **DoD específico:**
+  - Intents con `confidence: HIGH|MED|LOW` calculada por scoring
+  - Colisión `"quiero"` resuelta (no duplica intent — score decide)
+  - Normalización de tildes/espacios funciona (`Búsco` = `busco`)
+  - Context `lastIntent` influye en routing (after search → "quiero" = ADD_TO_CART)
+  - Log structured por request con intent, confidence, route, latency
   - Con todos los flags LLM en `false`: bot funciona 100% sin LLM (costo $0)
   - Intents determinísticos (GREETING, SEARCH, CART, etc.) NUNCA generan call LLM
   - Intent UNKNOWN + `LLM_INTENT_ASSIST=true` → LLM reclasifica → si match → flow determinístico
@@ -396,10 +439,147 @@ graph TD
   - Admin puede activar LLM gradualmente por flag
 - **Tech notes:**
   - `RouteDecisionService` es inyectable, testeable, y se formaliza en Bloque 7
-  - `IntentRouter` keyword-based sigue siendo la primera línea de clasificación
+  - `IntentRouter V2` mejora el keyword-based actual, manteniendo backward compat
   - LLM para intent assist usa prompt corto y barato (solo clasificación, no generación)
   - Los flows son los "templates" de V1 — en Bloque 7 (P2) se migran a Handlebars/DB
   - Modelo de costos: de ~100 LLM calls/100 msgs → ~15-20 (solo UNKNOWN), reducción 80-100%
+
+##### PR-03.5.2 — Catálogo FTS: search_text + tsvector + ranking 🟡 NUEVO
+- **Objetivo:** Mejorar búsqueda de catálogo con Full-Text Search español sin romper search actual.
+- **Depende de:** PR-03 ✅ (catálogo).
+- **Incluye:**
+  - Migración Prisma:
+    - Columna `searchText` en `Product` (derivada: `name || brand || description || category || tags`)
+    - Índice GIN con `tsvector` sobre `search_text` (config `'spanish'` para stemming)
+  - `ProductRepository.searchFts(merchantId, query, limit)`:
+    - Raw SQL via `$queryRaw` (Prisma no soporta tsvector nativamente)
+    - `ts_query` + `ts_rank` para scoring
+    - Boost: name match > description match
+  - Flag `CATALOG_FTS_ENABLED` (default: `true`):
+    - Si false → sigue usando ILIKE contains (backward compat)
+  - Fallback: si FTS retorna 0 resultados → retry con ILIKE contains (red más amplia)
+  - Trigger/middleware Prisma: regenerar `searchText` al crear/actualizar producto
+  - Tests: comparativa queries FTS vs ILIKE (`"algo para la cara"`, `"camiseta azul M"`)
+- **Excluye:** `pg_trgm` (fuzzy), sinónimos en DB, embeddings, FAQ/policies search.
+- **DoD específico:**
+  - `"algo para la cara"` retorna productos de skincare (FTS) donde ILIKE retorna vacío
+  - `"camiseta roja"` retorna match aunque `name` = `"Camiseta básica"` y `description` = `"Color rojo disponible"`
+  - ILIKE sigue funcionando como fallback si FTS retorna 0
+  - Búsqueda FTS completa < 50ms para catálogo de 500 productos
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
+- **Consumer experience:**
+  - Búsqueda por WhatsApp más precisa con lenguaje natural
+  - Sin cambio en API contract externo (misma firma searchProducts)
+- **Tech notes:**
+  - Raw SQL: `SELECT * FROM products WHERE to_tsvector('spanish', search_text) @@ plainto_tsquery('spanish', $1) ORDER BY ts_rank(...) DESC LIMIT $2`
+  - `search_text = name || ' ' || coalesce(brand,'') || ' ' || coalesce(description,'') || ' ' || array_to_string(tags,' ')`
+  - Índice: `CREATE INDEX idx_product_search ON products USING GIN (to_tsvector('spanish', search_text))`
+  - Config `'spanish'` para stemming español (`camisetas` → `camiseta`)
+- **Paralelizable con:** PR-03.5.1, PR-GAP-1
+
+##### PR-GAP-1 — Flows leen PlaybookConfig.messages + botPersonality 🔴 CRÍTICO NUEVO
+- **Objetivo:** Eliminar copy hardcoded de flows para que todos los mensajes vengan de PlaybookConfig (personalizable por merchant). Agregar selector `botPersonality.style` de alto nivel.
+- **Depende de:** PR-11 ✅ (Playbooks), PR-04 (Cart flows).
+- **Incluye:**
+
+  **A) Extensión de PlaybookConfig interface:**
+  - `botPersonality` (nuevo objeto):
+    - `style`: `'friendly'` | `'professional'` | `'enthusiastic'` | `'minimal'` (selector de alto nivel)
+    - `emojiUsage`: `'none'` | `'moderate'` | `'frequent'` (ya existe en LlmPromptConfig, se eleva)
+    - `signatureEmoji`: string opcional (ej: `"✨"` para belleza, `"👗"` para ropa)
+  - `PlaybookMessages` extendido con campos faltantes:
+    - `searchNoResults`: `"No encontré productos para \"{query}\""`
+    - `searchResultsHeader`: `"Encontré {count} productos:"`
+    - `helpMenu`: menú de ayuda
+    - `cartEmpty`: `"Tu carrito está vacío"`
+    - `cartSummaryHeader`: `"🛒 Tu carrito:"`
+    - `removeConfirm`: `"Removido del carrito"`
+    - `updateConfirm`: `"Cantidad actualizada"`
+    - `genericError`: `"Hubo un error, intenta de nuevo"`
+    - `unknownIntent`: `"No entendí tu mensaje. Escribe 'ayuda' para ver opciones."`
+
+  **B) PlaybookService.getMessage(merchant, key, placeholders?):**
+  - Retorna mensaje de PlaybookConfig con placeholders reemplazados
+  - Fallback a defaults de industria si no existe
+  - Aplica `botPersonality.style` (prefix/suffix, emoji usage)
+
+  **C) Refactor de flows para usar PlaybookService:**
+  - `CartFlow`: todos los 15+ mensajes hardcoded → `getMessage()`
+  - `SearchCatalogFlow`: no-results, results-header → `getMessage()`
+  - `HelpFlow`: menú → `getMessage()`
+  - `GreetingFlow`: ya usa PlaybookService ✅ (solo verificar)
+
+  **D) Actualizar industry presets:**
+  - `ropa.config.ts`: botPersonality friendly + signatureEmoji 👗
+  - `belleza.config.ts`: botPersonality enthusiastic + signatureEmoji ✨
+  - `minimarket.config.ts`: botPersonality minimal + signatureEmoji 🛒
+  - `generic.config.ts`: botPersonality friendly
+
+  - Tests unit (mensaje viene de config, no hardcoded)
+- **Excluye:** Handlebars, template DB, variantes, preview UI.
+- **DoD específico:**
+  - Cero strings hardcoded en CartFlow, SearchCatalogFlow, HelpFlow
+  - Merchant con playbookConfig custom → bot responde con su tono/copy
+  - Merchant sin playbookConfig → defaults de industria funcionan
+  - `botPersonality.style` cambia el tono de los mensajes (al menos emojiUsage)
+  - Tests verifican que flows usan PlaybookService.getMessage()
+  - `pnpm lint`, `pnpm test` pasan
+- **Consumer experience:**
+  - Merchant puede personalizar TODOS los mensajes del bot sin código
+  - Selector de "personalidad" simplifica configuración (no editar 20 campos)
+- **Tech notes:**
+  - `getMessage()` usa template literals simples (`{query}`, `{count}`) — no Handlebars aún
+  - `botPersonality.style` presets aplican emoji prefix/suffix + selección de sinónimos
+  - En Bloque 7 se migra a Handlebars render formal
+- **Paralelizable con:** PR-03.5.1, PR-03.5.2
+
+##### PR-GAP-2 — FAQ básico: faqs en PlaybookConfig + FaqFlow 🟡 NUEVO
+- **Objetivo:** Permitir que el bot responda preguntas frecuentes (envío, devoluciones, garantía, pagos) sin RAG, usando array de FAQs en PlaybookConfig.
+- **Depende de:** PR-11 ✅ (Playbooks), PR-03.5.1 (nuevo intent QUERY_FAQ).
+- **Incluye:**
+
+  **A) Extensión de PlaybookConfig:**
+  - `faqs`: array de `{ question: string, keywords: string[], answer: string }`
+  - Ejemplo:
+    ```json
+    { "question": "¿Cuánto demora el envío?", "keywords": ["envío", "demora", "llega", "días"], "answer": "Los envíos demoran 3-5 días hábiles." }
+    ```
+
+  **B) Intent QUERY_FAQ en IntentRouter:**
+  - Keywords: `envío, envio, devolver, devolución, garantía, pago, transferencia, efectivo, cuanto demora, como pago, metodo de pago`
+  - Confidence based on keyword matches
+
+  **C) FaqFlow (nuevo):**
+  - `handle(merchantId, query)` → busca en `playbookConfig.faqs` por keyword match
+  - Scoring simple: cuenta keywords que matchean en el query
+  - Si match con score > threshold → responde con `faq.answer`
+  - Si no match → fallback a UNKNOWN (o mensaje genérico)
+
+  **D) Industry presets con FAQs base:**
+  - Ropa: envío, cambios, tallas
+  - Belleza: envío, devoluciones, ingredientes
+  - Minimarket: delivery, horarios, mínimo de compra
+
+  **E) Endpoint para CRUD FAQs (vía MerchantSettings):**
+  - `PATCH /merchants/me/playbook` ya soporta actualizar `faqs` array
+  - Sin endpoint específico (usa el existente)
+
+  - Tests unit + e2e
+- **Excluye:** RAG/embeddings, búsqueda semántica, editor visual de FAQs, categorización.
+- **DoD específico:**
+  - Cliente pregunta "¿cuánto demora el envío?" → bot responde con FAQ configurada
+  - Cliente pregunta algo no cubierto → fallback normal (UNKNOWN o search)
+  - Merchant puede agregar/editar FAQs via `PATCH /merchants/me/playbook`
+  - 5+ FAQs base por industry preset
+  - `pnpm lint`, `pnpm test` pasan
+- **Consumer experience:**
+  - Bot responde políticas y preguntas comunes sin intervención humana
+  - Reduce handoffs por preguntas repetitivas
+- **Tech notes:**
+  - Sin embeddings/RAG — pure keyword matching + scoring
+  - En V2 se puede mejorar con pg_trgm o embeddings
+  - FAQs son parte de PlaybookConfig (JSON field), no tabla separada
+- **Depende de:** PR-03.5.1 (para que IntentRouter tenga QUERY_FAQ intent)
 
 ##### PR-04.5 — MerchantConfig: políticas, métodos de pago, envío + presets 🔴 NUEVO
 - **Objetivo:** persistir configuración operativa del merchant (métodos de pago aceptados, política de envío, política de devolución) con presets por industria.
@@ -791,6 +971,37 @@ graph TD
 - **Incluye:** página `/dashboard/settings`, form secciones (Profile, Messages, Rules, Guidelines).
 - **Excluye:** editor visual avanzado, preview conversación.
 
+##### PR-FE-06 — Dashboard: Orders UI ("Torre de Control") 🟡 NUEVO
+- **Objetivo:** Página de pedidos en dashboard para que el merchant supervise y gestione órdenes.
+- **Depende de:** PR-FE-01, PR-05 (Order model + API).
+- **Incluye:**
+  - Página `/dashboard/orders` con:
+    - Lista de pedidos con status badges (pending, confirmed, paid, shipped, delivered)
+    - Filtros: status, fecha, orderCode
+    - Detalle de pedido: items, cliente, dirección, método de pago
+  - Acciones inline:
+    - Confirmar pedido
+    - Marcar como pagado
+    - Marcar como enviado
+    - Cancelar pedido
+  - Contador de pendientes en sidebar/header
+  - Consume endpoints de PR-05: `GET /orders`, `PATCH /orders/:id/status`
+  - Real-time opcional: polling cada 30s o WebSocket futuro
+- **Excluye:** historial de cambios, notificaciones push, export CSV.
+- **DoD específico:**
+  - Lista de pedidos con filtros funcionales
+  - Acciones de cambio de status funcionan
+  - Contador de pendientes se actualiza
+  - Responsive (mobile-first para WhatsApp-first merchants)
+  - `pnpm build`, `pnpm lint` pasan
+- **Consumer experience:**
+  - Merchant tiene visibilidad de TODOS los pedidos en un solo lugar
+  - Puede operar pedidos desde dashboard además de WhatsApp (PR-05.1)
+- **Tech notes:**
+  - TanStack Table para lista con sorting/filtering
+  - TanStack Query para fetching + cache
+  - Status change es optimistic update con rollback
+
 ##### PR-FE-02 — OpenAPI Client Generation 🔵 FUTURE
 - **Depende de:** PR-FE-01, backend expone OpenAPI spec (`@nestjs/swagger`).
 - **Incluye:** NestJS Swagger + script codegen + tipos en dashboard.
@@ -859,17 +1070,19 @@ graph TD
 
 | Bloque | Prioridad | PRs | Dependencia previa | Paralelizable con |
 |--------|-----------|-----|-------------------|-------------------|
-| 1. Pedidos | P0 | PR-04, **PR-03.5.1**, PR-04.5, PR-05, PR-05.1, PR-06 | Infra mergeada ✅ | Bloque 3 |
+| 1. Pedidos | P0 | PR-04, **PR-03.5.1**, PR-03.5.2, PR-GAP-1, PR-GAP-2, PR-04.5, PR-05, PR-05.1, PR-06 | Infra mergeada ✅ | Bloque 3 |
 | 2. Operación | P0 | PR-07, PR-05.2, PR-08 | Bloque 1 | Bloque 3 |
 | 3. Dashboard Base | P1 | PR-FE-00, PR-15, PR-16, PR-17, PR-FE-01 | Infra mergeada ✅ | Bloques 1-2 |
 | 4. Onboarding | P1 | PR-OB-01, PR-FE-OB | PR-04.5 + PR-FE-01 | — |
-| 5. Dashboard UIs | P1 | PR-FE-03, PR-FE-04, PR-FE-05, PR-FE-02 | PR-FE-01 + APIs backend | — |
+| 5. Dashboard UIs | P1 | PR-FE-03, PR-FE-04, PR-FE-05, **PR-FE-06**, PR-FE-02 | PR-FE-01 + APIs backend | — |
 | 6. Mejoras | P2 | PR-09, PR-10, PR-14.1 | Bloques 1-2 | — |
 | 7. Template Formalization | P2 | PR-20, PR-21, PR-22, PR-24, PR-25 | Bloques 1-2 | Bloque 6 |
 
 > **Principio de diseño:** Template-first + LLM fallback desde el primer lanzamiento. Con todos los flags LLM apagados, el bot funciona al 100% ($0 costo LLM). El LLM es un acelerador opcional, no una dependencia.
 >
 > **Critical path:** PR-04 → PR-03.5.1 → PR-05 → PR-06 → Bloque 2 → Lanzamiento MVP WhatsApp-only.
+>
+> **Paralelo en Fase 1.1:** PR-03.5.2 (FTS), PR-GAP-1 (Messages), PR-GAP-2 (FAQ) son paralelizables con PR-03.5.1.
 >
 > **Paralelo:** Bloque 3 puede avanzar simultáneamente con Bloques 1-2 (APIs backend no dependen de Cart/Order).
 >
@@ -882,12 +1095,17 @@ graph TD
 > | `LLM_ENABLED=true` (todos activos) | ~15-20 | $0.02-0.05 |
 >
 > **Orden recomendado para Planner:**
-> 1. Generar briefs de PR-04 + PR-04.5 (Fase 1.1 — paralelizables)
-> 2. Generar brief de PR-03.5.1 (Template-First Router — **blocker** para PR-05)
-> 3. Generar brief de PR-05 (Fase 1.2 — debe diseñarse template-first)
-> 4. Generar briefs de PR-05.1 + PR-06 (Fase 1.3 — paralelizables)
-> 5. Continuar con Bloque 2: PR-07, PR-05.2, PR-08 (todos template-first)
-> 6. Bloque 3 en paralelo cuando haya capacidad
+> 1. Generar brief de PR-04 (Cart CRUD) — en progreso
+> 2. Generar briefs paralelos:
+>    - PR-03.5.1 (Router V2 + Template-First — **blocker** para PR-05)
+>    - PR-03.5.2 (Catálogo FTS)
+>    - PR-GAP-1 (Flows + botPersonality)
+>    - PR-04.5 (MerchantConfig)
+> 3. Generar brief de PR-GAP-2 (FAQ básico) — depende de PR-03.5.1
+> 4. Generar brief de PR-05 (Checkout — template-first)
+> 5. Generar briefs de PR-05.1 + PR-06 (Fase 1.3 — paralelizables)
+> 6. Continuar con Bloque 2: PR-07, PR-05.2, PR-08 (todos template-first)
+> 7. Bloque 3 + Bloque 5 (PR-FE-06 Orders UI) en paralelo cuando haya capacidad
 
 ---
 
