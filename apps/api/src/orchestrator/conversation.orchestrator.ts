@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { MessageDirection, ChannelType } from '@prisma/client'; // PR-03.10, PR-03.11
+import { MessageDirection, ChannelType, ConversationType } from '@prisma/client'; // PR-03.10, PR-03.11, PR-05.1
 import type { IntentKey } from './types/intent.types'; // PR-03.5.1
 import { RouteDecisionService } from './route-decision.service'; // PR-03.5.1
 import { CustomerService } from '../services/customer.service';
@@ -16,6 +16,8 @@ import { UpdateCartItemFlow } from './flows/update-cart-item.flow'; // PR-04 AC-
 import { RemoveFromCartFlow } from './flows/remove-from-cart.flow'; // PR-04 AC-10
 import { FaqFlow } from './flows/faq.flow'; // PR-GAP-2
 import { CheckoutFlow } from './flows/checkout.flow'; // PR-05 AC-05
+import { MerchantCommandParserService } from '../services/merchant-command-parser.service'; // PR-05.1
+import { MerchantCommandService } from '../services/merchant-command.service'; // PR-05.1
 import { LlmService } from '../llm/llm.service';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10 AC-06
@@ -71,6 +73,8 @@ export class ConversationOrchestrator {
     private readonly removeFromCartFlow: RemoveFromCartFlow, // PR-04 AC-10
     private readonly faqFlow: FaqFlow, // PR-GAP-2 AC-05
     private readonly checkoutFlow: CheckoutFlow, // PR-05
+    private readonly merchantCommandParser: MerchantCommandParserService, // PR-05.1
+    private readonly merchantCommandService: MerchantCommandService, // PR-05.1
     private readonly llmService: LlmService,
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
     private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
@@ -107,6 +111,26 @@ export class ConversationOrchestrator {
       merchant = await this.merchantResolver.resolveByWhatsAppPhoneId(input.receiverPhoneId);
     }
     this.logger.debug(`Merchant resolved: ${merchant.id}`);
+
+    // PR-05.1 AC-02, AC-03: Bifurcation — merchant vs. customer routing
+    // Detect if sender is the merchant (by whatsappNumber match)
+    if (merchant.whatsappNumber && input.from === merchant.whatsappNumber) {
+      return this.handleMerchantAdminMessage(input, merchant.id);
+    }
+
+    // PR-05.1 AC-14 (botPaused): if bot is paused, skip processing customer messages
+    if (merchant.botPaused) {
+      this.logger.log(
+        `Bot paused for merchant ${merchant.id} — skipping message from ${this.maskPhone(input.from)}`,
+      );
+      return {
+        response: '',
+        shouldSend: false,
+        conversationId: '',
+        merchantId: merchant.id,
+        intent: 'UNKNOWN' as IntentKey,
+      };
+    }
 
     // 2. Resolve or create customer
     const customer = await this.customerService.resolveByPhone(input.from);
@@ -255,6 +279,47 @@ export class ConversationOrchestrator {
       conversationId: conversation.id,
       merchantId: merchant.id,
       intent: routeDecision.intent,
+    };
+  }
+
+  /**
+   * PR-05.1 AC-02: Handle messages from the merchant (admin pipeline)
+   * Parses and executes merchant commands, returns response without customer tracking.
+   * Creates/resolves a MERCHANT_ADMIN conversation for the merchant's own phone.
+   */
+  private async handleMerchantAdminMessage(
+    input: OrchestratorInput,
+    merchantId: string,
+  ): Promise<OrchestratorResult> {
+    this.logger.log(`PR-05.1: Merchant admin message received for merchant ${merchantId}`);
+
+    // Resolve customer entry for merchant's phone (creates if first time)
+    const merchantAsCustomer = await this.customerService.resolveByPhone(input.from);
+
+    // Resolve or create MERCHANT_ADMIN conversation
+    const adminConversation = await this.conversationService.getOrCreateConversation(
+      merchantAsCustomer.id,
+      merchantId,
+      'whatsapp',
+      input.channelId ?? null,
+      ConversationType.MERCHANT_ADMIN,
+    );
+
+    const parsed = this.merchantCommandParser.parse(input.text);
+
+    let response: string;
+    if (!parsed) {
+      response = "❌ Comando no reconocido. Escribe 'ayuda' para ver comandos disponibles.";
+    } else {
+      response = await this.merchantCommandService.executeCommand(merchantId, parsed);
+    }
+
+    return {
+      response,
+      shouldSend: true,
+      conversationId: adminConversation.id,
+      merchantId,
+      intent: 'UNKNOWN' as IntentKey,
     };
   }
 

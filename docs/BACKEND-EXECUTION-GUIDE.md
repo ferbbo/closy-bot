@@ -1879,6 +1879,300 @@ LIMIT 1;
 
 ---
 
+## Flujo 6.1: Comandos de Operaciones del Merchant (PR-05.1)
+
+El merchant gestiona pedidos desde WhatsApp enviando comandos de texto. El mensaje **debe provenir del `whatsappNumber` registrado en `Merchant`** — de lo contrario, es procesado como cliente.
+
+**Prerrequisitos:**
+- Merchant con `whatsappNumber` configurado
+- Canal WhatsApp activo (`Channel.externalId = phoneNumberId`)
+- Órdenes creadas (ver Flujo 7)
+
+**Auth:** Webhook Signature (Meta) — igual que todos los webhooks WhatsApp.
+
+### Comandos disponibles
+
+| Comando | Descripción | Transición |
+|----|----|----|
+| `confirmar ORD-001` | Confirma pedido | `pending_payment → confirmed` |
+| `rechazar ORD-001 [motivo]` | Rechaza pedido | `pending_payment/confirmed → cancelled` |
+| `pagado ORD-001` | Marca como pagado | `confirmed → paid` |
+| `enviado ORD-001` | Marca como enviado | `confirmed/paid → shipped` |
+| `pedido ORD-001` | Detalle de un pedido | — |
+| `pendientes` | Lista pedidos pendientes/confirmados | — |
+| `hoy` | Resumen del día (cantidad + total) | — |
+| `ayuda` | Muestra todos los comandos | — |
+| `pausar bot` | Pausa el bot (no atiende clientes) | `botPaused = true` |
+| `activar bot` | Reactiva el bot | `botPaused = false` |
+
+---
+
+### Simular comando del merchant vía webhook
+
+El campo `from` del webhook debe coincidir con `Merchant.whatsappNumber`.
+
+```bash
+# Confirmar pedido ORD-001
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "id": "entry-1",
+      "changes": [{
+        "value": {
+          "messaging_product": "whatsapp",
+          "metadata": {
+            "display_phone_number": "15550000001",
+            "phone_number_id": "<CHANNEL_PHONE_NUMBER_ID>"
+          },
+          "messages": [{
+            "from": "<MERCHANT_WHATSAPP_NUMBER>",
+            "id": "wamid.cmd-001",
+            "timestamp": "1700000000",
+            "type": "text",
+            "text": { "body": "confirmar ORD-001" }
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }'
+```
+
+**Respuesta esperada:** HTTP 200. El merchant recibe un OutboxMessage con `✅ Pedido ORD-001 confirmado`. El cliente recibe notificación automática.
+
+---
+
+### Rechazar pedido con motivo
+
+```bash
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "id": "entry-2",
+      "changes": [{
+        "value": {
+          "messaging_product": "whatsapp",
+          "metadata": {
+            "display_phone_number": "15550000001",
+            "phone_number_id": "<CHANNEL_PHONE_NUMBER_ID>"
+          },
+          "messages": [{
+            "from": "<MERCHANT_WHATSAPP_NUMBER>",
+            "id": "wamid.cmd-002",
+            "timestamp": "1700000001",
+            "type": "text",
+            "text": { "body": "rechazar ORD-001 no hay stock" }
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }'
+```
+
+---
+
+### Ver detalle de un pedido
+
+```bash
+# Reemplaza "pedido" por el comando y el código de orden
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "id": "entry-3",
+      "changes": [{
+        "value": {
+          "messaging_product": "whatsapp",
+          "metadata": {
+            "display_phone_number": "15550000001",
+            "phone_number_id": "<CHANNEL_PHONE_NUMBER_ID>"
+          },
+          "messages": [{
+            "from": "<MERCHANT_WHATSAPP_NUMBER>",
+            "id": "wamid.cmd-003",
+            "timestamp": "1700000002",
+            "type": "text",
+            "text": { "body": "pedido ORD-001" }
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }'
+```
+
+---
+
+### Listar pedidos pendientes
+
+```bash
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "id": "entry-4",
+      "changes": [{
+        "value": {
+          "messaging_product": "whatsapp",
+          "metadata": {
+            "display_phone_number": "15550000001",
+            "phone_number_id": "<CHANNEL_PHONE_NUMBER_ID>"
+          },
+          "messages": [{
+            "from": "<MERCHANT_WHATSAPP_NUMBER>",
+            "id": "wamid.cmd-004",
+            "timestamp": "1700000003",
+            "type": "text",
+            "text": { "body": "pendientes" }
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }'
+```
+
+---
+
+### Resumen del día
+
+```bash
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "id": "entry-5",
+      "changes": [{
+        "value": {
+          "messaging_product": "whatsapp",
+          "metadata": {
+            "display_phone_number": "15550000001",
+            "phone_number_id": "<CHANNEL_PHONE_NUMBER_ID>"
+          },
+          "messages": [{
+            "from": "<MERCHANT_WHATSAPP_NUMBER>",
+            "id": "wamid.cmd-005",
+            "timestamp": "1700000004",
+            "type": "text",
+            "text": { "body": "hoy" }
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }'
+```
+
+---
+
+### Pausar y activar el bot
+
+```bash
+# Pausar bot (clientes no reciben respuestas automáticas)
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "id": "entry-6",
+      "changes": [{
+        "value": {
+          "messaging_product": "whatsapp",
+          "metadata": {
+            "display_phone_number": "15550000001",
+            "phone_number_id": "<CHANNEL_PHONE_NUMBER_ID>"
+          },
+          "messages": [{
+            "from": "<MERCHANT_WHATSAPP_NUMBER>",
+            "id": "wamid.cmd-006",
+            "timestamp": "1700000005",
+            "type": "text",
+            "text": { "body": "pausar bot" }
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }'
+
+# Activar bot
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "id": "entry-7",
+      "changes": [{
+        "value": {
+          "messaging_product": "whatsapp",
+          "metadata": {
+            "display_phone_number": "15550000001",
+            "phone_number_id": "<CHANNEL_PHONE_NUMBER_ID>"
+          },
+          "messages": [{
+            "from": "<MERCHANT_WHATSAPP_NUMBER>",
+            "id": "wamid.cmd-007",
+            "timestamp": "1700000006",
+            "type": "text",
+            "text": { "body": "activar bot" }
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }'
+```
+
+---
+
+### Marcar como pagado / enviado
+
+```bash
+# Pagado
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{"id": "entry-8","changes": [{"value": {"messaging_product": "whatsapp","metadata": {"display_phone_number": "15550000001","phone_number_id": "<CHANNEL_PHONE_NUMBER_ID>"},"messages": [{"from": "<MERCHANT_WHATSAPP_NUMBER>","id": "wamid.cmd-008","timestamp": "1700000007","type": "text","text": {"body": "pagado ORD-001"}}]},"field": "messages"}]}]}'
+
+# Enviado
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{"id": "entry-9","changes": [{"value": {"messaging_product": "whatsapp","metadata": {"display_phone_number": "15550000001","phone_number_id": "<CHANNEL_PHONE_NUMBER_ID>"},"messages": [{"from": "<MERCHANT_WHATSAPP_NUMBER>","id": "wamid.cmd-009","timestamp": "1700000008","type": "text","text": {"body": "enviado ORD-001"}}]},"field": "messages"}]}]}'
+```
+
+---
+
+### Notas importantes
+
+- **Idempotencia:** Si el pedido ya está en el estado destino, el comando responde con `ℹ️` sin duplicar notificaciones.
+- **Transiciones válidas:**
+  - `pending_payment → confirmed | cancelled`
+  - `confirmed → paid | shipped | cancelled`
+  - `paid → shipped`
+  - `shipped → delivered`
+- **Comandos case-insensitive:** `CONFIRMAR ORD-001` = `confirmar ORD-001` = `Confirmar ORD-001`.
+- **Tildes opcionales:** `confirmar` = `confírmar`.
+- **Bot pausado:** mientras `Merchant.botPaused = true`, ningún mensaje de cliente genera respuesta.
+
+**Coverage (PR-05.1):**
+- 27 tests `merchant-command-parser.service.spec.ts`
+- 22 tests `merchant-command.service.spec.ts`
+- 15 tests e2e `merchant-commands.e2e-spec.ts`
+- 3 tests adicionales en `conversation.orchestrator.spec.ts`
+
+---
+
 ## Flujo 7: Checkout Conversacional (PR-05)
 
 Flujo completo: el cliente inicia el checkout desde WhatsApp enviando "quiero pagar". El bot captura nombre, dirección y método de pago, crea la orden y notifica al merchant.

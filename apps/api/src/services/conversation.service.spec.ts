@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConversationService } from './conversation.service';
 import { ConversationRepository } from '../persistence/repositories/conversation.repository';
-import { Conversation } from '@prisma/client';
+import { Conversation, ConversationType } from '@prisma/client';
 import { Channel, ConversationStatus } from '../domain/entities/conversation.entity';
 
 describe('ConversationService', () => {
@@ -13,6 +13,7 @@ describe('ConversationService', () => {
     customerId: 'cust_123',
     merchantId: 'merch_123',
     channel: 'whatsapp',
+    type: ConversationType.CUSTOMER, // PR-05.1
     status: 'active',
     lastMessageAt: new Date('2026-02-12T10:00:00Z'),
     createdAt: new Date('2026-02-12T00:00:00Z'),
@@ -68,6 +69,8 @@ describe('ConversationService', () => {
         'cust_123',
         'merch_123',
         'whatsapp',
+        undefined, // channelId — PR-05.1
+        undefined, // type — PR-05.1
       );
       expect(repository.updateLastMessageAt).toHaveBeenCalledWith('conv_123', expect.any(Date));
       expect(repository.create).not.toHaveBeenCalled();
@@ -88,6 +91,8 @@ describe('ConversationService', () => {
         'cust_123',
         'merch_123',
         'whatsapp',
+        undefined, // channelId — PR-05.1
+        undefined, // type — PR-05.1
       );
       expect(repository.create).toHaveBeenCalledWith({
         customer: { connect: { id: 'cust_123' } },

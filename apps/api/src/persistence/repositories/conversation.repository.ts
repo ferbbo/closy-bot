@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Conversation, Prisma } from '@prisma/client';
+import { Conversation, ConversationType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -32,12 +32,14 @@ export class ConversationRepository {
    * Find an active conversation by customer, merchant and channel
    * Returns the most recent active conversation
    * PR-03.11: Optionally filter by channelId
+   * PR-05.1: Optionally filter by type (CUSTOMER | MERCHANT_ADMIN)
    */
   async findByCustomerAndChannel(
     customerId: string,
     merchantId: string,
     channel: string,
     channelId?: string,
+    type?: ConversationType,
   ): Promise<Conversation | null> {
     return this.prisma.conversation.findFirst({
       where: {
@@ -45,6 +47,7 @@ export class ConversationRepository {
         merchantId,
         channel,
         ...(channelId ? { channelId } : {}),
+        ...(type ? { type } : {}),
         status: 'active',
       },
       orderBy: {

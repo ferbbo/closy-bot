@@ -22,6 +22,7 @@ import { CommonModule } from '../common/common.module'; // PR-03.10 AC-06
  * Handles conversation flow orchestration and intent classification.
  *
  * PR-05: Added CheckoutFlow for conversational checkout
+ * PR-05.1: MerchantCommandParser + MerchantCommandService registered via ServicesModule
  */
 @Module({
   imports: [ServicesModule, LlmModule, PersistenceModule, CommonModule],

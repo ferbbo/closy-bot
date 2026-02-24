@@ -17,6 +17,16 @@ export enum Channel {
 }
 
 /**
+ * ConversationType enum — PR-05.1
+ * CUSTOMER: normal sales flow
+ * MERCHANT_ADMIN: merchant sending commands via WhatsApp
+ */
+export enum ConversationTypeEnum {
+  CUSTOMER = 'CUSTOMER',
+  MERCHANT_ADMIN = 'MERCHANT_ADMIN',
+}
+
+/**
  * Conversation entity - represents a chat session between customer and merchant
  */
 export class Conversation {
@@ -24,6 +34,7 @@ export class Conversation {
   customerId: string;
   merchantId: string;
   channel: Channel;
+  type?: ConversationTypeEnum; // PR-05.1
   status: ConversationStatus;
   lastMessageAt: Date | null;
   createdAt: Date;
@@ -34,6 +45,7 @@ export class Conversation {
     this.customerId = data.customerId;
     this.merchantId = data.merchantId;
     this.channel = data.channel;
+    this.type = data.type;
     this.status = data.status;
     this.lastMessageAt = data.lastMessageAt;
     this.createdAt = data.createdAt;
