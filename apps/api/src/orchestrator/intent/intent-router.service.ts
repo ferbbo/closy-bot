@@ -1,235 +1,225 @@
 import { Injectable, Logger } from '@nestjs/common';
-
-export type IntentType =
-  | 'SEARCH_PRODUCT'
-  | 'ADD_TO_CART'
-  | 'VIEW_CART'
-  | 'UPDATE_CART'
-  | 'REMOVE_FROM_CART'
-  | 'GREETING'
-  | 'HELP'
-  | 'UNKNOWN';
-
-export interface IntentResult {
-  intent: IntentType;
-  confidence: number;
-  entities?: {
-    query?: string; // extracted search query
-    productName?: string; // extracted product name for cart operations
-  };
-}
+import { ConfigService } from '@nestjs/config';
+import type {
+  IntentKey,
+  IntentDecision,
+  IntentContext,
+  ConfidenceLevel,
+} from '../types/intent.types';
+import { INTENT_KEYWORDS, CONTEXT_BONUSES, type KeywordConfig } from './keyword-configs';
 
 /**
- * IntentRouterService
- * Simple keyword-based intent classification (no LLM for MVP)
+ * IntentRouterService V2
+ * PR-03.5.1: Template-first keyword-based intent classification
+ * with scoring, normalization, confidence levels, and context-aware routing.
+ *
+ * Changes from V1:
+ * - REQ-01: Text normalization (lowercase, remove accents, collapse spaces)
+ * - REQ-02: Keyword scoring with weights (not cascade)
+ * - REQ-03: Confidence levels (HIGH/MED/LOW) based on score thresholds
+ * - REQ-04: Context-aware routing (uses lastIntent for scoring bonuses)
+ * - REQ-05: AMBIGUOUS intent when multiple intents with similar scores
  */
 @Injectable()
 export class IntentRouterService {
   private readonly logger = new Logger(IntentRouterService.name);
+  private readonly thresholdHigh: number;
+  private readonly thresholdLow: number;
+  private readonly ambiguousThreshold: number = 2; // Score diff for collision detection
 
-  // Keywords for each intent
-  private readonly keywords = {
-    GREETING: [
-      'hola',
-      'buenos días',
-      'buenas tardes',
-      'buenas noches',
-      'buen día',
-      'hey',
-      'holi',
-      'saludos',
-    ],
-    HELP: ['ayuda', 'cómo funciona', 'menú', 'opciones', 'qué puedo hacer', 'comandos'],
-    VIEW_CART: [
-      'carrito',
-      'ver carrito',
-      'mostrar carrito',
-      'qué tengo',
-      'mi carrito',
-      'pedido',
-      'ver pedido',
-    ],
-    UPDATE_CART: ['cambiar', 'actualizar', 'modificar', 'cambiar cantidad', 'ajustar'],
-    REMOVE_FROM_CART: ['remover', 'quitar', 'eliminar', 'sacar'],
-    ADD_TO_CART: [
-      'agregar',
-      'añadir',
-      'agrega',
-      'añade',
-      'dame',
-      'quiero comprar',
-      'quiero',
-      'me llevo',
-    ],
-    SEARCH_PRODUCT: [
-      'busco',
-      'quiero',
-      'tienes',
-      'tienen',
-      'producto',
-      'productos',
-      'necesito',
-      'buscar',
-      'mostrar',
-      'ver',
-      'precio',
-      'stock',
-      'disponible',
-      'vender',
-      'comprar',
-    ],
-  };
+  constructor(private readonly configService: ConfigService) {
+    // REQ-09: Load confidence thresholds from config
+    this.thresholdHigh = this.configService.get<number>('INTENT_CONFIDENCE_THRESHOLD_HIGH', 5);
+    this.thresholdLow = this.configService.get<number>('INTENT_CONFIDENCE_THRESHOLD_LOW', 2);
+  }
 
   /**
-   * Classify user message intent using keyword matching
+   * REQ-01, AC-01: Normalize text for consistent matching
+   * - Lowercase
+   * - Remove accents/tildes
+   * - Collapse multiple spaces into one
+   * - Trim whitespace
    *
-   * @param text - User message text
-   * @returns IntentResult with intent type, confidence, and extracted entities
+   * @example normalizeText("Búsco camisetas  ") => "busco camisetas"
    */
-  classify(text: string): IntentResult {
-    const normalizedText = text.toLowerCase().trim();
+  normalizeText(text: string): string {
+    return text
+      .toLowerCase()
+      .normalize('NFD') // Decompose accents
+      .replace(/[\u0300-\u036f]/g, '') // Remove accent marks
+      .replace(/\s+/g, ' ') // Collapse spaces
+      .trim();
+  }
 
-    this.logger.debug(`Classifying intent for message (${text.length} chars)`);
+  /**
+   * REQ-02, AC-02: Score intent based on keyword matches with weights
+   * Compound phrases (e.g., "quiero comprar") score higher than single words (e.g., "quiero")
+   *
+   * @param text - Normalized text
+   * @param keywords - Keyword configurations with weights
+   * @returns Total score for this intent
+   */
+  scoreIntent(text: string, keywords: KeywordConfig[]): number {
+    let score = 0;
+    const matched: string[] = [];
 
-    // Check GREETING
-    if (this.matchesKeywords(normalizedText, this.keywords.GREETING)) {
+    for (const { phrase, weight } of keywords) {
+      if (text.includes(phrase)) {
+        score += weight;
+        matched.push(phrase);
+      }
+    }
+
+    if (matched.length > 0) {
+      this.logger.debug(`Matched keywords: [${matched.join(', ')}] → score ${score}`);
+    }
+
+    return score;
+  }
+
+  /**
+   * REQ-05, AC-05: Resolve collisions when multiple intents have similar scores
+   * If top 2 intents have score diff < ambiguousThreshold, mark as AMBIGUOUS
+   *
+   * @param scores - Map of intent -> score
+   * @returns IntentDecision with selected intent or AMBIGUOUS
+   */
+  resolveCollisions(scores: Map<IntentKey, number>): IntentDecision {
+    const sorted = Array.from(scores.entries())
+      .filter(([_, score]) => score > 0)
+      .sort((a, b) => b[1] - a[1]); // Descending by score
+
+    if (sorted.length === 0) {
       return {
-        intent: 'GREETING',
-        confidence: 0.9,
+        intent: 'UNKNOWN',
+        confidence: 'LOW',
+        reason: 'No keywords matched',
+        signals: [],
+        missingSlots: [],
       };
     }
 
-    // Check HELP
-    if (this.matchesKeywords(normalizedText, this.keywords.HELP)) {
-      return {
-        intent: 'HELP',
-        confidence: 0.9,
-      };
+    const [topIntent, topScore] = sorted[0];
+
+    // REQ-05, AC-05: Check for collision (top 2 intents with similar scores)
+    if (sorted.length > 1) {
+      const [secondIntent, secondScore] = sorted[1];
+      const diff = topScore - secondScore;
+
+      if (diff < this.ambiguousThreshold) {
+        this.logger.debug(
+          `Collision detected: ${topIntent}=${topScore} vs ${secondIntent}=${secondScore} (diff=${diff})`,
+        );
+        return {
+          intent: 'AMBIGUOUS',
+          confidence: 'LOW',
+          reason: `collision detected: ${topIntent}=${topScore}, ${secondIntent}=${secondScore}`,
+          signals: [topIntent, secondIntent],
+          missingSlots: ['clarification'],
+        };
+      }
     }
 
-    // AC-11: Check ADD_TO_CART FIRST (higher priority than VIEW_CART to avoid "agregar al carrito" collision)
-    if (this.matchesKeywords(normalizedText, this.keywords.ADD_TO_CART)) {
-      const productName = this.extractProductName(normalizedText, this.keywords.ADD_TO_CART);
-      return {
-        intent: 'ADD_TO_CART',
-        confidence: 0.85,
-        entities: {
-          productName,
-        },
-      };
-    }
+    // REQ-03, AC-03: Calculate confidence level based on score
+    const confidence = this.calculateConfidence(topScore);
 
-    // AC-11: Check VIEW_CART (high confidence for explicit cart keywords)
-    if (this.matchesKeywords(normalizedText, this.keywords.VIEW_CART)) {
-      return {
-        intent: 'VIEW_CART',
-        confidence: 0.85,
-      };
-    }
-
-    // AC-09: Check UPDATE_CART (must have update keyword + product reference + quantity)
-    if (this.matchesKeywords(normalizedText, this.keywords.UPDATE_CART)) {
-      const productName = this.extractProductName(normalizedText, this.keywords.UPDATE_CART);
-      return {
-        intent: 'UPDATE_CART',
-        confidence: 0.75,
-        entities: {
-          productName,
-        },
-      };
-    }
-
-    // AC-11: Check REMOVE_FROM_CART (must have remove keyword + product reference)
-    if (this.matchesKeywords(normalizedText, this.keywords.REMOVE_FROM_CART)) {
-      const productName = this.extractProductName(normalizedText, this.keywords.REMOVE_FROM_CART);
-      return {
-        intent: 'REMOVE_FROM_CART',
-        confidence: 0.75,
-        entities: {
-          productName,
-        },
-      };
-    }
-
-    // Check SEARCH_PRODUCT
-    if (this.matchesKeywords(normalizedText, this.keywords.SEARCH_PRODUCT)) {
-      const query = this.extractSearchQuery(normalizedText);
-      return {
-        intent: 'SEARCH_PRODUCT',
-        confidence: 0.7,
-        entities: {
-          query,
-        },
-      };
-    }
-
-    // Default to UNKNOWN
     return {
-      intent: 'UNKNOWN',
-      confidence: 0.5,
-      entities: {
-        query: normalizedText, // Use full text as potential search query
-      },
+      intent: topIntent,
+      confidence,
+      reason: `Matched keywords with score ${topScore}`,
+      signals: [`score:${topScore}`],
+      missingSlots: [],
     };
   }
 
   /**
-   * Check if text contains any of the keywords
+   * REQ-03, AC-03: Calculate confidence level from score
+   * - HIGH: score >= thresholdHigh
+   * - MED: score >= thresholdLow
+   * - LOW: score < thresholdLow
    */
-  private matchesKeywords(text: string, keywords: string[]): boolean {
-    return keywords.some((keyword) => text.includes(keyword));
+  private calculateConfidence(score: number): ConfidenceLevel {
+    if (score >= this.thresholdHigh) {
+      return 'HIGH';
+    } else if (score >= this.thresholdLow) {
+      return 'MED';
+    } else {
+      return 'LOW';
+    }
   }
 
   /**
-   * Extract search query from text by removing trigger keywords
+   * REQ-04, AC-04: Apply context bonuses to scores based on lastIntent
+   * Example: lastIntent=SEARCH_PRODUCT + current="quiero" → boost ADD_TO_CART score
+   *
+   * @param scores - Base scores from keyword matching
+   * @param context - Intent context with lastIntent
+   * @returns Adjusted scores with context bonuses
    */
-  private extractSearchQuery(text: string): string {
-    let query = text;
-
-    // Remove common trigger words
-    const triggerWords = ['busco', 'quiero', 'tienes', 'necesito', 'buscar', 'mostrar', 'ver'];
-
-    for (const word of triggerWords) {
-      query = query.replace(new RegExp(`\\b${word}\\b`, 'gi'), '');
+  private applyContextBonuses(
+    scores: Map<IntentKey, number>,
+    context?: IntentContext,
+  ): Map<IntentKey, number> {
+    if (!context?.lastIntent) {
+      return scores;
     }
 
-    // Clean up whitespace
-    query = query.trim().replace(/\s+/g, ' ');
-
-    // If query is empty or too short, return original text
-    if (query.length < 2) {
-      return text;
+    const bonuses = CONTEXT_BONUSES[context.lastIntent];
+    if (!bonuses) {
+      return scores;
     }
 
-    return query;
+    const adjustedScores = new Map(scores);
+
+    for (const [intent, bonus] of Object.entries(bonuses)) {
+      const currentScore = adjustedScores.get(intent as IntentKey) || 0;
+      const newScore = currentScore + bonus;
+      adjustedScores.set(intent as IntentKey, newScore);
+
+      if (bonus > 0) {
+        this.logger.debug(
+          `Context bonus: lastIntent=${context.lastIntent} → ${intent} +${bonus} (${currentScore} → ${newScore})`,
+        );
+      }
+    }
+
+    return adjustedScores;
   }
 
   /**
-   * Extract product name from cart operation messages
-   * Removes action keywords (agregar, quitar, etc.)
+   * REQ-01 to REQ-05: Main classification method
+   * Classifies user message using keyword scoring with normalization and context
+   *
+   * @param text - User message text
+   * @param context - Optional context (lastIntent for context-aware routing)
+   * @returns IntentDecision with intent, confidence, reason, signals, and missing slots
    */
-  private extractProductName(text: string, actionKeywords: string[]): string {
-    let productName = text;
+  classify(text: string, context?: IntentContext): IntentDecision {
+    const startTime = Date.now();
 
-    // Remove action keywords
-    for (const keyword of actionKeywords) {
-      productName = productName.replace(new RegExp(`\\b${keyword}\\b`, 'gi'), '');
+    // REQ-01, AC-01: Normalize text
+    const normalized = this.normalizeText(text);
+    this.logger.debug(`Text normalized (length: ${text.length} → ${normalized.length})`);
+
+    // REQ-02, AC-02: Score all intents
+    const scores = new Map<IntentKey, number>();
+
+    for (const [intent, keywords] of Object.entries(INTENT_KEYWORDS)) {
+      const score = this.scoreIntent(normalized, keywords);
+      scores.set(intent as IntentKey, score);
     }
 
-    // Remove common filler words
-    const fillerWords = ['al carrito', 'del carrito', 'de', 'la', 'el', 'un', 'una'];
-    for (const word of fillerWords) {
-      productName = productName.replace(new RegExp(`\\b${word}\\b`, 'gi'), '');
-    }
+    // REQ-04, AC-04: Apply context bonuses
+    const adjustedScores = this.applyContextBonuses(scores, context);
 
-    // Clean up whitespace
-    productName = productName.trim().replace(/\s+/g, ' ');
+    // REQ-05, AC-05: Resolve collisions and select intent
+    const decision = this.resolveCollisions(adjustedScores);
 
-    // If empty, return original text
-    if (productName.length < 2) {
-      return text;
-    }
+    const latencyMs = Date.now() - startTime;
+    this.logger.log(
+      `Intent: ${decision.intent} | Confidence: ${decision.confidence} | Latency: ${latencyMs}ms`,
+    );
 
-    return productName;
+    return decision;
   }
 }

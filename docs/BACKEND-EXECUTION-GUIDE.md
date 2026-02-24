@@ -2,7 +2,7 @@
 
 > Documentación para probar los flujos implementados desde backend (sin frontend).
 > 
-> **Última actualización:** 2026-02-19
+> **Última actualización:** 2026-02-24
 
 ---
 
@@ -35,10 +35,22 @@ WHATSAPP_PHONE_NUMBER_ID="tu-phone-number-id"
 WHATSAPP_WEBHOOK_VERIFY_TOKEN="tu-verify-token"
 WHATSAPP_APP_SECRET="tu-app-secret"
 
-# LLM (opcional)
-LLM_ENABLED=true
+# LLM (opcional) - PR-03.5.1: Granular flags
+# Deprecated: LLM_ENABLED=true activa todos los flags granulares (backward compat)
+# LLM_ENABLED=true
+
+# Granular LLM flags (default: false)
+LLM_INTENT_ASSIST=false       # Intent assist for UNKNOWN with LLM (short prompt)
+LLM_FALLBACK_ENABLED=false    # LLM fallback generation for GENERIC route
+LLM_SUMMARY_ENABLED=false     # LLM conversation summaries (future)
+
+# LLM Provider
 LLM_PROVIDER="groq"
 GROQ_API_KEY="tu-groq-api-key"
+
+# Intent classification thresholds (optional)
+INTENT_CONFIDENCE_THRESHOLD_HIGH=5   # Score >= 5 -> HIGH confidence
+INTENT_CONFIDENCE_THRESHOLD_LOW=2    # Score >= 2 -> MED, < 2 -> LOW
 ```
 
 ### 2. Setup Base de Datos

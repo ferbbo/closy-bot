@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConversationOrchestrator } from './conversation.orchestrator';
 import { IntentRouterService } from './intent/intent-router.service';
+import { RouteDecisionService } from './route-decision.service'; // PR-03.5.1
 import { SearchCatalogFlow } from './flows/search-catalog.flow';
 import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
@@ -19,7 +20,8 @@ import { CommonModule } from '../common/common.module'; // PR-03.10 AC-06
  * Handles conversation flow orchestration and intent classification.
  *
  * Responsibilities:
- * - Intent classification (keyword-based for MVP)
+ * - Intent classification (IntentRouter V2 - PR-03.5.1)
+ * - Route decision (RouteDecisionService - PR-03.5.1)
  * - Flow execution (greeting, help, search, cart - PR-04)
  * - Merchant and customer resolution
  * - Conversation orchestration
@@ -28,12 +30,14 @@ import { CommonModule } from '../common/common.module'; // PR-03.10 AC-06
  * PR-11: Removed PlaybookService (now imported via ServicesModule in P2 fix)
  * PR-03.10: Imports PersistenceModule and CommonModule for conversation memory
  * PR-04: Added 4 separate cart flows (AC-07, AC-08, AC-09, AC-10)
+ * PR-03.5.1: Added RouteDecisionService for template-first routing
  */
 @Module({
   imports: [ServicesModule, LlmModule, PersistenceModule, CommonModule],
   providers: [
     ConversationOrchestrator,
     IntentRouterService,
+    RouteDecisionService, // PR-03.5.1
     SearchCatalogFlow,
     GreetingFlow,
     HelpFlow,

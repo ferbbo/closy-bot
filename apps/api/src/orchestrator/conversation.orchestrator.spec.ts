@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { ConversationOrchestrator } from './conversation.orchestrator';
 import { IntentRouterService } from './intent/intent-router.service';
+import { RouteDecisionService } from './route-decision.service'; // PR-03.5.1
 import { CustomerService } from '../services/customer.service';
 import { ConversationService } from '../services/conversation.service';
 import { MerchantResolverService } from '../services/merchant-resolver.service';
@@ -22,14 +23,11 @@ describe('ConversationOrchestrator', () => {
   let merchantResolver: MerchantResolverService;
   let customerService: CustomerService;
   let conversationService: ConversationService;
-  let intentRouter: IntentRouterService;
+  let routeDecisionService: RouteDecisionService; // PR-03.5.1
   let searchCatalogFlow: SearchCatalogFlow;
   let greetingFlow: GreetingFlow;
   let helpFlow: HelpFlow;
   let addToCartFlow: AddToCartFlow;
-  let viewCartFlow: ViewCartFlow;
-  let updateCartItemFlow: UpdateCartItemFlow;
-  let removeFromCartFlow: RemoveFromCartFlow;
 
   const mockMerchant: Merchant = {
     id: 'merchant-1',
@@ -97,6 +95,18 @@ describe('ConversationOrchestrator', () => {
           provide: IntentRouterService,
           useValue: {
             classify: jest.fn(),
+          },
+        },
+        {
+          provide: RouteDecisionService,
+          useValue: {
+            classifyAndRoute: jest.fn().mockResolvedValue({
+              route: 'TEMPLATE',
+              intent: 'GREETING',
+              reason: 'Template route',
+              confidence: 'HIGH',
+              signals: ['hola'],
+            }),
           },
         },
         {
@@ -169,14 +179,11 @@ describe('ConversationOrchestrator', () => {
     merchantResolver = module.get<MerchantResolverService>(MerchantResolverService);
     customerService = module.get<CustomerService>(CustomerService);
     conversationService = module.get<ConversationService>(ConversationService);
-    intentRouter = module.get<IntentRouterService>(IntentRouterService);
+    routeDecisionService = module.get<RouteDecisionService>(RouteDecisionService); // PR-03.5.1
     searchCatalogFlow = module.get<SearchCatalogFlow>(SearchCatalogFlow);
     greetingFlow = module.get<GreetingFlow>(GreetingFlow);
     helpFlow = module.get<HelpFlow>(HelpFlow);
     addToCartFlow = module.get<AddToCartFlow>(AddToCartFlow);
-    viewCartFlow = module.get<ViewCartFlow>(ViewCartFlow);
-    updateCartItemFlow = module.get<UpdateCartItemFlow>(UpdateCartItemFlow);
-    removeFromCartFlow = module.get<RemoveFromCartFlow>(RemoveFromCartFlow);
   });
 
   it('should be defined', () => {
@@ -193,9 +200,12 @@ describe('ConversationOrchestrator', () => {
     };
 
     it('should process greeting message', async () => {
-      jest.spyOn(intentRouter, 'classify').mockReturnValue({
+      jest.spyOn(routeDecisionService, 'classifyAndRoute').mockResolvedValue({
+        route: 'TEMPLATE',
         intent: 'GREETING',
-        confidence: 0.9,
+        reason: 'HIGH confidence keyword match',
+        confidence: 'HIGH',
+        signals: ['hola'],
       });
 
       const result = await orchestrator.process({
@@ -216,9 +226,12 @@ describe('ConversationOrchestrator', () => {
     });
 
     it('should process help message', async () => {
-      jest.spyOn(intentRouter, 'classify').mockReturnValue({
+      jest.spyOn(routeDecisionService, 'classifyAndRoute').mockResolvedValue({
+        route: 'TEMPLATE',
         intent: 'HELP',
-        confidence: 0.9,
+        reason: 'HIGH confidence keyword match',
+        confidence: 'HIGH',
+        signals: ['ayuda'],
       });
 
       const result = await orchestrator.process({
@@ -232,12 +245,12 @@ describe('ConversationOrchestrator', () => {
     });
 
     it('should process search product message', async () => {
-      jest.spyOn(intentRouter, 'classify').mockReturnValue({
+      jest.spyOn(routeDecisionService, 'classifyAndRoute').mockResolvedValue({
+        route: 'TEMPLATE',
         intent: 'SEARCH_PRODUCT',
-        confidence: 0.8,
-        entities: {
-          query: 'zapatillas',
-        },
+        reason: 'HIGH confidence keyword match',
+        confidence: 'HIGH',
+        signals: ['busco'],
       });
 
       const result = await orchestrator.process({
@@ -247,16 +260,17 @@ describe('ConversationOrchestrator', () => {
 
       expect(result.intent).toBe('SEARCH_PRODUCT');
       expect(result.shouldSend).toBe(true);
-      expect(searchCatalogFlow.handle).toHaveBeenCalledWith('merchant-1', 'zapatillas');
+      // V2 passes full text (no entity extraction)
+      expect(searchCatalogFlow.handle).toHaveBeenCalledWith('merchant-1', 'busco zapatillas');
     });
 
     it('should handle unknown intent with fallback search', async () => {
-      jest.spyOn(intentRouter, 'classify').mockReturnValue({
+      jest.spyOn(routeDecisionService, 'classifyAndRoute').mockResolvedValue({
+        route: 'GENERIC',
         intent: 'UNKNOWN',
-        confidence: 0.5,
-        entities: {
-          query: 'random text',
-        },
+        reason: 'Low confidence, no LLM flags',
+        confidence: 'LOW',
+        signals: [],
       });
 
       const result = await orchestrator.process({
@@ -266,13 +280,17 @@ describe('ConversationOrchestrator', () => {
 
       expect(result.intent).toBe('UNKNOWN');
       expect(result.shouldSend).toBe(true);
-      expect(searchCatalogFlow.handle).toHaveBeenCalledWith('merchant-1', 'random text');
+      // V2: GENERIC route returns hardcoded message, no searchCatalogFlow call
+      expect(searchCatalogFlow.handle).not.toHaveBeenCalled();
+      // AC-12: Exact message from brief
+      expect(result.response).toBe("No entendí, escribe 'ayuda'");
     });
 
     it('should resolve merchant, customer, and conversation', async () => {
-      jest.spyOn(intentRouter, 'classify').mockReturnValue({
+      jest.spyOn(routeDecisionService, 'classifyAndRoute').mockResolvedValue({
+        route: 'TEMPLATE',
         intent: 'GREETING',
-        confidence: 0.9,
+        reason: 'HIGH confidence',
       });
 
       await orchestrator.process(baseInput);
@@ -290,9 +308,12 @@ describe('ConversationOrchestrator', () => {
     it('should handle customer without name', async () => {
       const customerWithoutName = { ...mockCustomer, name: null };
       jest.spyOn(customerService, 'resolveByPhone').mockResolvedValue(customerWithoutName);
-      jest.spyOn(intentRouter, 'classify').mockReturnValue({
+      jest.spyOn(routeDecisionService, 'classifyAndRoute').mockResolvedValue({
+        route: 'TEMPLATE',
         intent: 'GREETING',
-        confidence: 0.9,
+        reason: 'HIGH confidence',
+        confidence: 'HIGH',
+        signals: ['hola'],
       });
 
       const result = await orchestrator.process({
@@ -310,10 +331,12 @@ describe('ConversationOrchestrator', () => {
     });
 
     it('should use full text as query when no query extracted', async () => {
-      jest.spyOn(intentRouter, 'classify').mockReturnValue({
+      jest.spyOn(routeDecisionService, 'classifyAndRoute').mockResolvedValue({
+        route: 'TEMPLATE',
         intent: 'SEARCH_PRODUCT',
-        confidence: 0.8,
-        entities: {}, // No query extracted
+        reason: 'HIGH confidence',
+        confidence: 'HIGH',
+        signals: ['text'],
       });
 
       await orchestrator.process({
@@ -325,12 +348,12 @@ describe('ConversationOrchestrator', () => {
     });
 
     it('AC-12: should route ADD_TO_CART to AddToCartFlow.execute', async () => {
-      jest.spyOn(intentRouter, 'classify').mockReturnValue({
+      jest.spyOn(routeDecisionService, 'classifyAndRoute').mockResolvedValue({
+        route: 'TEMPLATE',
         intent: 'ADD_TO_CART',
-        confidence: 0.85,
-        entities: {
-          productName: 'camiseta roja',
-        },
+        reason: 'HIGH confidence',
+        confidence: 'HIGH',
+        signals: ['agregar'],
       });
 
       const result = await orchestrator.process({
@@ -340,10 +363,11 @@ describe('ConversationOrchestrator', () => {
 
       expect(result.intent).toBe('ADD_TO_CART');
       expect(result.shouldSend).toBe(true);
+      // V2 passes full text (no entity extraction)
       expect(addToCartFlow.execute).toHaveBeenCalledWith(
         mockCustomer.id,
         mockMerchant.id,
-        'camiseta roja',
+        'quiero agregar una camiseta roja',
         'quiero agregar una camiseta roja',
       );
       expect(result.response).toBe('Item added to cart');

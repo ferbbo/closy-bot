@@ -33,7 +33,9 @@ export class AddToCartFlow {
     productQuery: string,
     fullText?: string,
   ): Promise<string> {
-    this.logger.log(`Adding to cart for customer ${customerId}: "${productQuery}"`);
+    this.logger.log(
+      `Adding to cart for customer ${customerId} (query length: ${productQuery.length})`,
+    );
 
     // Extract quantity from message (e.g., "quiero 2 camisas", "agregar 5", default 1)
     const quantityMatch = fullText?.match(/\b(\d+)\b/);

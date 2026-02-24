@@ -62,7 +62,15 @@ export class LlmService {
     private readonly conversationRepository: ConversationRepository, // PR-03.10
     private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
   ) {
-    this.llmEnabled = this.configService.get<boolean>('LLM_ENABLED', false);
+    // PR-03.5.1: Check LLM_ENABLED (deprecated) OR any granular flag for backward compat
+    const llmEnabledLegacy = this.configService.get<boolean>('LLM_ENABLED', false);
+    const llmIntentAssist = this.configService.get<boolean>('LLM_INTENT_ASSIST', false);
+    const llmFallbackEnabled = this.configService.get<boolean>('LLM_FALLBACK_ENABLED', false);
+    const llmSummaryEnabled = this.configService.get<boolean>('LLM_SUMMARY_ENABLED', false);
+
+    // Enable LLM if legacy flag OR any granular flag is true
+    this.llmEnabled =
+      llmEnabledLegacy || llmIntentAssist || llmFallbackEnabled || llmSummaryEnabled;
 
     if (this.llmEnabled) {
       const providerName = this.configService.get<string>('LLM_PROVIDER', 'groq');
@@ -136,6 +144,45 @@ export class LlmService {
         error instanceof Error ? error.stack : error,
       );
       return this.getFallbackResponse(params.userMessage);
+    }
+  }
+
+  /**
+   * PR-03.5.1: Generate simple LLM response with minimal context
+   * Used for intent assist (short prompts, low cost, fast timeout)
+   *
+   * @param prompt - System + user prompt combined
+   * @param options - Generation options (maxTokens, temperature, timeout)
+   * @returns LLM response text
+   * @throws Error if LLM is disabled or generation fails
+   */
+  async generateSimple(
+    prompt: string,
+    options?: {
+      maxTokens?: number;
+      temperature?: number;
+      timeout?: number;
+    },
+  ): Promise<string | null> {
+    if (!this.llmEnabled || !this.provider) {
+      this.logger.debug('LLM disabled, returning null from generateSimple');
+      return null;
+    }
+
+    try {
+      const response = await this.provider.generateResponse({
+        systemPrompt: '', // Empty system prompt, all in user message
+        userMessage: prompt,
+        conversationHistory: [],
+        context: undefined,
+        maxTokens: options?.maxTokens ?? 100,
+        temperature: options?.temperature ?? 0.3,
+      });
+
+      return response.content;
+    } catch (error) {
+      this.logger.error('Simple LLM generation failed', error);
+      throw error;
     }
   }
 

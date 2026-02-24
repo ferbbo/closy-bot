@@ -1,12 +1,32 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { IntentRouterService } from './intent-router.service';
+import type { IntentContext } from '../types/intent.types';
 
-describe('IntentRouterService', () => {
+/**
+ * PR-03.5.1: IntentRouter V2 Tests
+ * Tests for REQ-01 to REQ-05 and AC-01 to AC-05
+ */
+describe('IntentRouterService V2 (PR-03.5.1)', () => {
   let service: IntentRouterService;
 
   beforeEach(async () => {
+    const mockConfigService = {
+      get: jest.fn((key: string, defaultValue?: unknown) => {
+        if (key === 'INTENT_CONFIDENCE_THRESHOLD_HIGH') return 5;
+        if (key === 'INTENT_CONFIDENCE_THRESHOLD_LOW') return 2;
+        return defaultValue;
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
-      providers: [IntentRouterService],
+      providers: [
+        IntentRouterService,
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
+        },
+      ],
     }).compile();
 
     service = module.get<IntentRouterService>(IntentRouterService);
@@ -16,189 +36,201 @@ describe('IntentRouterService', () => {
     expect(service).toBeDefined();
   });
 
-  describe('classify()', () => {
-    it('should classify greeting intent', () => {
-      const result = service.classify('hola');
-      expect(result.intent).toBe('GREETING');
-      expect(result.confidence).toBeGreaterThanOrEqual(0.8);
+  // REQ-01, AC-01: Text normalization (lowercase, remove accents, collapse spaces)
+  describe('AC-01: normalizeText', () => {
+    it('should convert to lowercase', () => {
+      expect(service.normalizeText('BUSCO CAMISETAS')).toBe('busco camisetas');
     });
 
-    it('should classify greeting with different variations', () => {
-      const greetings = ['Hola', 'buenos días', 'BUENAS TARDES', 'hey', 'holi'];
-
-      for (const greeting of greetings) {
-        const result = service.classify(greeting);
-        expect(result.intent).toBe('GREETING');
-      }
+    it('should remove accents/tildes', () => {
+      expect(service.normalizeText('Búsco camisétas ñ')).toBe('busco camisetas n');
     });
 
-    it('should classify help intent', () => {
-      const result = service.classify('ayuda');
-      expect(result.intent).toBe('HELP');
-      expect(result.confidence).toBeGreaterThanOrEqual(0.8);
+    it('should collapse multiple spaces into one', () => {
+      expect(service.normalizeText('busco   camisetas')).toBe('busco camisetas');
     });
 
-    it('should classify help with different variations', () => {
-      const helpMessages = ['ayuda', 'cómo funciona', 'menú', 'opciones', 'qué puedo hacer'];
-
-      for (const message of helpMessages) {
-        const result = service.classify(message);
-        expect(result.intent).toBe('HELP');
-      }
+    it('should trim whitespace', () => {
+      expect(service.normalizeText('  busco camisetas  ')).toBe('busco camisetas');
     });
 
-    it('should classify search product intent', () => {
-      const result = service.classify('busco zapatillas');
-      expect(result.intent).toBe('SEARCH_PRODUCT');
-      expect(result.confidence).toBeGreaterThanOrEqual(0.7);
+    it('should handle combined normalization - AC-01 spec example', () => {
+      expect(service.normalizeText('Búsco camisetas  ')).toBe('busco camisetas');
+    });
+  });
+
+  // REQ-02, AC-02: Keyword scoring with weights
+  describe('AC-02: scoreIntent with keyword weights', () => {
+    it('should score compound phrases higher than single words', () => {
+      const text = 'quiero comprar una camiseta';
+      const decision = service.classify(text);
+
+      // "quiero comprar" (weight 5) should score > "quiero" (weight 1)
+      expect(decision.intent).toBe('ADD_TO_CART');
+      expect(decision.confidence).not.toBe('LOW');
     });
 
-    it('should extract search query from text', () => {
-      const result = service.classify('busco zapatillas running');
-      expect(result.intent).toBe('SEARCH_PRODUCT');
-      expect(result.entities?.query).toBeDefined();
-      expect(result.entities?.query).toContain('zapatillas');
+    it('should accumulate scores from multiple keyword matches', () => {
+      const text = 'busco productos disponibles';
+      const decision = service.classify(text);
+
+      // "busco" (weight 3) + "productos" (weight 2) + "disponibles" (weight 2) = 7
+      expect(decision.intent).toBe('SEARCH_PRODUCT');
+      expect(decision.confidence).toBe('HIGH'); // score >= 5
     });
 
-    it('should classify product search with different variations', () => {
-      const searches = [
-        'busco zapatillas',
-        // 'quiero una camisa', // Removed: "quiero" now triggers ADD_TO_CART (AC-11: intent classification)
-        'tienes pantalones',
-        'necesito zapatos',
-        'mostrar camisas',
-        'ver productos',
-      ];
+    it('should handle single keyword match', () => {
+      const text = 'busco camisetas';
+      const decision = service.classify(text);
 
-      for (const search of searches) {
-        const result = service.classify(search);
-        expect(result.intent).toBe('SEARCH_PRODUCT');
-      }
+      // "busco" (weight 3) → score 3
+      expect(decision.intent).toBe('SEARCH_PRODUCT');
+      expect(decision.confidence).toBe('MED'); // score >= 2 but < 5
+    });
+  });
+
+  // REQ-03, AC-03: Confidence levels based on score
+  describe('AC-03: Confidence calculation', () => {
+    it('should return HIGH confidence for score >= 5', () => {
+      const text = 'hola buenos dias'; // GREETING keywords = 10 pts
+      const decision = service.classify(text);
+
+      expect(decision.confidence).toBe('HIGH');
     });
 
-    it('should classify unknown intent for random text', () => {
-      const result = service.classify('asdfghjkl');
-      expect(result.intent).toBe('UNKNOWN');
-      expect(result.confidence).toBeLessThanOrEqual(0.6);
+    it('should return MED confidence for score >= 2 and < 5', () => {
+      const text = 'busco'; // SEARCH_PRODUCT "busco" = 3 pts
+      const decision = service.classify(text);
+
+      expect(decision.confidence).toBe('MED');
     });
 
-    it('should return query entity for unknown intent', () => {
-      const result = service.classify('random text');
-      expect(result.intent).toBe('UNKNOWN');
-      expect(result.entities?.query).toBe('random text');
+    it('should return LOW confidence for score < 2', () => {
+      const text = 'xyz random text';
+      const decision = service.classify(text);
+
+      expect(decision.confidence).toBe('LOW');
+      expect(decision.intent).toBe('UNKNOWN');
+    });
+  });
+
+  // REQ-04, AC-04: Context-aware routing with lastIntent bonus
+  describe('AC-04: Context-aware routing', () => {
+    it('should boost ADD_TO_CART when lastIntent=SEARCH_PRODUCT - AC-04 spec example', () => {
+      const text = 'quiero'; // Ambiguous: could be ADD_TO_CART or SEARCH_PRODUCT
+
+      const context: IntentContext = {
+        lastIntent: 'SEARCH_PRODUCT',
+      };
+
+      const decision = service.classify(text, context);
+
+      // With context bonus, ADD_TO_CART should win
+      expect(decision.intent).toBe('ADD_TO_CART');
     });
 
-    it('should handle empty text', () => {
-      const result = service.classify('');
-      expect(result.intent).toBe('UNKNOWN');
+    it('should work without context', () => {
+      const text = 'hola';
+      const decision = service.classify(text); // No context
+
+      expect(decision.intent).toBe('GREETING');
     });
 
-    it('should handle text with only spaces', () => {
-      const result = service.classify('   ');
-      expect(result.intent).toBe('UNKNOWN');
+    it('should boost VIEW_CART when lastIntent=ADD_TO_CART', () => {
+      const text = 'ver pedido';
+
+      const context: IntentContext = {
+        lastIntent: 'ADD_TO_CART',
+      };
+
+      const decision = service.classify(text, context);
+
+      // Context bonus should make VIEW_CART score higher
+      expect(decision.intent).toBe('VIEW_CART');
+    });
+  });
+
+  // REQ-05, AC-05: AMBIGUOUS intent when collision detected
+  describe('AC-05: Collision detection (AMBIGUOUS)', () => {
+    it('should detect AMBIGUOUS when multiple intents have similar scores - AC-05 example', () => {
+      // Use keywords with same weight to create collision:
+      // SEARCH_PRODUCT: "tienes" = 2
+      // ADD_TO_CART: "dame" = 2
+      // Score diff = 0 < 2 → AMBIGUOUS
+      const text = 'tienes dame';
+
+      const decision = service.classify(text);
+
+      // Should detect AMBIGUOUS due to collision
+      expect(decision.intent).toBe('AMBIGUOUS');
+      expect(decision.confidence).toBe('LOW');
+      expect(decision.reason).toContain('collision');
     });
 
-    it('should extract query by removing trigger words', () => {
-      const result = service.classify('busco zapatillas nike running');
-      expect(result.entities?.query).not.toContain('busco');
-      expect(result.entities?.query).toContain('zapatillas');
-      expect(result.entities?.query).toContain('nike');
+    it('should NOT be AMBIGUOUS when clear winner exists', () => {
+      const text = 'hola'; // Clear GREETING intent
+      const decision = service.classify(text);
+
+      expect(decision.intent).toBe('GREETING');
+      expect(decision.intent).not.toBe('AMBIGUOUS');
     });
 
-    // PR-04: Cart intent tests
-    describe('AC-11: ADD_TO_CART intent detection', () => {
-      it('should detect ADD_TO_CART', () => {
-        const result = service.classify('agregar camiseta roja');
-        expect(result.intent).toBe('ADD_TO_CART');
-        expect(result.confidence).toBeGreaterThan(0.7);
-      });
+    it('should handle AMBIGUOUS gracefully', () => {
+      // Even if we can't trigger AMBIGUOUS easily, validate structure
+      const decision = service.classify('random xyz');
 
-      it('should extract product name', () => {
-        const result = service.classify('quiero agregar camiseta roja talla M');
-        expect(result.intent).toBe('ADD_TO_CART');
-        expect(result.entities?.productName).toContain('camiseta');
-      });
+      expect(decision).toHaveProperty('intent');
+      expect(decision).toHaveProperty('confidence');
+      expect(decision).toHaveProperty('reason');
+      expect(decision).toHaveProperty('signals');
+      expect(decision).toHaveProperty('missingSlots');
+    });
+  });
 
-      it('should detect variations', () => {
-        const variations = [
-          'añadir producto',
-          'agrega camiseta',
-          'quiero comprar zapatos',
-          'me llevo la blusa',
-        ];
+  // REQ-01 to REQ-05: Full integration tests
+  describe('Full classification flow', () => {
+    it('should classify GREETING with HIGH confidence', () => {
+      const decision = service.classify('Hola, buenos días');
 
-        variations.forEach((text) => {
-          const result = service.classify(text);
-          expect(result.intent).toBe('ADD_TO_CART');
-        });
-      });
+      expect(decision.intent).toBe('GREETING');
+      expect(decision.confidence).toBe('HIGH');
     });
 
-    describe('AC-11: VIEW_CART intent detection', () => {
-      it('should detect VIEW_CART', () => {
-        const result = service.classify('ver carrito');
-        expect(result.intent).toBe('VIEW_CART');
-        expect(result.confidence).toBeGreaterThan(0.8);
-      });
+    it('should classify SEARCH_PRODUCT with normalization', () => {
+      const decision = service.classify('Búsco camisétas');
 
-      it('should detect variations', () => {
-        const variations = ['carrito', 'mostrar carrito', 'qué tengo', 'mi carrito', 'ver pedido'];
-
-        variations.forEach((text) => {
-          const result = service.classify(text);
-          expect(result.intent).toBe('VIEW_CART');
-        });
-      });
+      expect(decision.intent).toBe('SEARCH_PRODUCT');
     });
 
-    describe('AC-11: REMOVE_FROM_CART intent detection', () => {
-      it('should detect REMOVE_FROM_CART', () => {
-        const result = service.classify('quitar camiseta');
-        expect(result.intent).toBe('REMOVE_FROM_CART');
-        expect(result.confidence).toBeGreaterThan(0.7);
-      });
+    it('should classify ADD_TO_CART with context bonus', () => {
+      const context: IntentContext = {
+        lastIntent: 'SEARCH_PRODUCT',
+      };
 
-      it('should detect variations', () => {
-        const variations = ['remover producto', 'eliminar camiseta', 'sacar zapatos'];
+      const decision = service.classify('quiero eso', context);
 
-        variations.forEach((text) => {
-          const result = service.classify(text);
-          expect(result.intent).toBe('REMOVE_FROM_CART');
-        });
-      });
+      expect(decision.intent).toBe('ADD_TO_CART');
     });
 
-    describe('AC-11: UPDATE_CART intent detection', () => {
-      it('should detect UPDATE_CART', () => {
-        const result = service.classify('cambiar cantidad camiseta a 3');
-        expect(result.intent).toBe('UPDATE_CART');
-        expect(result.confidence).toBeGreaterThan(0.7);
-      });
+    it('should return UNKNOWN for unrecognized text', () => {
+      const decision = service.classify('xyz abc 123');
 
-      it('should detect variations', () => {
-        const variations = [
-          'actualizar camiseta a 5',
-          'modificar cantidad zapatos',
-          'cambiar a 2 unidades',
-        ];
-
-        variations.forEach((text) => {
-          const result = service.classify(text);
-          expect(result.intent).toBe('UPDATE_CART');
-        });
-      });
+      expect(decision.intent).toBe('UNKNOWN');
+      expect(decision.confidence).toBe('LOW');
     });
 
-    describe('Intent priority', () => {
-      it('VIEW_CART should have higher priority than SEARCH', () => {
-        const result = service.classify('ver productos en carrito');
-        expect(result.intent).toBe('VIEW_CART');
-      });
+    it('should include signals in decision', () => {
+      const decision = service.classify('busco productos');
 
-      it('ADD_TO_CART should have higher priority than SEARCH', () => {
-        const result = service.classify('quiero agregar producto');
-        expect(result.intent).toBe('ADD_TO_CART');
-      });
+      expect(decision.signals).toBeDefined();
+      expect(decision.signals.length).toBeGreaterThan(0);
+    });
+
+    it('should include reason in decision', () => {
+      const decision = service.classify('hola');
+
+      expect(decision.reason).toBeDefined();
+      expect(typeof decision.reason).toBe('string');
     });
   });
 });
