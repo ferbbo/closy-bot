@@ -119,7 +119,7 @@ export class IntentRouterService {
       };
     }
 
-    // AC-14: Check VIEW_CART (high confidence for explicit cart keywords)
+    // AC-11: Check VIEW_CART (high confidence for explicit cart keywords)
     if (this.matchesKeywords(normalizedText, this.keywords.VIEW_CART)) {
       return {
         intent: 'VIEW_CART',
@@ -139,7 +139,7 @@ export class IntentRouterService {
       };
     }
 
-    // AC-15: Check REMOVE_FROM_CART (must have remove keyword + product reference)
+    // AC-11: Check REMOVE_FROM_CART (must have remove keyword + product reference)
     if (this.matchesKeywords(normalizedText, this.keywords.REMOVE_FROM_CART)) {
       const productName = this.extractProductName(normalizedText, this.keywords.REMOVE_FROM_CART);
       return {

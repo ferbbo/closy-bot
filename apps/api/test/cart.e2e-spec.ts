@@ -280,7 +280,7 @@ describe('Cart (e2e)', () => {
     });
   });
 
-  describe('AC-17: Stock validation', () => {
+  describe('AC-06: Stock validation', () => {
     it('should reject add when stock insufficient', async () => {
       // Update stock to 0
       await prisma.productVariant.update({

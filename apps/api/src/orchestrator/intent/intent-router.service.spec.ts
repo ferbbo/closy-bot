@@ -134,7 +134,7 @@ describe('IntentRouterService', () => {
       });
     });
 
-    describe('AC-14: VIEW_CART intent detection', () => {
+    describe('AC-11: VIEW_CART intent detection', () => {
       it('should detect VIEW_CART', () => {
         const result = service.classify('ver carrito');
         expect(result.intent).toBe('VIEW_CART');
@@ -151,7 +151,7 @@ describe('IntentRouterService', () => {
       });
     });
 
-    describe('AC-15: REMOVE_FROM_CART intent detection', () => {
+    describe('AC-11: REMOVE_FROM_CART intent detection', () => {
       it('should detect REMOVE_FROM_CART', () => {
         const result = service.classify('quitar camiseta');
         expect(result.intent).toBe('REMOVE_FROM_CART');

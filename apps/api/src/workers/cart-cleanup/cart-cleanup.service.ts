@@ -8,7 +8,7 @@ import { CartService } from '../../services/cart.service';
  * Periodically marks expired carts as abandoned.
  * Runs daily via cron to maintain data hygiene.
  *
- * AC-19: Job cleanup marks carritos expirados como abandoned
+ * Cleanup job: marks expired carts as abandoned (edge case per brief)
  */
 @Injectable()
 export class CartCleanupService {
@@ -19,7 +19,7 @@ export class CartCleanupService {
   /**
    * Cron job: Mark expired carts as abandoned
    * Runs every day at 2:00 AM (low-traffic hours)
-   * AC-19: cleanup job runs daily
+   * Cleanup job: runs daily at 3am to mark expired carts as abandoned
    */
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async cleanupExpiredCarts() {

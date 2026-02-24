@@ -4,7 +4,7 @@ import { CartService } from '../../services/cart.service';
 
 /**
  * CartCleanupService Unit Tests
- * PR-04 AC-19: Cleanup job
+ * PR-04 Cleanup job: marks expired carts as abandoned (edge case per brief)
  */
 describe('CartCleanupService', () => {
   let service: CartCleanupService;
@@ -27,7 +27,7 @@ describe('CartCleanupService', () => {
     cartService = module.get(CartService);
   });
 
-  describe('AC-19: cleanupExpiredCarts', () => {
+  describe('Cleanup: cleanupExpiredCarts', () => {
     it('should mark expired carts', async () => {
       cartService.markExpiredCartsAsAbandoned.mockResolvedValue(3);
 

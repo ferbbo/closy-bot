@@ -68,7 +68,7 @@ export class CartService {
     const merchant = await this.merchantResolverService.getById(merchantId);
     const ttlHours = merchant.playbookConfig?.cartConfig?.ttlHours ?? this.defaultTtlHours;
 
-    // Create new cart with TTL (REQ-17, AC-18)
+    // Create new cart with TTL (AC-13: TTL configured at cart creation)
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + ttlHours);
 
@@ -93,7 +93,7 @@ export class CartService {
   }
 
   /**
-   * AC-04, AC-05, AC-16, AC-17: Add item to cart with stock validation and price snapshot
+   * AC-04, AC-05, AC-06: Add item to cart with stock validation and price snapshot
    * REQ-04: Creates cart if not exists, validates stock, captures real price from ProductVariant
    *
    * Guardrails:
@@ -122,7 +122,7 @@ export class CartService {
     const cart = await this.createOrGetActiveCart(customerId, merchantId);
     const cartId = cart.id;
 
-    // Fetch variant to validate stock and get real price (REQ-15, AC-16)
+    // Fetch variant to validate stock and get real price (AC-04: price snapshot)
     const product = await this.productRepository.findByVariantId(variantId);
     if (!product) {
       throw new NotFoundException(`Product variant ${variantId} not found`);
@@ -133,7 +133,7 @@ export class CartService {
       throw new NotFoundException(`Variant ${variantId} not found`);
     }
 
-    // Guardrail: Validate stock (REQ-16, AC-17)
+    // Guardrail: Validate stock (AC-06)
     if (variant.stock < quantity) {
       throw new BadRequestException(
         `Stock insuficiente. Solo quedan ${variant.stock} unidades de ${product.name} - ${variant.name}`,
@@ -185,7 +185,7 @@ export class CartService {
           if (nowExistingItem) {
             const newQuantity = nowExistingItem.quantity + quantity;
 
-            // REQ-16/AC-17: Re-validate stock for new quantity (concurrency guardrail)
+            // AC-06: Re-validate stock for new quantity (concurrency guardrail)
             if (variant.stock < newQuantity) {
               throw new BadRequestException(
                 `Stock insuficiente. Solo quedan ${variant.stock} unidades (tienes ${nowExistingItem.quantity} en carrito)`,
@@ -363,7 +363,7 @@ export class CartService {
 
   /**
    * Mark expired carts as abandoned (called by cleanup job)
-   * AC-19: Cleanup job
+   * Cleanup expired carts job (edge case: mark EXPIRED carts as abandoned)
    */
   async markExpiredCartsAsAbandoned(): Promise<number> {
     const expiredCarts = await this.cartRepository.findExpiredCarts();

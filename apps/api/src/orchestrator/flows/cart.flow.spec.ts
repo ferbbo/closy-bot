@@ -40,7 +40,7 @@ describe('CartFlow', () => {
     catalogService = module.get(CatalogService);
   });
 
-  describe('AC-10: handleAddToCart', () => {
+  describe('AC-07: handleAddToCart', () => {
     it('should add item via conversation', async () => {
       const mockCart = { id: 'cart-1', items: [] };
       const mockProduct = {
@@ -91,7 +91,7 @@ describe('CartFlow', () => {
     });
   });
 
-  describe('AC-11: handleShowCart', () => {
+  describe('AC-08: handleShowCart', () => {
     it('should show cart summary', async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       cartService.createOrGetActiveCart.mockResolvedValue({ id: 'cart-1' } as any);
@@ -132,7 +132,7 @@ describe('CartFlow', () => {
     });
   });
 
-  describe('AC-12: handleRemoveItem', () => {
+  describe('AC-10: handleRemoveItem', () => {
     it('should remove item via conversation', async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       cartService.createOrGetActiveCart.mockResolvedValue({ id: 'cart-1' } as any);
