@@ -140,6 +140,44 @@ export class LlmService {
   }
 
   /**
+   * PR-03.5.1: Generate simple LLM response with minimal context
+   * Used for intent assist (short prompts, low cost, fast timeout)
+   *
+   * @param prompt - System + user prompt combined
+   * @param options - Generation options (maxTokens, temperature, timeout)
+   * @returns LLM response text
+   * @throws Error if LLM is disabled or generation fails
+   */
+  async generateSimple(
+    prompt: string,
+    options?: {
+      maxTokens?: number;
+      temperature?: number;
+      timeout?: number;
+    },
+  ): Promise<string> {
+    if (!this.llmEnabled || !this.provider) {
+      throw new Error('LLM is disabled');
+    }
+
+    try {
+      const response = await this.provider.generateResponse({
+        systemPrompt: '', // Empty system prompt, all in user message
+        userMessage: prompt,
+        conversationHistory: [],
+        context: undefined,
+        maxTokens: options?.maxTokens ?? 100,
+        temperature: options?.temperature ?? 0.3,
+      });
+
+      return response.content;
+    } catch (error) {
+      this.logger.error('Simple LLM generation failed', error);
+      throw error;
+    }
+  }
+
+  /**
    * PR-03.10: Build context with conversation memory (REQ-05, AC-05)
    * Combines:
    * - Last K message logs (history)

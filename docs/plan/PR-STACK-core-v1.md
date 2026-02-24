@@ -366,7 +366,7 @@ graph TD
 
 ##### PR-03.5.1 — Template-First Router + IntentRouter V2 🔴 CRÍTICO NUEVO
 - **Objetivo:** (1) Invertir la lógica del orchestrator para que flows determinísticos ejecuten SIEMPRE primero. (2) Mejorar IntentRouter con scoring, confidence real, normalización y resolución de colisiones. (3) Minimizar costos LLM desde día 1.
-- **Depende de:** PR-03.5 ✅ (orchestrator), PR-03.6 ✅ (LLM adapter), PR-04 (Cart, para tener todos los flows determinísticos).
+- **Depende de:** PR-03.5 ✅ (orchestrator), PR-03.6 ✅ (LLM adapter), PR-04 ✅ (Cart, para tener todos los flows determinísticos).
 - **Incluye:**
 
   **A) Interfaces/contratos formales (nuevos tipos):**

@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MessageDirection, ChannelType } from '@prisma/client'; // PR-03.10, PR-03.11
-import { IntentRouterService, IntentType } from './intent/intent-router.service';
+import type { IntentKey } from './types/intent.types'; // PR-03.5.1
+import { RouteDecisionService } from './route-decision.service'; // PR-03.5.1
 import { CustomerService } from '../services/customer.service';
 import { ConversationService } from '../services/conversation.service';
 import { MerchantResolverService } from '../services/merchant-resolver.service';
@@ -32,31 +33,33 @@ export interface OrchestratorResult {
   shouldSend: boolean;
   conversationId: string;
   merchantId: string;
-  intent: IntentType;
+  intent: IntentKey; // PR-03.5.1: Updated to IntentKey
 }
 
 /**
  * ConversationOrchestrator
- * Main orchestration service that coordinates the conversation pipeline:
+ * PR-03.5.1: Rewritten with template-first routing via RouteDecisionService
+ * REQ-08, AC-08: Removed binary toggle `this.llmEnabled` for granular LLM flags
+ *
+ * Pipeline:
  * 1. Resolve merchant
  * 2. Resolve/create customer
  * 3. Resolve/create conversation
  * 4. PR-03.10: Log inbound message (REQ-07, AC-07)
- * 5. Classify intent
- * 6. Execute flow (using LLM if enabled, or templated flow)
+ * 5. PR-03.5.1: RouteDecisionService.classifyAndRoute() → RouteDecision
+ * 6. Execute flow based on route type (TEMPLATE / LLM_FALLBACK / GENERIC)
  * 7. Return response
  */
 @Injectable()
 export class ConversationOrchestrator {
   private readonly logger = new Logger(ConversationOrchestrator.name);
-  private readonly llmEnabled: boolean;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly merchantResolver: MerchantResolverService,
     private readonly customerService: CustomerService,
     private readonly conversationService: ConversationService,
-    private readonly intentRouter: IntentRouterService,
+    private readonly routeDecisionService: RouteDecisionService, // PR-03.5.1: NEW
     private readonly searchCatalogFlow: SearchCatalogFlow,
     private readonly greetingFlow: GreetingFlow,
     private readonly helpFlow: HelpFlow,
@@ -68,12 +71,13 @@ export class ConversationOrchestrator {
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
     private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
   ) {
-    this.llmEnabled = this.configService.get<boolean>('LLM_ENABLED', false);
+    // PR-03.5.1, REQ-08, AC-08: Removed `this.llmEnabled` binary toggle
   }
 
   /**
    * Process inbound message and generate response
    * PR-03.11: Supports pre-resolved merchantId+channelId for multi-channel routing
+   * PR-03.5.1: Template-first routing with RouteDecisionService
    *
    * @param input - OrchestratorInput with message details
    * @returns OrchestratorResult with response and metadata
@@ -134,13 +138,18 @@ export class ConversationOrchestrator {
       this.logger.warn(`Failed to log inbound message for conversation ${conversation.id}`, error);
     }
 
-    // 5. Classify intent
-    const intentResult = this.intentRouter.classify(input.text);
+    // 5. PR-03.5.1: Classify and route (REQ-07, AC-07)
+    const routeDecision = await this.routeDecisionService.classifyAndRoute(input.text, {
+      conversationId: conversation.id,
+      lastIntent: conversation.memory?.lastIntent as IntentKey | undefined,
+      merchantId: merchant.id,
+    });
+
     this.logger.log(
-      `Intent classified: ${intentResult.intent} (confidence: ${intentResult.confidence})`,
+      `Route: ${routeDecision.route} | Intent: ${routeDecision.intent} | Reason: ${routeDecision.reason}`,
     );
 
-    // 6. Execute flow handler
+    // 6. Execute flow handler based on route type
     let response: string;
 
     // PR-11: Build merchant playbook data for downstream components
@@ -151,78 +160,45 @@ export class ConversationOrchestrator {
       playbookConfig: merchant.playbookConfig,
     };
 
-    // If LLM is enabled, use it for all intents (except explicit flows like search)
-    if (this.llmEnabled) {
-      this.logger.debug('Using LLM for response generation');
-      response = await this.llmService.generateConversationalResponse({
-        userMessage: input.text,
-        merchantId: merchant.id,
-        merchant: merchantPlaybookData,
-        conversationContext: {
-          conversationId: conversation.id,
-          merchantName: merchant.name,
-          industry: merchant.industry ?? undefined,
-        },
-      });
-    } else {
-      // Fallback to templated flow handlers
-      switch (intentResult.intent) {
-        case 'GREETING':
-          response = await this.greetingFlow.handle(
-            customer.name ?? undefined,
-            merchantPlaybookData,
-          );
-          break;
+    // PR-03.5.1, REQ-08, AC-08: Route-based execution (no binary toggle)
+    switch (routeDecision.route) {
+      case 'TEMPLATE':
+        // REQ-15, AC-15: Deterministic flows execute without LLM
+        response = await this.executeTemplateFlow(
+          routeDecision.intent,
+          input.text,
+          customer.id,
+          merchant.id,
+          customer.name ?? undefined,
+          merchantPlaybookData,
+        );
+        break;
 
-        case 'HELP':
-          response = await this.helpFlow.handle();
-          break;
+      case 'LLM_FALLBACK':
+        // REQ-11, AC-11: LLM generates response for UNKNOWN intent
+        this.logger.debug('Using LLM fallback for response generation');
+        response = await this.llmService.generateConversationalResponse({
+          userMessage: input.text,
+          merchantId: merchant.id,
+          merchant: merchantPlaybookData,
+          conversationContext: {
+            conversationId: conversation.id,
+            merchantName: merchant.name,
+            industry: merchant.industry ?? undefined,
+          },
+        });
+        break;
 
-        case 'SEARCH_PRODUCT':
-          const query = intentResult.entities?.query || input.text;
-          response = await this.searchCatalogFlow.handle(merchant.id, query);
-          break;
+      case 'GENERIC':
+        // REQ-12, AC-12: Generic fallback (hardcoded message)
+        response = this.getGenericFallbackMessage();
+        break;
 
-        // PR-04: Cart intents (AC-07, AC-08, AC-09, AC-10)
-        case 'ADD_TO_CART':
-          const productQuery = intentResult.entities?.productName || input.text;
-          response = await this.addToCartFlow.execute(
-            customer.id,
-            merchant.id,
-            productQuery,
-            input.text,
-          );
-          break;
-
-        case 'VIEW_CART':
-          response = await this.viewCartFlow.execute(customer.id, merchant.id);
-          break;
-
-        case 'REMOVE_FROM_CART':
-          const removeQuery = intentResult.entities?.productName || input.text;
-          response = await this.removeFromCartFlow.execute(customer.id, merchant.id, removeQuery);
-          break;
-
-        case 'UPDATE_CART':
-          const updateQuery = intentResult.entities?.productName || input.text;
-          // Extract quantity from text (e.g., "cambiar a 3", "poner 5", "actualizar a 2")
-          const quantityMatch = input.text.match(/\b(\d+)\b/);
-          const newQuantity = quantityMatch ? parseInt(quantityMatch[1], 10) : 1;
-          response = await this.updateCartItemFlow.execute(
-            customer.id,
-            merchant.id,
-            updateQuery,
-            newQuantity,
-          );
-          break;
-
-        case 'UNKNOWN':
-        default:
-          // For unknown intent, try search as fallback
-          const fallbackQuery = intentResult.entities?.query || input.text;
-          response = await this.searchCatalogFlow.handle(merchant.id, fallbackQuery);
-          break;
-      }
+      default:
+        // Type safety: should never reach here
+        this.logger.warn(`Unknown route type: ${(routeDecision as { route: string }).route}`);
+        response = this.getGenericFallbackMessage();
+        break;
     }
 
     this.logger.log(`Generated response (${response.length} chars)`);
@@ -232,8 +208,72 @@ export class ConversationOrchestrator {
       shouldSend: true,
       conversationId: conversation.id,
       merchantId: merchant.id,
-      intent: intentResult.intent,
+      intent: routeDecision.intent,
     };
+  }
+
+  /**
+   * PR-03.5.1: Execute template flow based on intent
+   * REQ-15, AC-15: These flows NEVER generate LLM calls
+   */
+  private async executeTemplateFlow(
+    intent: IntentKey,
+    originalText: string,
+    customerId: string,
+    merchantId: string,
+    customerName: string | undefined,
+    merchantPlaybook: MerchantPlaybookData,
+  ): Promise<string> {
+    switch (intent) {
+      case 'GREETING':
+        return await this.greetingFlow.handle(customerName, merchantPlaybook);
+
+      case 'HELP':
+        return await this.helpFlow.handle();
+
+      case 'SEARCH_PRODUCT':
+        return await this.searchCatalogFlow.handle(merchantId, originalText);
+
+      case 'ADD_TO_CART':
+        return await this.addToCartFlow.execute(customerId, merchantId, originalText, originalText);
+
+      case 'VIEW_CART':
+        return await this.viewCartFlow.execute(customerId, merchantId);
+
+      case 'REMOVE_FROM_CART':
+        return await this.removeFromCartFlow.execute(customerId, merchantId, originalText);
+
+      case 'UPDATE_CART':
+        // Extract quantity from text (e.g., "cambiar a 3", "poner 5", "actualizar a 2")
+        const quantityMatch = originalText.match(/\b(\d+)\b/);
+        const newQuantity = quantityMatch ? parseInt(quantityMatch[1], 10) : 1;
+        return await this.updateCartItemFlow.execute(
+          customerId,
+          merchantId,
+          originalText,
+          newQuantity,
+        );
+
+      case 'CHECKOUT':
+      case 'QUERY_FAQ':
+      case 'HANDOFF':
+      case 'AMBIGUOUS':
+        // These are not yet implemented but have templates routes
+        return this.getGenericFallbackMessage();
+
+      case 'UNKNOWN':
+      default:
+        // Should not reach here (RouteDecisionService handles UNKNOWN)
+        // But keep as safety fallback
+        return await this.searchCatalogFlow.handle(merchantId, originalText);
+    }
+  }
+
+  /**
+   * REQ-12, AC-12: Generic fallback message (no LLM)
+   */
+  private getGenericFallbackMessage(): string {
+    return 'No entendí tu mensaje. Escribe "ayuda" para ver las opciones disponibles.';
   }
 
   /**

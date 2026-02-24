@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { ConversationOrchestrator } from './conversation.orchestrator';
 import { IntentRouterService } from './intent/intent-router.service';
+import { RouteDecisionService } from './route-decision.service'; // PR-03.5.1
 import { CustomerService } from '../services/customer.service';
 import { ConversationService } from '../services/conversation.service';
 import { MerchantResolverService } from '../services/merchant-resolver.service';
@@ -27,9 +28,6 @@ describe('ConversationOrchestrator', () => {
   let greetingFlow: GreetingFlow;
   let helpFlow: HelpFlow;
   let addToCartFlow: AddToCartFlow;
-  let viewCartFlow: ViewCartFlow;
-  let updateCartItemFlow: UpdateCartItemFlow;
-  let removeFromCartFlow: RemoveFromCartFlow;
 
   const mockMerchant: Merchant = {
     id: 'merchant-1',
@@ -97,6 +95,16 @@ describe('ConversationOrchestrator', () => {
           provide: IntentRouterService,
           useValue: {
             classify: jest.fn(),
+          },
+        },
+        {
+          provide: RouteDecisionService,
+          useValue: {
+            classifyAndRoute: jest.fn().mockResolvedValue({
+              route: 'TEMPLATE',
+              intent: 'GREETING',
+              reason: 'Template route',
+            }),
           },
         },
         {
@@ -174,9 +182,6 @@ describe('ConversationOrchestrator', () => {
     greetingFlow = module.get<GreetingFlow>(GreetingFlow);
     helpFlow = module.get<HelpFlow>(HelpFlow);
     addToCartFlow = module.get<AddToCartFlow>(AddToCartFlow);
-    viewCartFlow = module.get<ViewCartFlow>(ViewCartFlow);
-    updateCartItemFlow = module.get<UpdateCartItemFlow>(UpdateCartItemFlow);
-    removeFromCartFlow = module.get<RemoveFromCartFlow>(RemoveFromCartFlow);
   });
 
   it('should be defined', () => {
