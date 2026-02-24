@@ -146,6 +146,7 @@ export class ProductRepository {
       const productsWithVariants = await this.prisma.product.findMany({
         where: {
           id: { in: productIds },
+          merchantId, // Defense in depth: ensure multi-tenancy
           isActive: true,
           variants: {
             some: {

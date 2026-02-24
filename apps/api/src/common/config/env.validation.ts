@@ -31,6 +31,9 @@ export const envValidationSchema = Joi.object({
   LLM_CONTEXT_LAST_K: Joi.number().min(1).max(50).default(10),
   SUMMARIZATION_BATCH_SIZE: Joi.number().min(1).max(100).default(20),
 
+  // PR-03.5.2: Catalog Full-Text Search configuration
+  CATALOG_FTS_ENABLED: Joi.boolean().default(true),
+
   // PR-12: Auth OIDC configuration
   GOOGLE_CLIENT_ID: Joi.string().optional(),
   GOOGLE_CLIENT_SECRET: Joi.string().optional(),

@@ -1,9 +1,9 @@
 -- PR-03.5.2: Add FTS fields to products
 -- AlterTable
 ALTER TABLE "products" ADD COLUMN     "brand" TEXT,
-ADD COLUMN     "image_urls" TEXT[],
+ADD COLUMN     "image_urls" TEXT[] DEFAULT '{}',
 ADD COLUMN     "search_text" TEXT,
-ADD COLUMN     "tags" TEXT[];
+ADD COLUMN     "tags" TEXT[] DEFAULT '{}';
 
 -- Generate initial search_text for existing products
 UPDATE "products" 

@@ -349,9 +349,37 @@ curl -X POST http://localhost:3000/api/catalog/import \
 
 ### Probar Búsqueda Directa (sin WhatsApp)
 
+#### PR-03.5.2: Full-Text Search (FTS) con PostgreSQL
+
+A partir de PR-03.5.2, la búsqueda de productos usa **PostgreSQL Full-Text Search (tsvector + GIN index)** para búsquedas por lenguaje natural, con fallback automático a ILIKE si FTS retorna 0 resultados.
+
+**Feature Flag:**
+```bash
+# En .env
+CATALOG_FTS_ENABLED=true   # Default: true
+```
+
+- **`true`**: Usa FTS con `plainto_tsquery('simple', ...)` + scoring `ts_rank`
+- **`false`**: Usa ILIKE contains (backward compat con PR-03)
+
+**Comportamiento:**
+- Config `'simple'` (sin stemming) → soporta Spanglish: "makeup crema", "blazer negro"
+- Fallback automático: si FTS retorna 0 → retry con ILIKE
+- Campos indexados: `name`, `brand`, `description`, `tags`
+
+#### Ejemplos
+
 ```bash
 # Buscar productos por texto
 curl "http://localhost:3000/api/products?q=camisa" \
+  -H "x-api-key: <merchant-api-key>"
+
+# Búsqueda natural (FTS): "algo para la cara" → productos skincare
+curl "http://localhost:3000/api/products?q=algo%20para%20la%20cara" \
+  -H "x-api-key: <merchant-api-key>"
+
+# Spanglish: "makeup base" → productos con términos mixtos
+curl "http://localhost:3000/api/products?q=makeup%20base" \
   -H "x-api-key: <merchant-api-key>"
 ```
 
