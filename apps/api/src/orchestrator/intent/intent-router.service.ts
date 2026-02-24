@@ -113,7 +113,7 @@ export class IntentRouterService {
         return {
           intent: 'AMBIGUOUS',
           confidence: 'LOW',
-          reason: `Multiple intents matched: ${topIntent}=${topScore}, ${secondIntent}=${secondScore}`,
+          reason: `collision detected: ${topIntent}=${topScore}, ${secondIntent}=${secondScore}`,
           signals: [topIntent, secondIntent],
           missingSlots: ['clarification'],
         };

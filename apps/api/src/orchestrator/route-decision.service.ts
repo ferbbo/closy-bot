@@ -85,6 +85,8 @@ export class RouteDecisionService {
         route: 'TEMPLATE',
         intent: decision.intent,
         reason: `Confidence ${decision.confidence} → template flow`,
+        confidence: decision.confidence,
+        signals: decision.signals,
       };
     }
 
@@ -108,6 +110,8 @@ export class RouteDecisionService {
             route: 'TEMPLATE',
             intent: decision.intent,
             reason: 'LLM intent assist reclassified → template flow',
+            confidence: decision.confidence,
+            signals: decision.signals,
           };
         }
       } catch (error) {
@@ -125,6 +129,8 @@ export class RouteDecisionService {
         route: 'LLM_FALLBACK',
         intent: decision.intent,
         reason: 'LLM_FALLBACK_ENABLED → generate conversational response',
+        confidence: decision.confidence,
+        signals: decision.signals,
       };
     }
 
@@ -136,6 +142,8 @@ export class RouteDecisionService {
       route: 'GENERIC',
       intent: decision.intent,
       reason: 'No template match, LLM disabled → generic fallback',
+      confidence: decision.confidence,
+      signals: decision.signals,
     };
   }
 

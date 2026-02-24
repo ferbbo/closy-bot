@@ -62,7 +62,15 @@ export class LlmService {
     private readonly conversationRepository: ConversationRepository, // PR-03.10
     private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
   ) {
-    this.llmEnabled = this.configService.get<boolean>('LLM_ENABLED', false);
+    // PR-03.5.1: Check LLM_ENABLED (deprecated) OR any granular flag for backward compat
+    const llmEnabledLegacy = this.configService.get<boolean>('LLM_ENABLED', false);
+    const llmIntentAssist = this.configService.get<boolean>('LLM_INTENT_ASSIST', false);
+    const llmFallbackEnabled = this.configService.get<boolean>('LLM_FALLBACK_ENABLED', false);
+    const llmSummaryEnabled = this.configService.get<boolean>('LLM_SUMMARY_ENABLED', false);
+
+    // Enable LLM if legacy flag OR any granular flag is true
+    this.llmEnabled =
+      llmEnabledLegacy || llmIntentAssist || llmFallbackEnabled || llmSummaryEnabled;
 
     if (this.llmEnabled) {
       const providerName = this.configService.get<string>('LLM_PROVIDER', 'groq');

@@ -104,6 +104,8 @@ describe('ConversationOrchestrator', () => {
               route: 'TEMPLATE',
               intent: 'GREETING',
               reason: 'Template route',
+              confidence: 'HIGH',
+              signals: ['hola'],
             }),
           },
         },
@@ -202,6 +204,8 @@ describe('ConversationOrchestrator', () => {
         route: 'TEMPLATE',
         intent: 'GREETING',
         reason: 'HIGH confidence keyword match',
+        confidence: 'HIGH',
+        signals: ['hola'],
       });
 
       const result = await orchestrator.process({
@@ -226,6 +230,8 @@ describe('ConversationOrchestrator', () => {
         route: 'TEMPLATE',
         intent: 'HELP',
         reason: 'HIGH confidence keyword match',
+        confidence: 'HIGH',
+        signals: ['ayuda'],
       });
 
       const result = await orchestrator.process({
@@ -243,6 +249,8 @@ describe('ConversationOrchestrator', () => {
         route: 'TEMPLATE',
         intent: 'SEARCH_PRODUCT',
         reason: 'HIGH confidence keyword match',
+        confidence: 'HIGH',
+        signals: ['busco'],
       });
 
       const result = await orchestrator.process({
@@ -261,6 +269,8 @@ describe('ConversationOrchestrator', () => {
         route: 'GENERIC',
         intent: 'UNKNOWN',
         reason: 'Low confidence, no LLM flags',
+        confidence: 'LOW',
+        signals: [],
       });
 
       const result = await orchestrator.process({
@@ -272,7 +282,8 @@ describe('ConversationOrchestrator', () => {
       expect(result.shouldSend).toBe(true);
       // V2: GENERIC route returns hardcoded message, no searchCatalogFlow call
       expect(searchCatalogFlow.handle).not.toHaveBeenCalled();
-      expect(result.response).toContain('No entendí tu mensaje');
+      // AC-12: Exact message from brief
+      expect(result.response).toBe("No entendí, escribe 'ayuda'");
     });
 
     it('should resolve merchant, customer, and conversation', async () => {
@@ -301,6 +312,8 @@ describe('ConversationOrchestrator', () => {
         route: 'TEMPLATE',
         intent: 'GREETING',
         reason: 'HIGH confidence',
+        confidence: 'HIGH',
+        signals: ['hola'],
       });
 
       const result = await orchestrator.process({
@@ -322,6 +335,8 @@ describe('ConversationOrchestrator', () => {
         route: 'TEMPLATE',
         intent: 'SEARCH_PRODUCT',
         reason: 'HIGH confidence',
+        confidence: 'HIGH',
+        signals: ['text'],
       });
 
       await orchestrator.process({
@@ -337,6 +352,8 @@ describe('ConversationOrchestrator', () => {
         route: 'TEMPLATE',
         intent: 'ADD_TO_CART',
         reason: 'HIGH confidence',
+        confidence: 'HIGH',
+        signals: ['agregar'],
       });
 
       const result = await orchestrator.process({

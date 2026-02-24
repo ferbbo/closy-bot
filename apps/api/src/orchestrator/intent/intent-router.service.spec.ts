@@ -153,18 +153,18 @@ describe('IntentRouterService V2 (PR-03.5.1)', () => {
   // REQ-05, AC-05: AMBIGUOUS intent when collision detected
   describe('AC-05: Collision detection (AMBIGUOUS)', () => {
     it('should detect AMBIGUOUS when multiple intents have similar scores - AC-05 example', () => {
-      // Create artificial collision scenario
-      // Note: Real collisions are rare with proper keyword weights
-      // This validates the collision logic doesn't crash
-      const text = 'quiero ver opciones agregar mostrar';
+      // Use keywords with same weight to create collision:
+      // SEARCH_PRODUCT: "tienes" = 2
+      // ADD_TO_CART: "dame" = 2
+      // Score diff = 0 < 2 → AMBIGUOUS
+      const text = 'tienes dame';
 
       const decision = service.classify(text);
 
-      // Should resolve to one of the matched intents (not crash)
-      expect(decision.intent).toBeDefined();
-      expect(['SEARCH_PRODUCT', 'VIEW_CART', 'ADD_TO_CART', 'AMBIGUOUS']).toContain(
-        decision.intent,
-      );
+      // Should detect AMBIGUOUS due to collision
+      expect(decision.intent).toBe('AMBIGUOUS');
+      expect(decision.confidence).toBe('LOW');
+      expect(decision.reason).toContain('collision');
     });
 
     it('should NOT be AMBIGUOUS when clear winner exists', () => {

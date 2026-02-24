@@ -139,14 +139,23 @@ export class ConversationOrchestrator {
     }
 
     // 5. PR-03.5.1: Classify and route (REQ-07, AC-07)
+    const classifyStartTime = Date.now();
     const routeDecision = await this.routeDecisionService.classifyAndRoute(input.text, {
       conversationId: conversation.id,
       lastIntent: conversation.memory?.lastIntent as IntentKey | undefined,
       merchantId: merchant.id,
     });
+    const latencyMs = Date.now() - classifyStartTime;
 
+    // REQ-13, AC-13: Structured logging with all classification metadata
     this.logger.log(
-      `Route: ${routeDecision.route} | Intent: ${routeDecision.intent} | Reason: ${routeDecision.reason}`,
+      JSON.stringify({
+        intent: routeDecision.intent,
+        confidence: routeDecision.confidence,
+        signals: routeDecision.signals,
+        route: routeDecision.route,
+        latencyMs,
+      }),
     );
 
     // 6. Execute flow handler based on route type
@@ -273,7 +282,7 @@ export class ConversationOrchestrator {
    * REQ-12, AC-12: Generic fallback message (no LLM)
    */
   private getGenericFallbackMessage(): string {
-    return 'No entendí tu mensaje. Escribe "ayuda" para ver las opciones disponibles.';
+    return "No entendí, escribe 'ayuda'";
   }
 
   /**
