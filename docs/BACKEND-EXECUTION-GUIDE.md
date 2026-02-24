@@ -1240,7 +1240,157 @@ curl -X GET http://localhost:3000/merchants/me/config
 
 ---
 
+## Flujo 5.6: FAQ Automáticas — PlaybookConfig + FaqFlow (PR-GAP-2)
+
+### Descripción
+
+Respuestas automáticas a preguntas frecuentes (envío, devoluciones, pagos, horarios) usando keyword matching sobre array de FAQs en `PlaybookConfig`. Sin RAG, sin embeddings, sin costo LLM.
+
+**Casos de uso:**
+- Cliente pregunta "¿Cuánto demora el envío?" → bot responde con FAQ configurada
+- Merchant actualiza sus FAQs via PATCH /merchants/me/playbook
+- Preguntas no cubiertas → fallback a búsqueda/respuesta genérica
+
+### Auth
+
+- **Session cookie** (`connect.sid`) — mismo que dashboard login OIDC
+- Obtener cookie en [Flujo 1](#flujo-1-login-oidc-pr-12)
+
+---
+
+### cURL 5.6.1 — Ver FAQs actuales del merchant
+
+```bash
+curl -s http://localhost:3000/api/merchants/me/playbook \
+  -H "Cookie: connect.sid=<TU_SESSION_COOKIE>" | jq '.faqs'
+```
+
+**Respuesta esperada:**
+```json
+[
+  {
+    "question": "¿Cuánto demora el envío?",
+    "keywords": ["envio", "demora", "llega"],
+    "answer": "Los envíos demoran 3-5 días hábiles 📦"
+  },
+  ...
+]
+```
+
+---
+
+### cURL 5.6.2 — Actualizar FAQs del merchant (PATCH)
+
+> **Nota:** Usa el endpoint existente `PATCH /merchants/me/playbook`. El campo `faqs` reemplaza el array completo (merge por reemplazo total).
+
+```bash
+curl -s -X PATCH http://localhost:3000/api/merchants/me/playbook \
+  -H "Cookie: connect.sid=<TU_SESSION_COOKIE>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "faqs": [
+      {
+        "question": "¿Cuánto demora el envío?",
+        "keywords": ["envio", "demora", "llega", "dias"],
+        "answer": "Los envíos demoran 3-5 días hábiles 📦"
+      },
+      {
+        "question": "¿Hacen cambios de talla?",
+        "keywords": ["cambio", "devolver", "talla"],
+        "answer": "Aceptamos cambios hasta 15 días después de recibir tu pedido 👗"
+      },
+      {
+        "question": "¿Cómo puedo pagar?",
+        "keywords": ["pago", "transferencia", "efectivo"],
+        "answer": "Aceptamos transferencia y pago contra entrega 💳"
+      }
+    ]
+  }' | jq .
+```
+
+**Respuesta esperada (200 OK):**
+```json
+{
+  "success": true,
+  "playbookConfig": {
+    "faqs": [
+      {
+        "question": "¿Cuánto demora el envío?",
+        "keywords": ["envio", "demora", "llega", "dias"],
+        "answer": "Los envíos demoran 3-5 días hábiles 📦"
+      },
+      ...
+    ]
+  }
+}
+```
+
+---
+
+### cURL 5.6.3 — Limpiar FAQs (array vacío)
+
+```bash
+curl -s -X PATCH http://localhost:3000/api/merchants/me/playbook \
+  -H "Cookie: connect.sid=<TU_SESSION_COOKIE>" \
+  -H "Content-Type: application/json" \
+  -d '{ "faqs": [] }' | jq .
+```
+
+---
+
+### cURL 5.6.4 — Simular pregunta FAQ via WhatsApp webhook
+
+```bash
+curl -s -X POST http://localhost:3000/api/webhook/whatsapp \
+  -H "Content-Type: application/json" \
+  -H "X-Hub-Signature-256: sha256=test" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "id": "test-account",
+      "changes": [{
+        "value": {
+          "messaging_product": "whatsapp",
+          "metadata": { "phone_number_id": "<PHONE_NUMBER_ID>" },
+          "messages": [{
+            "id": "faq-test-001",
+            "from": "5491112345678",
+            "timestamp": "1708800000",
+            "type": "text",
+            "text": { "body": "¿Cuánto demora el envío?" }
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }' | jq .
+```
+
+**Respuesta esperada:** `{ "ok": true }` — el bot responde con el FAQ answer configurado.
+
+---
+
+### Configuración FAQ_MATCH_THRESHOLD
+
+```bash
+# En .env: mínimo de keywords que deben matchear para activar FAQ
+FAQ_MATCH_THRESHOLD=1
+```
+
+- `1` (default): basta con 1 keyword para activar FAQ (más sensible)
+- `2`: requiere 2 keywords simultáneas (menos falsos positivos)
+
+### Keywords — buenas prácticas
+
+- Usar **sin tildes**: `"envio"` no `"envío"`, `"devolucion"` no `"devolución"`
+- Usar **minúsculas**: el sistema normaliza automáticamente
+- Keywords **específicas** tienen menos colisiones que genéricas
+- Keywords de FAQs **no compiten** con intents del router — FaqFlow corre solo si el router clasifica `QUERY_FAQ`
+
+---
+
 ## Flujo 6: Cart CRUD Conversacional (PR-04)
+
 
 
 ### Descripción

@@ -57,4 +57,32 @@ export const GenericPlaybookDefaults: PlaybookConfig = {
     upsellEnabled: true,
     maxRecommendations: 3,
   },
+  // PR-GAP-2: FAQ presets genéricos (AC-04)
+  faqs: [
+    {
+      question: '¿Cuánto demora el envío?',
+      keywords: ['envio', 'demora'],
+      answer: 'Los envíos demoran 3-5 días hábiles 📦',
+    },
+    {
+      question: '¿Cómo puedo pagar?',
+      keywords: ['pago', 'metodos'],
+      answer: 'Aceptamos transferencia y pago contra entrega 💳',
+    },
+    {
+      question: '¿Cuál es el horario de atención?',
+      keywords: ['horario', 'abierto'],
+      answer: 'Escribe "ayuda" para ver nuestras opciones 💬',
+    },
+    {
+      question: '¿Cómo los contacto?',
+      keywords: ['contacto', 'telefono', 'whatsapp'],
+      answer: 'Estoy aquí para ayudarte. ¿Qué necesitas? 😊',
+    },
+    {
+      question: '¿Qué opciones tienen?',
+      keywords: ['ayuda', 'opciones'],
+      answer: 'Escribe "ayuda" para ver el menú completo 📋',
+    },
+  ],
 };

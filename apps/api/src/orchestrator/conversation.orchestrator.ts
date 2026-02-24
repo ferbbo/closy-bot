@@ -14,6 +14,7 @@ import { AddToCartFlow } from './flows/add-to-cart.flow'; // PR-04 AC-07
 import { ViewCartFlow } from './flows/view-cart.flow'; // PR-04 AC-08
 import { UpdateCartItemFlow } from './flows/update-cart-item.flow'; // PR-04 AC-09
 import { RemoveFromCartFlow } from './flows/remove-from-cart.flow'; // PR-04 AC-10
+import { FaqFlow } from './flows/faq.flow'; // PR-GAP-2 AC-05
 import { LlmService } from '../llm/llm.service';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10 AC-06
@@ -67,6 +68,7 @@ export class ConversationOrchestrator {
     private readonly viewCartFlow: ViewCartFlow, // PR-04 AC-08
     private readonly updateCartItemFlow: UpdateCartItemFlow, // PR-04 AC-09
     private readonly removeFromCartFlow: RemoveFromCartFlow, // PR-04 AC-10
+    private readonly faqFlow: FaqFlow, // PR-GAP-2 AC-05
     private readonly llmService: LlmService,
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
     private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
@@ -275,8 +277,13 @@ export class ConversationOrchestrator {
           newQuantity,
         );
 
-      case 'CHECKOUT':
       case 'QUERY_FAQ':
+        // PR-GAP-2 REQ-05, AC-05: Keyword-based FAQ matching (no LLM)
+        return (
+          this.faqFlow.handle(merchantPlaybook, originalText) ?? this.getGenericFallbackMessage()
+        );
+
+      case 'CHECKOUT':
       case 'HANDOFF':
       case 'AMBIGUOUS':
         // These are not yet implemented but have templates routes

@@ -434,4 +434,69 @@ describe('MerchantSettings (e2e) - PR-15', () => {
       expect(response.body.playbookConfig.botPersonality.emojiUsage).toBe('moderate');
     });
   });
+
+  describe('AC-06 (PR-GAP-2): PATCH /merchants/me/playbook — faqs field', () => {
+    const testFaqs = [
+      {
+        question: '¿Cuánto demora el envío?',
+        keywords: ['envio', 'demora', 'llega'],
+        answer: 'Los envíos demoran 3-5 días hábiles 📦',
+      },
+      {
+        question: '¿Cómo puedo pagar?',
+        keywords: ['pago', 'transferencia', 'efectivo'],
+        answer: 'Aceptamos transferencia y pago contra entrega 💳',
+      },
+    ];
+
+    it('AC-06: PATCH /merchants/me/playbook with faqs array returns 200 and persists faqs', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/merchants/me/playbook')
+        .set('Cookie', [`session_id=${sessionId}`])
+        .send({ faqs: testFaqs })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.playbookConfig.faqs)).toBe(true);
+      expect(response.body.playbookConfig.faqs).toHaveLength(2);
+      expect(response.body.playbookConfig.faqs[0].question).toBe(testFaqs[0].question);
+      expect(response.body.playbookConfig.faqs[0].keywords).toEqual(testFaqs[0].keywords);
+      expect(response.body.playbookConfig.faqs[0].answer).toBe(testFaqs[0].answer);
+    });
+
+    it('AC-06: PATCH persists faqs in DB — verify via prisma', async () => {
+      await request(app.getHttpServer())
+        .patch('/merchants/me/playbook')
+        .set('Cookie', [`session_id=${sessionId}`])
+        .send({ faqs: testFaqs })
+        .expect(200);
+
+      const merchant = await prisma.merchant.findUnique({ where: { id: testMerchant.id } });
+      const playbookConfig = merchant?.playbookConfig as Record<string, unknown> | null;
+      const storedFaqs = playbookConfig?.['faqs'] as typeof testFaqs | undefined;
+
+      expect(Array.isArray(storedFaqs)).toBe(true);
+      expect(storedFaqs!.length).toBe(2);
+      expect(storedFaqs![0].question).toBe(testFaqs[0].question);
+    });
+
+    it('AC-06: PATCH with empty faqs array clears faqs', async () => {
+      // First set some faqs
+      await request(app.getHttpServer())
+        .patch('/merchants/me/playbook')
+        .set('Cookie', [`session_id=${sessionId}`])
+        .send({ faqs: testFaqs })
+        .expect(200);
+
+      // Then clear them
+      const response = await request(app.getHttpServer())
+        .patch('/merchants/me/playbook')
+        .set('Cookie', [`session_id=${sessionId}`])
+        .send({ faqs: [] })
+        .expect(200);
+
+      expect(Array.isArray(response.body.playbookConfig.faqs)).toBe(true);
+      expect(response.body.playbookConfig.faqs).toHaveLength(0);
+    });
+  });
 });

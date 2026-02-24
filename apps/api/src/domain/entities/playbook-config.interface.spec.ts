@@ -4,7 +4,7 @@
  * Evidence for AC-01: playbook-config interface has botPersonality + all 23 PlaybookMessages fields.
  */
 
-import { PlaybookConfig, PlaybookMessages, BotPersonality } from './playbook-config.interface';
+import { PlaybookConfig, PlaybookMessages, BotPersonality, Faq } from './playbook-config.interface';
 import { GenericPlaybookDefaults } from './playbook-defaults/generic.config';
 
 describe('AC-01: PlaybookConfig interface — botPersonality + PlaybookMessages completeness (PR-GAP-1)', () => {
@@ -85,5 +85,36 @@ describe('AC-01: PlaybookConfig interface — botPersonality + PlaybookMessages 
     const msgs: PlaybookMessages = GenericPlaybookDefaults.messages;
     const fieldCount = Object.keys(msgs).length;
     expect(fieldCount).toBeGreaterThanOrEqual(22);
+  });
+
+  // PR-GAP-2: Faq type evidence
+  it('AC-01 (PR-GAP-2): Faq type has required fields question, keywords, answer', () => {
+    const faq: Faq = {
+      question: '¿Cuánto demora el envío?',
+      keywords: ['envio', 'demora'],
+      answer: 'Los envíos demoran 3-5 días hábiles 📦',
+    };
+    expect(typeof faq.question).toBe('string');
+    expect(Array.isArray(faq.keywords)).toBe(true);
+    expect(typeof faq.answer).toBe('string');
+  });
+
+  it('AC-01 (PR-GAP-2): PlaybookConfig has optional faqs field of type Faq[]', () => {
+    // GenericPlaybookDefaults now has faqs
+    const config: PlaybookConfig = GenericPlaybookDefaults;
+    expect(Array.isArray(config.faqs)).toBe(true);
+    if (config.faqs && config.faqs.length > 0) {
+      const firstFaq = config.faqs[0];
+      expect(typeof firstFaq.question).toBe('string');
+      expect(Array.isArray(firstFaq.keywords)).toBe(true);
+      expect(typeof firstFaq.answer).toBe('string');
+    }
+  });
+
+  it('AC-01 (PR-GAP-2): PlaybookConfig.faqs is optional (undefined is valid)', () => {
+    const config: PlaybookConfig = { ...GenericPlaybookDefaults };
+    delete (config as Partial<PlaybookConfig>).faqs;
+    // Should compile and be valid without faqs
+    expect(config.faqs).toBeUndefined();
   });
 });

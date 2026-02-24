@@ -6,6 +6,19 @@
 
 export type Industry = 'ropa' | 'belleza' | 'minimarket';
 
+/**
+ * PR-GAP-2: FAQ entry for keyword-based matching (no RAG/embeddings)
+ * REQ-01: Faq type with question, keywords, answer
+ */
+export interface Faq {
+  /** Pregunta ejemplo (para referencia humana) */
+  question: string;
+  /** Keywords de matching (normalizado: lowercase, sin tildes) */
+  keywords: string[];
+  /** Respuesta del bot (puede contener emojis y saltos de línea) */
+  answer: string;
+}
+
 export interface PlaybookConfig {
   industry: Industry;
   llmPrompt: LlmPromptConfig;
@@ -15,6 +28,8 @@ export interface PlaybookConfig {
   cartConfig?: CartConfig; // PR-04: Cart-specific configuration
   /** PR-GAP-1: High-level personality selector */
   botPersonality?: BotPersonality;
+  /** PR-GAP-2: FAQ array for keyword-based matching (no LLM, no embeddings) */
+  faqs?: Faq[];
 }
 
 /**

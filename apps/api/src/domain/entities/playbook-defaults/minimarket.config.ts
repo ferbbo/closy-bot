@@ -73,4 +73,32 @@ export const MinimarketPlaybookDefaults: PlaybookConfig = {
   cartConfig: {
     ttlHours: 24, // PR-04: Cart expires after 24 hours
   },
+  // PR-GAP-2: FAQ presets para industria Minimarket (AC-04)
+  faqs: [
+    {
+      question: '¿Cuánto demora el delivery?',
+      keywords: ['delivery', 'envio', 'demora'],
+      answer: 'Delivery en 2-4 horas en zona urbana 🛒',
+    },
+    {
+      question: '¿Cuál es el horario de atención?',
+      keywords: ['horario', 'abierto', 'atienden'],
+      answer: 'Atendemos de 8am a 10pm todos los días 🕐',
+    },
+    {
+      question: '¿Hay mínimo de compra?',
+      keywords: ['minimo', 'compra', 'pedido'],
+      answer: 'Pedido mínimo: $15.000 para delivery 💰',
+    },
+    {
+      question: '¿Cómo puedo pagar?',
+      keywords: ['pago', 'transferencia', 'efectivo'],
+      answer: 'Solo efectivo contra entrega 💵',
+    },
+    {
+      question: '¿Aceptan devoluciones?',
+      keywords: ['devolver', 'cambio', 'producto'],
+      answer: 'No aceptamos devoluciones en alimentos. Solo productos defectuosos 🚫',
+    },
+  ],
 };

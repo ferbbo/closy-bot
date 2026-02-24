@@ -93,3 +93,42 @@ describe('AC-06: Industry presets completeness — botPersonality + all messages
     expect(uniqueStyles.size).toBeGreaterThanOrEqual(2);
   });
 });
+
+/**
+ * AC-04: 4 industry presets have 5+ FAQs base cada uno (PR-GAP-2)
+ */
+describe('AC-04: Industry presets tienen 5+ FAQs base (PR-GAP-2)', () => {
+  const presets = [
+    { name: 'Generic', preset: GenericPlaybookDefaults },
+    { name: 'Ropa', preset: RopaPlaybookDefaults },
+    { name: 'Belleza', preset: BellezaPlaybookDefaults },
+    { name: 'Minimarket', preset: MinimarketPlaybookDefaults },
+  ];
+
+  for (const { name, preset } of presets) {
+    it(`AC-04: ${name} preset tiene al menos 5 FAQs`, () => {
+      expect(Array.isArray(preset.faqs)).toBe(true);
+      expect(preset.faqs!.length).toBeGreaterThanOrEqual(5);
+    });
+
+    it(`AC-04: ${name} preset FAQs tienen question, keywords[] y answer`, () => {
+      for (const faq of preset.faqs!) {
+        expect(typeof faq.question).toBe('string');
+        expect(faq.question.length).toBeGreaterThan(0);
+        expect(Array.isArray(faq.keywords)).toBe(true);
+        expect(faq.keywords.length).toBeGreaterThan(0);
+        expect(typeof faq.answer).toBe('string');
+        expect(faq.answer.length).toBeGreaterThan(0);
+      }
+    });
+
+    it(`AC-04: ${name} preset FAQ keywords están en minúsculas sin tildes`, () => {
+      for (const faq of preset.faqs!) {
+        for (const kw of faq.keywords) {
+          // Keywords should be lowercase
+          expect(kw).toBe(kw.toLowerCase());
+        }
+      }
+    });
+  }
+});

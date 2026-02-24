@@ -81,4 +81,33 @@ export const BellezaPlaybookDefaults: PlaybookConfig = {
   cartConfig: {
     ttlHours: 24, // PR-04: Cart expires after 24 hours
   },
+  // PR-GAP-2: FAQ presets para industria Belleza (AC-04)
+  faqs: [
+    {
+      question: '¿Cuánto tarda el envío?',
+      keywords: ['envio', 'demora'],
+      answer: 'Envíos en 2-4 días hábiles. Gratis en compras >$50k 🚚',
+    },
+    {
+      question: '¿Aceptan devoluciones?',
+      keywords: ['devolver', 'devolucion', 'no me gusto'],
+      answer: 'Aceptamos devoluciones hasta 30 días sin abrir 💄',
+    },
+    {
+      question: '¿Tienen lista de ingredientes?',
+      keywords: ['ingredientes', 'componentes', 'alergia'],
+      answer:
+        'Todos nuestros productos tienen ingredientes en la etiqueta. ¿Alguna alergia específica? 🌿',
+    },
+    {
+      question: '¿Cómo puedo pagar?',
+      keywords: ['pago', 'metodos', 'transferencia'],
+      answer: 'Aceptamos transferencia, link de pago y contra entrega 💳',
+    },
+    {
+      question: '¿Tienen muestras?',
+      keywords: ['muestra', 'prueba', 'tamano'],
+      answer: 'Tenemos muestras de algunos productos. ¿Cuál te interesa? ✨',
+    },
+  ],
 };
