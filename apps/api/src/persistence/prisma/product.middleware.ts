@@ -3,7 +3,10 @@ import { Prisma } from '@prisma/client';
 /**
  * PR-03.5.2: Middleware to auto-generate searchText for Product
  * Triggers on product.create and product.update
- * Concatenates: name + brand + description + tags
+ * Concatenates: name + brand + description + tags + variants.name
+ *
+ * Note: Variants are only indexed during Product creation with nested create.
+ * Changes to variants after product creation do not auto-update searchText.
  */
 export function createProductSearchTextMiddleware(): Prisma.Middleware {
   return async (params, next) => {
@@ -23,8 +26,25 @@ export function createProductSearchTextMiddleware(): Prisma.Middleware {
       const description = data.description?.set ?? data.description ?? '';
       const tags = data.tags?.set ?? data.tags ?? [];
 
+      // Extract variant names from nested create (if present)
+      const variantNames: string[] = [];
+      if (data.variants?.create) {
+        const variantsToCreate = Array.isArray(data.variants.create)
+          ? data.variants.create
+          : [data.variants.create];
+        variantNames.push(
+          ...variantsToCreate.map((v: { name?: string }) => v.name || '').filter(Boolean),
+        );
+      }
+
       // Concatenate fields with spaces
-      const searchText = [name, brand, description, Array.isArray(tags) ? tags.join(' ') : '']
+      const searchText = [
+        name,
+        brand,
+        description,
+        Array.isArray(tags) ? tags.join(' ') : '',
+        variantNames.join(' '),
+      ]
         .filter(Boolean)
         .join(' ')
         .trim();

@@ -152,4 +152,32 @@ describe('ProductSearchTextMiddleware - AC-07, AC-08', () => {
     expect(params.args.data.searchText).toBe('Product');
     expect(mockNext).toHaveBeenCalled();
   });
+
+  it('AC-05: should include variant names in searchText on nested create', async () => {
+    const params: Prisma.MiddlewareParams = {
+      model: 'Product',
+      action: 'create',
+      args: {
+        data: {
+          name: 'Camiseta',
+          brand: 'Nike',
+          description: 'Camiseta roja',
+          tags: ['ropa'],
+          variants: {
+            create: [
+              { sku: 'CAM-M', name: 'talla M', price: 29.99, stock: 10 },
+              { sku: 'CAM-L', name: 'talla L', price: 29.99, stock: 5 },
+            ],
+          },
+        },
+      },
+      dataPath: [],
+      runInTransaction: false,
+    };
+
+    await middleware(params, mockNext);
+
+    expect(params.args.data.searchText).toBe('Camiseta Nike Camiseta roja ropa talla M talla L');
+    expect(mockNext).toHaveBeenCalled();
+  });
 });
