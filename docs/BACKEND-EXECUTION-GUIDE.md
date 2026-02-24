@@ -16,11 +16,6 @@ Copiar `.env.example` a `.env` y configurar:
 # Base de datos
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/closy_bot?schema=public"
 
-# CORS (PR-FE-00) - Para dashboard frontend
-# Comma-separated list de orígenes permitidos
-# Default dev: http://localhost:3001 (Next.js dashboard)
-CORS_ORIGINS="http://localhost:3001"
-
 # Auth OIDC (PR-12)
 AUTH_REDIRECT_URL="http://localhost:3000"
 AUTH_COOKIE_DOMAIN=""  # vacío para localhost
@@ -545,13 +540,12 @@ El endpoint JSON (`/api/catalog/import`) sigue funcional pero retorna headers de
 | Respuestas LLM | PR-03.6 | ✅ Funcional (si `LLM_ENABLED=true`) |
 | Catálogo CRUD/Import | PR-03.7 | ✅ Funcional |
 | Catalog Import File Upload | PR-17 | ✅ Funcional (multipart/form-data) |
+| Carrito CRUD conversacional | PR-04 | ✅ Funcional (ADD_TO_CART, VIEW_CART, UPDATE_CART, REMOVE_FROM_CART) |
 
 ### ❌ Flujos Pendientes (ver PR-STACK)
 
 | Flujo | PR Requerido | Descripción |
 |-------|--------------|-------------|
-| Agregar al carrito | PR-04 | Intent `ADD_TO_CART` + modelos Cart/CartItem |
-| Ver carrito | PR-04 | Intent `VIEW_CART` + flow |
 | Checkout | PR-05 | Captura datos + crear Order |
 | Confirmar pago | PR-06 | Webhook + fallback `PAGADO` |
 | Estado pedido | PR-07 | Intent `ORDER_STATUS` + flow |
@@ -1045,6 +1039,494 @@ Ejemplo:
 
 ---
 
+## Flujo 6: Cart CRUD Conversacional (PR-04)
+
+### Descripción
+
+Sistema de carrito de compras conversacional integrado con WhatsApp. Permite a los clientes agregar/ver/modificar/eliminar productos mediante lenguaje natural, con TTL dinámico y validaciones de stock.
+
+**Casos de uso:**
+- Cliente agrega productos al carrito: "Quiero 2 camisas rojas"
+- Cliente consulta su carrito: "Qué tengo en mi carrito?"
+- Cliente modifica cantidad: "Cambia las camisas a 3"
+- Cliente elimina items: "Quita la camisa azul"
+- Sistema maneja duplicados incrementando cantidad automáticamente
+- Carrito expira después de 24h de inactividad (configurable por playbook)
+- TTL se refresca con cada operación (agregar/modificar/eliminar)
+
+### Modelos
+
+#### Cart (PostgreSQL)
+
+```prisma
+model Cart {
+  id          String      @id @default(cuid())
+  customerId  String      // FK to Customer.id (Customer.phone holds actual number)
+  merchantId  String
+  status      CartStatus  @default(active) // active | abandoned | completed
+  expiresAt   DateTime    // TTL: default 24h desde última interacción
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  items       CartItem[]
+  customer    Customer    @relation(fields: [customerId], references: [id])
+  merchant    Merchant    @relation(fields: [merchantId], references: [id])
+  
+  @@index([customerId, merchantId, status])
+  @@index([expiresAt])  // Para cleanup job
+  @@map("carts")
+}
+
+enum CartStatus {
+  active     // Carrito en uso
+  abandoned  // Expirado por TTL (candidato para recordatorio)
+  completed  // Convertido a Order (PR-05)
+}
+```
+
+#### CartItem (PostgreSQL)
+
+```prisma
+model CartItem {
+  id            String   @id @default(cuid())
+  cartId        String
+  variantId     String
+  quantity      Int      // 1-99
+  priceSnapshot Decimal  // Precio al momento de agregar (inmutable)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  cart          Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variant       ProductVariant @relation(fields: [variantId], references: [id])
+  
+  @@unique([cartId, variantId])  // Evita duplicados (se incrementa qty)
+  @@index([cartId])
+  @@map("cart_items")
+}
+```
+
+**Guardrails:**
+- `priceSnapshot`: Capturado de `variant.price` al agregar (bot NO inventa precios)
+- `quantity`: Rango 1-99 validado en CartService
+- `unique [cartId, variantId]`: Duplicados incrementan quantity en vez de crear nueva fila
+
+### Intents Conversacionales
+
+| Intent | Keywords | Confidence | Descripción |
+|--------|----------|------------|-------------|
+| `ADD_TO_CART` | agregar, añadir, quiero, me interesa, agregar al carrito, añadir al carrito | 0.85 | Agregar producto (con cantidad opcional) |
+| `VIEW_CART` | carrito, ver carrito, mostrar carrito, qué tengo, mi carrito, pedido, ver pedido | 0.80 | Ver resumen del carrito actual |
+| `UPDATE_CART` | cambiar cantidad, modificar, actualizar, cambiar a, actualizar cantidad | 0.75 | Cambiar quantity de un item |
+| `REMOVE_FROM_CART` | quitar, eliminar, remover, borrar, sacar, quitar del carrito | 0.80 | Eliminar item del carrito |
+
+**Prioridad de clasificación:**
+1. `ADD_TO_CART` se verifica ANTES de `VIEW_CART` para evitar colisión con "agregar al carrito"
+2. Si múltiples intents coinciden, se usa el de mayor confidence
+
+### Ejemplos WhatsApp
+
+#### 1. Agregar al Carrito (ADD_TO_CART)
+
+**Cliente:**
+```
+Quiero 2 camisas rojas
+```
+
+**Bot procesa:**
+1. IntentRouter clasifica como `ADD_TO_CART` (keywords: "quiero")
+2. CartFlow.handleAddToCart extrae:
+   - Producto: "camisas rojas" (búsqueda fuzzy en catálogo)
+   - Cantidad: 2 (regex `\b(\d+)\b` en texto)
+3. CartService.addItem valida:
+   - Stock disponible: `variant.stock >= 2`
+   - Snapshot precio: `priceSnapshot = variant.price`
+   - Duplicado: Si ya existe, incrementa `quantity += 2`
+   - TTL refresh: `expiresAt = now() + 24h`
+
+**Bot responde:**
+```
+✅ Agregado al carrito:
+• Camisa Roja Talla M x2 - $70.000
+
+Total del carrito: $70.000 (2 items)
+```
+
+#### 2. Ver Carrito (VIEW_CART)
+
+**Cliente:**
+```
+Qué tengo en mi carrito?
+```
+
+**Bot responde:**
+```
+🛒 Tu carrito:
+
+1. Camisa Roja Talla M x2 - $70.000
+2. Pantalón Azul Talla L x1 - $120.000
+
+Total: $190.000 (3 items)
+
+¿Quieres agregar algo más o finalizar tu pedido?
+```
+
+#### 3. Modificar Cantidad (UPDATE_CART)
+
+**Cliente:**
+```
+Cambia las camisas a 3
+```
+
+**Bot procesa:**
+1. Busca item "camisas" en carrito actual
+2. Valida cantidad: 1 <= 3 <= 99 ✓
+3. Valida stock: `variant.stock >= 3` ✓
+4. Actualiza quantity: 2 → 3
+5. Refresca TTL: `expiresAt = now() + 24h`
+
+**Bot responde:**
+```
+✅ Cantidad actualizada:
+• Camisa Roja Talla M x3 - $105.000
+
+Total del carrito: $225.000 (4 items)
+```
+
+#### 4. Eliminar Item (REMOVE_FROM_CART)
+
+**Cliente:**
+```
+Quita la camisa azul
+```
+
+**Bot procesa:**
+1. Busca item "camisa azul" en carrito
+2. Elimina CartItem
+3. Refresca TTL del Cart
+
+**Bot responde:**
+```
+❌ Producto eliminado del carrito:
+• Camisa Azul Talla S
+
+Total del carrito: $120.000 (1 item)
+```
+
+#### 5. Agregar Duplicado (Incrementa Quantity)
+
+**Cliente tiene:** Camisa Roja x2 en carrito
+
+**Cliente:**
+```
+Agregar 3 camisas rojas más
+```
+
+**Bot procesa:**
+1. Detecta unique constraint `[cartId, variantId]`
+2. En vez de crear nueva fila: `quantity = 2 + 3 = 5`
+
+**Bot responde:**
+```
+✅ Cantidad incrementada:
+• Camisa Roja Talla M x5 - $175.000
+
+Total del carrito: $175.000 (5 items)
+```
+
+### TTL Behavior (Time-To-Live)
+
+#### Configuración
+
+**Default:** 24 horas desde última interacción
+
+**Playbook Configurable:**
+```typescript
+// apps/api/src/domain/entities/playbook-config.interface.ts
+interface CartConfig {
+  ttlHours: number;  // Default: 24
+}
+```
+
+**Ejemplo en playbook:**
+```json
+{
+  "industry": "ropa",
+  "cartConfig": {
+    "ttlHours": 48
+  }
+}
+```
+
+**Fallback:** Si `playbookConfig.cartConfig` no existe, usa `CART_TTL_HOURS` (env var) o 24h.
+
+#### Eventos que Refrescan TTL
+
+| Operación | Método | TTL Refresh |
+|-----------|--------|-------------|
+| Crear carrito | `createOrGetActiveCart()` | ✅ `expiresAt = now() + ttlHours` |
+| Agregar item | `addItem()` | ✅ Refresca después de agregar |
+| Modificar cantidad | `updateQuantity()` | ✅ Refresca después de modificar |
+| Eliminar item | `removeItem()` | ✅ Refresca después de eliminar |
+| Ver carrito | `getCartSummary()` | ❌ Solo lectura, no refresca |
+
+#### Cleanup Job
+
+```typescript
+// apps/api/src/workers/cart-cleanup.service.ts
+@Cron('0 */6 * * *')  // Cada 6 horas
+async handleExpiredCarts() {
+  const abandoned = await this.cartService.markExpiredCartsAsAbandoned();
+  // Status: active → abandoned
+  // Trigger: abandoned reminders (PR-08)
+}
+```
+
+**Query:**
+```sql
+-- Encuentra carritos expirados
+SELECT * FROM carts 
+WHERE status = 'active' 
+  AND expires_at < NOW();
+```
+
+### Edge Cases
+
+#### 1. Stock Insuficiente
+
+**Escenario:** Cliente intenta agregar quantity > stock disponible
+
+**Cliente:**
+```
+Quiero 10 camisas rojas
+```
+
+**Bot valida:**
+```typescript
+if (variant.stock < requestedQuantity) {
+  throw new BadRequestException('Stock insuficiente');
+}
+```
+
+**Bot responde:**
+```
+😔 Solo tenemos 5 unidades disponibles de Camisa Roja Talla M.
+¿Quieres agregar las 5 disponibles?
+```
+
+#### 2. Carrito Expirado
+
+**Escenario:** Cliente intenta operar sobre carrito con `expiresAt < now()`
+
+**Bot:**
+1. Cleanup job ya marcó como `status: abandoned`
+2. `findActiveCart()` retorna `null` (filtra `status != active` y `expiresAt < now()`)
+3. Se crea nuevo carrito vacío
+
+**Respuesta:**
+```
+Tu carrito anterior expiró. He creado uno nuevo.
+¿En qué puedo ayudarte?
+```
+
+#### 3. Quantity Fuera de Rango
+
+**Escenario:** Cliente pide quantity < 1 o > 99
+
+**Cliente:**
+```
+Cambiar camisas a 150
+```
+
+**Bot valida:**
+```typescript
+if (quantity < 1 || quantity > 99) {
+  throw new BadRequestException('Cantidad debe estar entre 1 y 99');
+}
+```
+
+**Bot responde:**
+```
+La cantidad debe estar entre 1 y 99.
+Por favor, ingresa una cantidad válida.
+```
+
+#### 4. Item No Encontrado en Carrito
+
+**Escenario:** Cliente intenta modificar/eliminar item que no está en carrito
+
+**Cliente:**
+```
+Quita el pantalón verde
+```
+
+**Bot valida:**
+```typescript
+const item = cart.items.find(i => fuzzyMatch(i.variant.name, query));
+if (!item) {
+  return 'No encontré ese producto en tu carrito';
+}
+```
+
+#### 5. Producto No Encontrado en Catálogo
+
+**Escenario:** Cliente intenta agregar producto que no existe
+
+**Cliente:**
+```
+Quiero una moto
+```
+
+**Bot busca:**
+1. SearchCatalogService.findVariants('moto') → `[]`
+
+**Bot responde:**
+```
+No encontré "moto" en nuestro catálogo.
+¿Quieres ver nuestros productos disponibles?
+```
+
+### Testing
+
+#### Vía WhatsApp (Recomendado)
+
+**Pre-requisitos:**
+1. Merchant con WhatsApp channel conectado (Flujo 2)
+2. Catálogo cargado con productos (Flujo 4)
+3. Playbook configurado (Flujo 5 - opcional)
+
+**Flujo completo:**
+
+```
+# 1. Agregar producto
+Cliente: "Quiero 2 camisas rojas"
+Bot: ✅ Agregado al carrito...
+
+# 2. Agregar más (duplicado incrementa)
+Cliente: "Agregar 1 camisa roja más"
+Bot: ✅ Cantidad incrementada: x3...
+
+# 3. Ver carrito
+Cliente: "Ver mi carrito"
+Bot: 🛒 Tu carrito: ...
+
+# 4. Modificar cantidad
+Cliente: "Cambiar camisas a 5"
+Bot: ✅ Cantidad actualizada...
+
+# 5. Eliminar item
+Cliente: "Quita las camisas"
+Bot: ❌ Producto eliminado...
+
+# 6. Verificar carrito vacío
+Cliente: "Ver carrito"
+Bot: Tu carrito está vacío.
+```
+
+#### Vía Tests (Automatizado)
+
+```bash
+# Tests unitarios
+pnpm test cart.service.spec.ts      # 9 tests (AC-03, AC-04, AC-06, AC-13, cleanup)
+pnpm test cart.repository.spec.ts   # 6 tests (AC-03)
+pnpm test cart.flow.spec.ts         # 10 tests (AC-07, AC-08, AC-09, AC-10, AC-11, AC-12)
+
+# Tests de integración
+pnpm test conversation.orchestrator.spec.ts  # AC-12 routing
+
+# Todos los tests de cart
+pnpm test cart
+# => 25 tests passing
+```
+
+#### Verificar TTL en DB
+
+```sql
+-- Ver carritos activos con TTL
+SELECT 
+  id,
+  customer_id,
+  status,
+  expires_at,
+  EXTRACT(EPOCH FROM (expires_at - NOW())) / 3600 AS hours_remaining
+FROM carts
+WHERE status = 'active'
+ORDER BY expires_at ASC;
+
+-- Ver items en carrito
+SELECT 
+  ci.id,
+  ci.quantity,
+  ci.price_snapshot,
+  v.name AS product_name
+FROM cart_items ci
+JOIN product_variants v ON ci.variant_id = v.id
+WHERE ci.cart_id = '<cart-id>';
+```
+
+#### Simular TTL Expiration
+
+```sql
+-- Forzar expiración de carrito para testing
+UPDATE carts 
+SET expires_at = NOW() - INTERVAL '1 hour'
+WHERE id = '<cart-id>';
+
+-- Ejecutar cleanup job manualmente
+-- (o esperar 6 horas para cron)
+```
+
+#### Validar Playbook TTL Config
+
+```bash
+# 1. Configurar TTL custom en playbook
+curl -X PATCH http://localhost:3000/merchants/me/playbook \
+  -H "Cookie: session_id=<session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cartConfig": {
+      "ttlHours": 48
+    }
+  }'
+
+# 2. Crear carrito vía WhatsApp
+# (enviar mensaje "quiero una camisa")
+
+# 3. Verificar TTL en DB
+SELECT 
+  c.expires_at,
+  EXTRACT(EPOCH FROM (c.expires_at - c.created_at)) / 3600 AS ttl_hours
+FROM carts c
+JOIN customers cu ON c.customer_id = cu.id
+WHERE cu.phone = '<phone-number>'  -- e.g., '+573001234567'
+ORDER BY c.created_at DESC
+LIMIT 1;
+# => ttl_hours debe ser ~48
+```
+
+### Acceptance Criteria (PR-04)
+
+**Implementados:**
+- ✅ **AC-01 a AC-13**: Todos los ACs del brief con evidencia en tests
+  - AC-01, AC-02: Migración + modelos (schema.prisma)
+  - AC-03: CartRepository CRUD + tests (6 tests)
+  - AC-04: Price snapshot (test unitario)
+  - AC-05: Increment quantity en duplicados (test unitario)
+  - AC-06: Stock validation (test unitario)
+  - AC-07: AddToCartFlow agrega producto y responde confirmación (test flow)
+  - AC-08: ViewCartFlow muestra items con formato WhatsApp + subtotal (test flow)
+  - AC-09: UpdateQuantity flow (test conversacional)
+  - AC-10: AddToCart flow con quantity extraction (test conversacional)
+  - AC-11: ViewCart flow (test conversacional)
+  - AC-12: Orchestrator routing ADD_TO_CART (test integración)
+  - AC-13: TTL configurable por playbook + refresh en operaciones (test + playbook configs)
+
+**Coverage:** 25 tests passing
+- 6 repository tests (cart.repository.spec.ts)
+- 9 service tests (cart.service.spec.ts)
+- 10 flow tests (cart.flow.spec.ts + conversation.orchestrator.spec.ts)
+
+---
+
 ## Troubleshooting
 
 ### Error: "Channel not found"
@@ -1085,57 +1567,18 @@ La firma `X-Hub-Signature-256` no coincide.
 
 **Modo dev:** Si `WHATSAPP_APP_SECRET` no está configurado, se permite el request con warning.
 
-### CORS: "Access to fetch blocked" (browser console)
-
-El browser bloquea requests cross-origin.
-
-**Diagnóstico:**
-
-```bash
-# Verificar CORS preflight
-curl -X OPTIONS http://localhost:3000/auth/me \
-  -H "Origin: http://localhost:3001" \
-  -H "Access-Control-Request-Method: GET" \
-  -v
-
-# Deben aparecer headers:
-# Access-Control-Allow-Origin: http://localhost:3001
-# Access-Control-Allow-Credentials: true
-```
-
-**Soluciones comunes:**
-
-| Problema | Solución |
-|----------|----------|
-| Origen no permitido | Agregar a `CORS_ORIGINS` en `.env` |
-| Falta `credentials: include` | Agregar en fetch del frontend |
-| Cookie no se envía | Verificar `SameSite`, `Domain` de la cookie |
-| Headers bloqueados | Verificar `allowedHeaders` en CORS config |
-
-**Ejemplo configuración producción:**
-
-```bash
-# .env producción
-CORS_ORIGINS="https://dashboard.closybot.com,https://admin.closybot.com"
-```
-
 ---
 
 ## Próximos Pasos
 
 Para completar el flujo de ventas transaccional, implementar:
 
-1. **PR-04 — Carrito** (🔴 CRÍTICO)
-   - Modelos `Cart`, `CartItem`
-   - Intents `ADD_TO_CART`, `VIEW_CART`, `REMOVE_FROM_CART`
-   - Flow handlers
-
-2. **PR-05 — Checkout**
+1. **PR-05 — Checkout** (🔴 CRÍTICO)
    - Modelo `Order`, `OrderItem`
    - Captura de datos (nombre, dirección)
-   - Métodos de pago
+      - Métodos de pago
 
-3. **PR-06 — Pagos**
+2. **PR-06 — Pagos**
    - Modelo `Payment`
    - Webhook idempotente
    - Fallback `PAGADO`

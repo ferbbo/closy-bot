@@ -22,8 +22,8 @@ describe('CartFlow', () => {
             createOrGetActiveCart: jest.fn(),
             addItem: jest.fn(),
             getCartSummary: jest.fn(),
+            updateQuantity: jest.fn(),
             removeItem: jest.fn(),
-            clearCart: jest.fn(),
           },
         },
         {
@@ -40,7 +40,7 @@ describe('CartFlow', () => {
     catalogService = module.get(CatalogService);
   });
 
-  describe('AC-10: handleAddToCart', () => {
+  describe('AC-07: handleAddToCart', () => {
     it('should add item via conversation', async () => {
       const mockCart = { id: 'cart-1', items: [] };
       const mockProduct = {
@@ -91,7 +91,7 @@ describe('CartFlow', () => {
     });
   });
 
-  describe('AC-11: handleShowCart', () => {
+  describe('AC-08: handleShowCart', () => {
     it('should show cart summary', async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       cartService.createOrGetActiveCart.mockResolvedValue({ id: 'cart-1' } as any);
@@ -132,7 +132,7 @@ describe('CartFlow', () => {
     });
   });
 
-  describe('AC-12: handleRemoveItem', () => {
+  describe('AC-10: handleRemoveItem', () => {
     it('should remove item via conversation', async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       cartService.createOrGetActiveCart.mockResolvedValue({ id: 'cart-1' } as any);
@@ -161,6 +161,72 @@ describe('CartFlow', () => {
 
       expect(response).toContain('removido');
       expect(cartService.removeItem).toHaveBeenCalled();
+    });
+  });
+
+  describe('AC-09: handleUpdateQuantity', () => {
+    it('should update item quantity via conversation', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      cartService.createOrGetActiveCart.mockResolvedValue({ id: 'cart-1' } as any);
+      cartService.getCartSummary
+        .mockResolvedValueOnce({
+          items: [
+            {
+              id: 'item-1',
+              productName: 'Camiseta',
+              variantName: 'Talla M',
+              quantity: 1,
+              priceSnapshot: 25,
+              subtotal: 25,
+            },
+          ],
+          total: 25,
+          itemCount: 1,
+        })
+        .mockResolvedValueOnce({
+          items: [
+            {
+              id: 'item-1',
+              productName: 'Camiseta',
+              variantName: 'Talla M',
+              quantity: 3,
+              priceSnapshot: 25,
+              subtotal: 75,
+            },
+          ],
+          total: 75,
+          itemCount: 3,
+        });
+
+      const response = await flow.handleUpdateQuantity('customer-1', 'merchant-1', 'camiseta', 3);
+
+      expect(response).toContain('actualizada');
+      expect(response).toContain('3 unidades');
+      expect(cartService.updateQuantity).toHaveBeenCalledWith('cart-1', 'item-1', 3);
+    });
+
+    it('should handle invalid quantity', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      cartService.createOrGetActiveCart.mockResolvedValue({ id: 'cart-1' } as any);
+      cartService.getCartSummary.mockResolvedValue({
+        items: [
+          {
+            id: 'item-1',
+            productName: 'Camiseta',
+            variantName: 'Talla M',
+            quantity: 1,
+            priceSnapshot: 25,
+            subtotal: 25,
+          },
+        ],
+        total: 25,
+        itemCount: 1,
+      });
+
+      const response = await flow.handleUpdateQuantity('customer-1', 'merchant-1', 'camiseta', 150);
+
+      expect(response).toContain('cantidad debe estar entre 1 y 99');
+      expect(cartService.updateQuantity).not.toHaveBeenCalled();
     });
   });
 });

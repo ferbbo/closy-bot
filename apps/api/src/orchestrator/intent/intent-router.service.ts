@@ -3,9 +3,9 @@ import { Injectable, Logger } from '@nestjs/common';
 export type IntentType =
   | 'SEARCH_PRODUCT'
   | 'ADD_TO_CART'
-  | 'SHOW_CART'
+  | 'VIEW_CART'
+  | 'UPDATE_CART'
   | 'REMOVE_FROM_CART'
-  | 'CLEAR_CART'
   | 'GREETING'
   | 'HELP'
   | 'UNKNOWN';
@@ -40,7 +40,7 @@ export class IntentRouterService {
       'saludos',
     ],
     HELP: ['ayuda', 'cómo funciona', 'menú', 'opciones', 'qué puedo hacer', 'comandos'],
-    SHOW_CART: [
+    VIEW_CART: [
       'carrito',
       'ver carrito',
       'mostrar carrito',
@@ -49,13 +49,7 @@ export class IntentRouterService {
       'pedido',
       'ver pedido',
     ],
-    CLEAR_CART: [
-      'vaciar carrito',
-      'limpiar carrito',
-      'borrar carrito',
-      'cancelar pedido',
-      'eliminar todo',
-    ],
+    UPDATE_CART: ['cambiar', 'actualizar', 'modificar', 'cambiar cantidad', 'ajustar'],
     REMOVE_FROM_CART: ['remover', 'quitar', 'eliminar', 'sacar'],
     ADD_TO_CART: [
       'agregar',
@@ -113,27 +107,31 @@ export class IntentRouterService {
       };
     }
 
-    // AC-14: Check SHOW_CART (high confidence for explicit cart keywords)
-    if (this.matchesKeywords(normalizedText, this.keywords.SHOW_CART)) {
+    // AC-11: Check ADD_TO_CART FIRST (higher priority than VIEW_CART to avoid "agregar al carrito" collision)
+    if (this.matchesKeywords(normalizedText, this.keywords.ADD_TO_CART)) {
+      const productName = this.extractProductName(normalizedText, this.keywords.ADD_TO_CART);
       return {
-        intent: 'SHOW_CART',
+        intent: 'ADD_TO_CART',
+        confidence: 0.85,
+        entities: {
+          productName,
+        },
+      };
+    }
+
+    // AC-11: Check VIEW_CART (high confidence for explicit cart keywords)
+    if (this.matchesKeywords(normalizedText, this.keywords.VIEW_CART)) {
+      return {
+        intent: 'VIEW_CART',
         confidence: 0.85,
       };
     }
 
-    // Check CLEAR_CART
-    if (this.matchesKeywords(normalizedText, this.keywords.CLEAR_CART)) {
+    // AC-09: Check UPDATE_CART (must have update keyword + product reference + quantity)
+    if (this.matchesKeywords(normalizedText, this.keywords.UPDATE_CART)) {
+      const productName = this.extractProductName(normalizedText, this.keywords.UPDATE_CART);
       return {
-        intent: 'CLEAR_CART',
-        confidence: 0.8,
-      };
-    }
-
-    // AC-15: Check REMOVE_FROM_CART (must have remove keyword + product reference)
-    if (this.matchesKeywords(normalizedText, this.keywords.REMOVE_FROM_CART)) {
-      const productName = this.extractProductName(normalizedText, this.keywords.REMOVE_FROM_CART);
-      return {
-        intent: 'REMOVE_FROM_CART',
+        intent: 'UPDATE_CART',
         confidence: 0.75,
         entities: {
           productName,
@@ -141,11 +139,11 @@ export class IntentRouterService {
       };
     }
 
-    // AC-13: Check ADD_TO_CART (must have add keyword + product name)
-    if (this.matchesKeywords(normalizedText, this.keywords.ADD_TO_CART)) {
-      const productName = this.extractProductName(normalizedText, this.keywords.ADD_TO_CART);
+    // AC-11: Check REMOVE_FROM_CART (must have remove keyword + product reference)
+    if (this.matchesKeywords(normalizedText, this.keywords.REMOVE_FROM_CART)) {
+      const productName = this.extractProductName(normalizedText, this.keywords.REMOVE_FROM_CART);
       return {
-        intent: 'ADD_TO_CART',
+        intent: 'REMOVE_FROM_CART',
         confidence: 0.75,
         entities: {
           productName,

@@ -5,6 +5,7 @@ import { CartService } from './cart.service';
 import { CartRepository } from '../persistence/repositories/cart.repository';
 import { CartItemRepository } from '../persistence/repositories/cart-item.repository';
 import { ProductRepository } from '../persistence/repositories/product.repository';
+import { MerchantResolverService } from './merchant-resolver.service';
 import { CartStatus } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
@@ -17,6 +18,7 @@ describe('CartService', () => {
   let cartRepository: jest.Mocked<CartRepository>;
   let cartItemRepository: jest.Mocked<CartItemRepository>;
   let productRepository: jest.Mocked<ProductRepository>;
+  let merchantResolverService: jest.Mocked<MerchantResolverService>;
 
   const mockCart = {
     id: 'cart-1',
@@ -60,9 +62,11 @@ describe('CartService', () => {
           provide: CartRepository,
           useValue: {
             create: jest.fn(),
+            findById: jest.fn().mockResolvedValue(mockCart), // AC-13: For refreshCartTTL helper
             findByIdWithItems: jest.fn(),
             findActiveCart: jest.fn(),
             updateStatus: jest.fn(),
+            refreshTTL: jest.fn().mockResolvedValue(mockCart),
             findExpiredCarts: jest.fn(),
           },
         },
@@ -84,6 +88,19 @@ describe('CartService', () => {
           },
         },
         {
+          provide: MerchantResolverService,
+          useValue: {
+            getById: jest.fn().mockResolvedValue({
+              id: 'merchant-1',
+              playbookConfig: {
+                cartConfig: {
+                  ttlHours: 24,
+                },
+              },
+            }),
+          },
+        },
+        {
           provide: ConfigService,
           useValue: {
             get: jest.fn().mockReturnValue(24), // CART_TTL_HOURS = 24
@@ -96,6 +113,7 @@ describe('CartService', () => {
     cartRepository = module.get(CartRepository);
     cartItemRepository = module.get(CartItemRepository);
     productRepository = module.get(ProductRepository);
+    merchantResolverService = module.get(MerchantResolverService);
   });
 
   describe('AC-03: createOrGetActiveCart', () => {
@@ -113,7 +131,7 @@ describe('CartService', () => {
       expect(cartRepository.create).not.toHaveBeenCalled();
     });
 
-    it('AC-18: should set expiration on create', async () => {
+    it('AC-13: should set expiration on create', async () => {
       cartRepository.findActiveCart.mockResolvedValue(null);
       cartRepository.create.mockResolvedValue(mockCart);
       cartRepository.findByIdWithItems.mockResolvedValue({
@@ -155,12 +173,25 @@ describe('CartService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
+      // AC-04: Mock cart creation/retrieval
+      cartRepository.findActiveCart.mockResolvedValue(null); // No existing cart
+      cartRepository.create.mockResolvedValue(mockCart);
       cartRepository.findByIdWithItems.mockResolvedValue({
         ...mockCart,
         items: [],
       });
+      merchantResolverService.getById.mockResolvedValue({
+        id: 'merchant-1',
+        name: 'Test Merchant',
+        whatsappNumber: '+test',
+        apiKey: 'test',
+        industry: null,
+        playbookConfig: { cartConfig: { ttlHours: 24 } },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
 
-      await service.addItem('cart-1', 'variant-1', 1);
+      await service.addItem('customer-1', 'merchant-1', 'variant-1', 1);
 
       expect(cartItemRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -169,14 +200,88 @@ describe('CartService', () => {
       );
     });
 
-    it('AC-17: should validate stock', async () => {
+    it('AC-05: should increment quantity for existing item', async () => {
+      const existingItem = {
+        id: 'item-1',
+        cartId: 'cart-1',
+        variantId: 'variant-1',
+        quantity: 2,
+        priceSnapshot: new Decimal(25),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      productRepository.findByVariantId.mockResolvedValue(mockProduct);
+      cartItemRepository.findByCartAndVariant.mockResolvedValue(existingItem);
+      cartItemRepository.updateQuantity.mockResolvedValue({ ...existingItem, quantity: 5 });
+      // AC-04: Mock cart retrieval
+      cartRepository.findActiveCart.mockResolvedValue(mockCart);
+      cartRepository.findByIdWithItems
+        .mockResolvedValueOnce({ ...mockCart, items: [] }) // First call in createOrGetActiveCart
+        .mockResolvedValueOnce({ ...mockCart, items: [] }); // Second call after update
+
+      await service.addItem('customer-1', 'merchant-1', 'variant-1', 3);
+
+      expect(cartItemRepository.updateQuantity).toHaveBeenCalledWith('item-1', 5); // 2 + 3
+      // AC-05: Validate stock for new quantity (2 + 3 = 5)
+      expect(productRepository.findByVariantId).toHaveBeenCalledWith('variant-1');
+    });
+
+    it('AC-05: should validate stock for new quantity when incrementing', async () => {
+      const existingItem = {
+        id: 'item-1',
+        cartId: 'cart-1',
+        variantId: 'variant-1',
+        quantity: 8,
+        priceSnapshot: new Decimal(25),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      productRepository.findByVariantId.mockResolvedValue({
+        ...mockProduct,
+        variants: [{ ...mockVariant, stock: 10 }],
+      });
+      cartItemRepository.findByCartAndVariant.mockResolvedValue(existingItem);
+      // AC-04: Mock cart retrieval
+      cartRepository.findActiveCart.mockResolvedValue(mockCart);
+      cartRepository.findByIdWithItems.mockResolvedValue({ ...mockCart, items: [] });
+
+      // Try to add 3 more (would be 8 + 3 = 11, but stock is only 10)
+      await expect(service.addItem('customer-1', 'merchant-1', 'variant-1', 3)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.addItem('customer-1', 'merchant-1', 'variant-1', 3)).rejects.toThrow(
+        'Stock insuficiente',
+      );
+    });
+
+    it('AC-06: should validate stock', async () => {
       productRepository.findByVariantId.mockResolvedValue({
         ...mockProduct,
         variants: [{ ...mockVariant, stock: 2 }],
       });
+      // AC-04: Mock cart creation/retrieval
+      cartRepository.findActiveCart.mockResolvedValue(null); // No existing cart
+      cartRepository.create.mockResolvedValue(mockCart);
+      cartRepository.findByIdWithItems.mockResolvedValue({ ...mockCart, items: [] });
+      merchantResolverService.getById.mockResolvedValue({
+        id: 'merchant-1',
+        name: 'Test Merchant',
+        whatsappNumber: '+test',
+        apiKey: 'test',
+        industry: null,
+        playbookConfig: { cartConfig: { ttlHours: 24 } },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
 
-      await expect(service.addItem('cart-1', 'variant-1', 5)).rejects.toThrow(BadRequestException);
-      await expect(service.addItem('cart-1', 'variant-1', 5)).rejects.toThrow('Stock insuficiente');
+      await expect(service.addItem('customer-1', 'merchant-1', 'variant-1', 5)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.addItem('customer-1', 'merchant-1', 'variant-1', 5)).rejects.toThrow(
+        'Stock insuficiente',
+      );
     });
   });
 
@@ -226,7 +331,7 @@ describe('CartService', () => {
     });
   });
 
-  describe('AC-07: removeItem', () => {
+  describe('Service: removeItem', () => {
     it('should remove item', async () => {
       cartItemRepository.findById.mockResolvedValue({
         id: 'item-1',
@@ -248,7 +353,7 @@ describe('CartService', () => {
     });
   });
 
-  describe('AC-08: getCartSummary', () => {
+  describe('Service: getCartSummary', () => {
     it('should calculate totals', async () => {
       cartRepository.findByIdWithItems.mockResolvedValue({
         ...mockCart,
@@ -304,17 +409,8 @@ describe('CartService', () => {
     });
   });
 
-  describe('AC-09: clearCart', () => {
-    it('should clear cart', async () => {
-      await service.clearCart('cart-1');
-
-      expect(cartItemRepository.deleteByCartId).toHaveBeenCalledWith('cart-1');
-      expect(cartRepository.updateStatus).toHaveBeenCalledWith('cart-1', CartStatus.abandoned);
-    });
-  });
-
-  describe('AC-19: markExpiredCartsAsAbandoned', () => {
-    it('should mark expired carts', async () => {
+  describe('Cleanup: markExpiredCartsAsAbandoned', () => {
+    it('should mark expired carts as abandoned', async () => {
       const expiredCart1 = { ...mockCart, id: 'cart-expired-1' };
       const expiredCart2 = { ...mockCart, id: 'cart-expired-2' };
 

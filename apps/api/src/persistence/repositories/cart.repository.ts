@@ -38,6 +38,16 @@ export class CartRepository {
   }
 
   /**
+   * Find cart by ID (without items)
+   * REQ-02: Basic cart lookup for operations that don't need full items
+   */
+  async findById(id: string): Promise<Cart | null> {
+    return this.prisma.cart.findUnique({
+      where: { id },
+    });
+  }
+
+  /**
    * Find cart by ID with items
    */
   async findByIdWithItems(id: string): Promise<CartWithItems | null> {
@@ -60,6 +70,17 @@ export class CartRepository {
         },
       },
     });
+  }
+
+  /**
+   * AC-03: Find active cart for customer and merchant (brief naming)
+   * REQ-02: Alias for findActiveCart
+   */
+  async findActiveByCustomerAndMerchant(
+    customerId: string,
+    merchantId: string,
+  ): Promise<Cart | null> {
+    return this.findActiveCart(customerId, merchantId);
   }
 
   /**
@@ -89,6 +110,17 @@ export class CartRepository {
     return this.prisma.cart.update({
       where: { id },
       data: { status },
+    });
+  }
+
+  /**
+   * Refresh TTL (expiresAt) for active cart
+   * AC-13: Update expiresAt on cart operations (create/update)
+   */
+  async refreshTTL(id: string, expiresAt: Date): Promise<Cart> {
+    return this.prisma.cart.update({
+      where: { id },
+      data: { expiresAt },
     });
   }
 

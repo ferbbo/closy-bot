@@ -63,7 +63,7 @@ describe('IntentRouterService', () => {
     it('should classify product search with different variations', () => {
       const searches = [
         'busco zapatillas',
-        // 'quiero una camisa', // Removed: "quiero" now triggers ADD_TO_CART (AC-13)
+        // 'quiero una camisa', // Removed: "quiero" now triggers ADD_TO_CART (AC-11: intent classification)
         'tienes pantalones',
         'necesito zapatos',
         'mostrar camisas',
@@ -106,7 +106,7 @@ describe('IntentRouterService', () => {
     });
 
     // PR-04: Cart intent tests
-    describe('AC-13: ADD_TO_CART intent detection', () => {
+    describe('AC-11: ADD_TO_CART intent detection', () => {
       it('should detect ADD_TO_CART', () => {
         const result = service.classify('agregar camiseta roja');
         expect(result.intent).toBe('ADD_TO_CART');
@@ -134,10 +134,10 @@ describe('IntentRouterService', () => {
       });
     });
 
-    describe('AC-14: SHOW_CART intent detection', () => {
-      it('should detect SHOW_CART', () => {
+    describe('AC-11: VIEW_CART intent detection', () => {
+      it('should detect VIEW_CART', () => {
         const result = service.classify('ver carrito');
-        expect(result.intent).toBe('SHOW_CART');
+        expect(result.intent).toBe('VIEW_CART');
         expect(result.confidence).toBeGreaterThan(0.8);
       });
 
@@ -146,12 +146,12 @@ describe('IntentRouterService', () => {
 
         variations.forEach((text) => {
           const result = service.classify(text);
-          expect(result.intent).toBe('SHOW_CART');
+          expect(result.intent).toBe('VIEW_CART');
         });
       });
     });
 
-    describe('AC-15: REMOVE_FROM_CART intent detection', () => {
+    describe('AC-11: REMOVE_FROM_CART intent detection', () => {
       it('should detect REMOVE_FROM_CART', () => {
         const result = service.classify('quitar camiseta');
         expect(result.intent).toBe('REMOVE_FROM_CART');
@@ -168,10 +168,31 @@ describe('IntentRouterService', () => {
       });
     });
 
+    describe('AC-11: UPDATE_CART intent detection', () => {
+      it('should detect UPDATE_CART', () => {
+        const result = service.classify('cambiar cantidad camiseta a 3');
+        expect(result.intent).toBe('UPDATE_CART');
+        expect(result.confidence).toBeGreaterThan(0.7);
+      });
+
+      it('should detect variations', () => {
+        const variations = [
+          'actualizar camiseta a 5',
+          'modificar cantidad zapatos',
+          'cambiar a 2 unidades',
+        ];
+
+        variations.forEach((text) => {
+          const result = service.classify(text);
+          expect(result.intent).toBe('UPDATE_CART');
+        });
+      });
+    });
+
     describe('Intent priority', () => {
-      it('SHOW_CART should have higher priority than SEARCH', () => {
+      it('VIEW_CART should have higher priority than SEARCH', () => {
         const result = service.classify('ver productos en carrito');
-        expect(result.intent).toBe('SHOW_CART');
+        expect(result.intent).toBe('VIEW_CART');
       });
 
       it('ADD_TO_CART should have higher priority than SEARCH', () => {

@@ -31,17 +31,17 @@ model HealthCheck {
 model InboundMessage {
   id        String   @id @default(cuid())
   messageId String   @unique @map("message_id") // Provider unique ID (WhatsApp message_id)
-  from      String   // Phone number or user identifier
+  from      String // Phone number or user identifier
   timestamp DateTime // Message timestamp from provider
-  text      String?  // Text content
+  text      String? // Text content
   mediaType String?  @map("media_type") // image, document, audio, video
   mediaUrl  String?  @map("media_url") // URL to media attachment
   processed Boolean  @default(false) // Processing status
   createdAt DateTime @default(now()) @map("created_at")
 
-  @@map("inbound_messages")
   @@index([from])
   @@index([timestamp])
+  @@map("inbound_messages")
 }
 
 // ============================================================================
@@ -63,10 +63,10 @@ model Merchant {
   categories     Category[]
   products       Product[]
   outboxMessages OutboxMessage[]
-  channels       Channel[]   // PR-03.11: Multi-channel support
+  channels       Channel[] // PR-03.11: Multi-channel support
   identities     MerchantIdentity[] // PR-12: OIDC identities
-  sessions       Session[]   // PR-12: Auth sessions
-  carts          Cart[]      // PR-04: Shopping carts
+  sessions       Session[] // PR-12: Auth sessions
+  carts          Cart[] // PR-04: Shopping carts
 
   @@map("merchants")
 }
@@ -93,47 +93,47 @@ enum ChannelStatus {
 
 /// Customer represents an end-user (identity resolved by phone)
 model Customer {
-  id        String    @id @default(cuid())
-  phone     String    @unique // Normalized phone number (e.g., +573001234567)
+  id        String   @id @default(cuid())
+  phone     String   @unique // Normalized phone number (e.g., +573001234567)
   name      String?
-  language  String    @default("es") // ISO 639-1 code
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  language  String   @default("es") // ISO 639-1 code
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   conversations Conversation[]
-  carts         Cart[]         // PR-04: Shopping carts
+  carts         Cart[] // PR-04: Shopping carts
 
-  @@map("customers")
   @@index([phone])
+  @@map("customers")
 }
 
 /// Conversation represents a chat session between customer and merchant
 model Conversation {
-  id            String    @id @default(cuid())
-  customerId    String    @map("customer_id")
-  merchantId    String    @map("merchant_id")
-  channelId     String?   @map("channel_id") // PR-03.11: FK to Channel (nullable for backwards compat)
-  channel       String    // whatsapp, webchat, instagram
-  status        String    @default("active") // active, closed, handoff
-  lastMessageAt DateTime? @map("last_message_at")
+  id               String    @id @default(cuid())
+  customerId       String    @map("customer_id")
+  merchantId       String    @map("merchant_id")
+  channelId        String?   @map("channel_id") // PR-03.11: FK to Channel (nullable for backwards compat)
+  channel          String // whatsapp, webchat, instagram
+  status           String    @default("active") // active, closed, handoff
+  lastMessageAt    DateTime? @map("last_message_at")
   // PR-03.10: Memory fields for conversational continuity
-  summary           String?   @db.Text // Conversational summary (max 1000 chars)
-  memoryFacts       Json?     @map("memory_facts") // Persistent facts extracted from conversation
-  lastIntent        String?   @map("last_intent") // Last detected intent
-  lastSummarizedAt  DateTime? @map("last_summarized_at") // Last time summary was generated
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  summary          String?   @db.Text // Conversational summary (max 1000 chars)
+  memoryFacts      Json?     @map("memory_facts") // Persistent facts extracted from conversation
+  lastIntent       String?   @map("last_intent") // Last detected intent
+  lastSummarizedAt DateTime? @map("last_summarized_at") // Last time summary was generated
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   customer    Customer     @relation(fields: [customerId], references: [id])
   merchant    Merchant     @relation(fields: [merchantId], references: [id])
   channelRef  Channel?     @relation(fields: [channelId], references: [id]) // PR-03.11
   messageLogs MessageLog[] // PR-03.10: Message history
 
-  @@map("conversations")
   @@index([customerId])
   @@index([merchantId])
   @@index([customerId, channel])
   @@index([status])
+  @@map("conversations")
 }
 
 // ============================================================================
@@ -142,28 +142,28 @@ model Conversation {
 
 /// Direction enum for message logs
 enum MessageDirection {
-  IN  // Inbound from user
+  IN // Inbound from user
   OUT // Outbound from bot
 }
 
 /// MessageLog stores conversation history with TTL for memory retention
 model MessageLog {
-  id                 String           @id @default(cuid())
-  conversationId     String           @map("conversation_id")
-  merchantId         String           @map("merchant_id") // Denormalized for multi-tenant queries
-  direction          MessageDirection // IN or OUT
-  providerMessageId  String?          @map("provider_message_id") // Provider ID for traceability (not used for dedupe)
-  text               String?          @db.Text // Message text content
-  mediaType          String?          @map("media_type") // image, document, audio, video
-  expiresAt          DateTime         @map("expires_at") // TTL for automatic cleanup
-  createdAt          DateTime         @default(now()) @map("created_at")
+  id                String           @id @default(cuid())
+  conversationId    String           @map("conversation_id")
+  merchantId        String           @map("merchant_id") // Denormalized for multi-tenant queries
+  direction         MessageDirection // IN or OUT
+  providerMessageId String?          @map("provider_message_id") // Provider ID for traceability (not used for dedupe)
+  text              String?          @db.Text // Message text content
+  mediaType         String?          @map("media_type") // image, document, audio, video
+  expiresAt         DateTime         @map("expires_at") // TTL for automatic cleanup
+  createdAt         DateTime         @default(now()) @map("created_at")
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  @@map("message_logs")
   @@index([conversationId, createdAt]) // For ordered queries (last K messages)
   @@index([expiresAt]) // For cleanup job
   @@index([merchantId]) // For multi-tenant queries
+  @@map("message_logs")
 }
 
 // ============================================================================
@@ -172,18 +172,18 @@ model MessageLog {
 
 /// Category groups products for easier navigation
 model Category {
-  id         String    @id @default(cuid())
+  id         String   @id @default(cuid())
   name       String
-  merchantId String    @map("merchant_id")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
+  merchantId String   @map("merchant_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   merchant Merchant  @relation(fields: [merchantId], references: [id])
   products Product[]
 
-  @@map("categories")
   @@unique([merchantId, name])
   @@index([merchantId])
+  @@map("categories")
 }
 
 /// Product represents an item in the catalog
@@ -197,14 +197,14 @@ model Product {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  category Category          @relation(fields: [categoryId], references: [id])
-  merchant Merchant          @relation(fields: [merchantId], references: [id])
+  category Category         @relation(fields: [categoryId], references: [id])
+  merchant Merchant         @relation(fields: [merchantId], references: [id])
   variants ProductVariant[]
 
-  @@map("products")
   @@index([merchantId])
   @@index([categoryId])
   @@index([merchantId, isActive])
+  @@map("products")
 }
 
 /// ProductVariant represents a specific SKU with price and stock
@@ -222,10 +222,10 @@ model ProductVariant {
   product   Product    @relation(fields: [productId], references: [id])
   cartItems CartItem[] // PR-04: Cart items
 
-  @@map("product_variants")
   @@unique([productId, sku]) // Ensure SKU is unique per product
   @@index([productId])
   @@index([isActive])
+  @@map("product_variants")
 }
 
 // ============================================================================
@@ -250,15 +250,15 @@ enum OutboxMessageStatus {
 /// Transactional outbox for reliable WhatsApp outbound messaging
 /// Guarantees eventual delivery without dual-write race conditions
 model OutboxMessage {
-  id             String              @id @default(cuid())
-  merchantId     String              @map("merchant_id")
-  conversationId String?             @map("conversation_id") // PR-03.10: For outbound message logging
-  channelId      String?             @map("channel_id") // PR-03.11: FK to Channel (nullable for backwards compat)
+  id             String            @id @default(cuid())
+  merchantId     String            @map("merchant_id")
+  conversationId String?           @map("conversation_id") // PR-03.10: For outbound message logging
+  channelId      String?           @map("channel_id") // PR-03.11: FK to Channel (nullable for backwards compat)
   channel        OutboxChannel
   type           OutboxMessageType
   to             String
-  payloadJson    Json                @map("payload_json")
-  dedupeKey      String?             @map("dedupe_key")
+  payloadJson    Json              @map("payload_json")
+  dedupeKey      String?           @map("dedupe_key")
 
   status      OutboxMessageStatus @default(PENDING)
   attempts    Int                 @default(0)
@@ -267,18 +267,18 @@ model OutboxMessage {
   lockedBy    String?             @map("locked_by")
   lastError   String?             @map("last_error")
 
-  providerMessageId String?       @map("provider_message_id")
-  sentAt            DateTime?     @map("sent_at")
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
+  providerMessageId String?   @map("provider_message_id")
+  sentAt            DateTime? @map("sent_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   merchant   Merchant @relation(fields: [merchantId], references: [id])
   channelRef Channel? @relation(fields: [channelId], references: [id]) // PR-03.11
 
-  @@map("outbox_messages")
+  @@unique([merchantId, dedupeKey])
   @@index([merchantId])
   @@index([status, nextRetryAt])
-  @@unique([merchantId, dedupeKey])
+  @@map("outbox_messages")
 }
 
 // ============================================================================
@@ -312,14 +312,61 @@ model Channel {
   outboxMessages OutboxMessage[]
 
   @@unique([type, externalId])
-  @@map("channels")
   @@index([merchantId])
   @@index([type, externalId])
   @@index([isActive])
+  @@map("channels")
 }
 
 // ============================================================================
-// PR-12: Auth OIDC - Social Login (Google + Microsoft)
+// PR-04: Cart - Conversational Shopping Cart
+// ============================================================================
+
+/// Cart status enum
+enum CartStatus {
+  active     // Currently active cart
+  abandoned  // TTL expired or manually cleared
+  completed  // Converted to Order
+}
+
+/// Cart represents a shopping cart for a customer
+model Cart {
+  id         String     @id @default(cuid())
+  customerId String     @map("customer_id")
+  merchantId String     @map("merchant_id")
+  status     CartStatus @default(active)
+  expiresAt  DateTime   @map("expires_at")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  customer Customer   @relation(fields: [customerId], references: [id])
+  merchant Merchant   @relation(fields: [merchantId], references: [id])
+  items    CartItem[]
+
+  @@index([customerId, merchantId, status])
+  @@index([expiresAt])
+  @@map("carts")
+}
+
+/// CartItem represents an item in a cart with snapshot pricing
+model CartItem {
+  id            String   @id @default(cuid())
+  cartId        String   @map("cart_id")
+  variantId     String   @map("variant_id")
+  quantity      Int
+  priceSnapshot Decimal  @map("price_snapshot") @db.Decimal(10, 2)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  cart    Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@unique([cartId, variantId])
+  @@index([cartId])
+  @@map("cart_items")
+}
+
+// ============================================================================// PR-12: Auth OIDC - Social Login (Google + Microsoft)
 // ============================================================================
 
 /// OidcProvider enum for supported identity providers
@@ -340,81 +387,25 @@ model MerchantIdentity {
   merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
   @@unique([provider, oidcSubject])
-  @@map("merchant_identities")
   @@index([merchantId])
   @@index([email])
+  @@map("merchant_identities")
 }
 
 /// Session stores server-side sessions for authenticated merchants
 model Session {
-  id        String   @id @default(cuid())
-  sessionId String   @unique @map("session_id") // UUID for cookie
-  merchantId String  @map("merchant_id")
-  expiresAt DateTime @map("expires_at")
-  userAgent String?  @map("user_agent")
-  ipAddress String?  @map("ip_address")
-  createdAt DateTime @default(now()) @map("created_at")
+  id         String   @id @default(cuid())
+  sessionId  String   @unique @map("session_id") // UUID for cookie
+  merchantId String   @map("merchant_id")
+  expiresAt  DateTime @map("expires_at")
+  userAgent  String?  @map("user_agent")
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
 
   merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
-  @@map("sessions")
   @@index([sessionId])
   @@index([expiresAt])
   @@index([merchantId])
+  @@map("sessions")
 }
-
-// ============================================================================
-// PR-04: Cart & CartItem (conversational e-commerce)
-// ============================================================================
-
-/// CartStatus enum for cart lifecycle
-enum CartStatus {
-  active
-  abandoned
-  completed
-}
-
-/// Cart represents a shopping cart for a customer
-model Cart {
-  id         String     @id @default(cuid())
-  customerId String     @map("customer_id")
-  merchantId String     @map("merchant_id")
-  status     CartStatus @default(active)
-  expiresAt  DateTime   @map("expires_at")
-  createdAt  DateTime   @default(now()) @map("created_at")
-  updatedAt  DateTime   @updatedAt @map("updated_at")
-
-  customer Customer   @relation(fields: [customerId], references: [id])
-  merchant Merchant   @relation(fields: [merchantId], references: [id])
-  items    CartItem[]
-
-  @@map("carts")
-  @@index([customerId, merchantId, status])
-  @@index([expiresAt])
-}
-
-/// CartItem represents a line item in a cart
-model CartItem {
-  id            String   @id @default(cuid())
-  cartId        String   @map("cart_id")
-  variantId     String   @map("variant_id")
-  quantity      Int
-  priceSnapshot Decimal  @db.Decimal(10, 2) @map("price_snapshot") // Price at add time
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  cart    Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  variant ProductVariant @relation(fields: [variantId], references: [id])
-
-  @@unique([cartId, variantId]) // Idempotency: 1 entry per variant in cart
-  @@map("cart_items")
-  @@index([cartId])
-}
-
-// ============================================================================
-// Future entities (Core V1 MVP)
-// ============================================================================
-// - Order (order_id, customer, cart_snapshot, status, payment_method)
-// - Payment (payment_id, payment_intent_id UNIQUE for idempotency, order, status)
-// - Ticket (ticket_id, customer, order?, type, status, description)
-// ============================================================================

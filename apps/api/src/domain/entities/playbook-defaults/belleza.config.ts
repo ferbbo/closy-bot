@@ -48,4 +48,7 @@ export const BellezaPlaybookDefaults: PlaybookConfig = {
     upsellEnabled: true,
     maxRecommendations: 3,
   },
+  cartConfig: {
+    ttlHours: 24, // PR-04: Cart expires after 24 hours
+  },
 };

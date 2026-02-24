@@ -4,6 +4,7 @@ import { CartStatus } from '@prisma/client';
 import { CartRepository, CartWithItems } from '../persistence/repositories/cart.repository';
 import { CartItemRepository } from '../persistence/repositories/cart-item.repository';
 import { ProductRepository } from '../persistence/repositories/product.repository';
+import { MerchantResolverService } from './merchant-resolver.service';
 
 /**
  * CartSummary DTO for conversational display
@@ -26,27 +27,29 @@ export interface CartSummary {
  * PR-04: Cart CRUD conversacional
  *
  * Guardrails:
- * - Precio siempre capturado desde ProductVariant.price (REQ-15)
- * - Stock validado antes de agregar (REQ-16)
- * - TTL respetado al crear carrito (REQ-17)
+ * - Precio siempre capturado desde ProductVariant.price (AC-04)
+ * - Stock validado antes de agregar (AC-06)
+ * - TTL respetado al crear carrito (AC-13)
  */
 @Injectable()
 export class CartService {
   private readonly logger = new Logger(CartService.name);
-  private readonly cartTtlHours: number;
+  private readonly defaultTtlHours: number;
 
   constructor(
     private readonly cartRepository: CartRepository,
     private readonly cartItemRepository: CartItemRepository,
     private readonly productRepository: ProductRepository,
+    private readonly merchantResolverService: MerchantResolverService,
     private readonly configService: ConfigService,
   ) {
-    this.cartTtlHours = this.configService.get<number>('CART_TTL_HOURS', 24);
+    this.defaultTtlHours = this.configService.get<number>('CART_TTL_HOURS', 24);
   }
 
   /**
    * AC-03: Create or get active cart for customer/merchant
    * REQ-03: Returns existing active cart or creates new one with TTL
+   * AC-13: TTL configurable by playbook (default 24h)
    */
   async createOrGetActiveCart(customerId: string, merchantId: string): Promise<CartWithItems> {
     // Check for existing active cart
@@ -61,9 +64,13 @@ export class CartService {
       }
     }
 
-    // Create new cart with TTL (REQ-17, AC-18)
+    // AC-13: Get TTL from playbook config, fallback to env var or default 24h
+    const merchant = await this.merchantResolverService.getById(merchantId);
+    const ttlHours = merchant.playbookConfig?.cartConfig?.ttlHours ?? this.defaultTtlHours;
+
+    // Create new cart with TTL (AC-13: TTL configured at cart creation)
     const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + this.cartTtlHours);
+    expiresAt.setHours(expiresAt.getHours() + ttlHours);
 
     const newCart = await this.cartRepository.create({
       customer: { connect: { id: customerId } },
@@ -73,7 +80,7 @@ export class CartService {
     });
 
     this.logger.log(
-      `Created new cart ${newCart.id} for customer ${customerId}, expires at ${expiresAt.toISOString()}`,
+      `Created new cart ${newCart.id} for customer ${customerId}, TTL ${ttlHours}h, expires at ${expiresAt.toISOString()}`,
     );
 
     // Return with empty items
@@ -86,22 +93,36 @@ export class CartService {
   }
 
   /**
-   * AC-04, AC-05, AC-16, AC-17: Add item to cart with stock validation and price snapshot
-   * REQ-04: Validates stock and captures real price from ProductVariant
+   * AC-04, AC-05, AC-06: Add item to cart with stock validation and price snapshot
+   * REQ-04: Creates cart if not exists, validates stock, captures real price from ProductVariant
    *
    * Guardrails:
    * - priceSnapshot always from variant.price (no manual override)
    * - Stock validated before adding
+   * - Creates cart automatically if customer doesn't have active cart
    *
+   * @param customerId - Customer ID (FK to Customer.id)
+   * @param merchantId - Merchant ID
+   * @param variantId - Product variant ID
+   * @param quantity - Quantity to add (min 1)
    * @throws BadRequestException if stock insufficient
    * @throws NotFoundException if variant not found
    */
-  async addItem(cartId: string, variantId: string, quantity: number): Promise<CartWithItems> {
+  async addItem(
+    customerId: string,
+    merchantId: string,
+    variantId: string,
+    quantity: number,
+  ): Promise<CartWithItems> {
     if (quantity < 1) {
       throw new BadRequestException('Quantity must be at least 1');
     }
 
-    // Fetch variant to validate stock and get real price (REQ-15, AC-16)
+    // AC-04: Get or create active cart (brief requirement)
+    const cart = await this.createOrGetActiveCart(customerId, merchantId);
+    const cartId = cart.id;
+
+    // Fetch variant to validate stock and get real price (AC-04: price snapshot)
     const product = await this.productRepository.findByVariantId(variantId);
     if (!product) {
       throw new NotFoundException(`Product variant ${variantId} not found`);
@@ -112,7 +133,7 @@ export class CartService {
       throw new NotFoundException(`Variant ${variantId} not found`);
     }
 
-    // Guardrail: Validate stock (REQ-16, AC-17)
+    // Guardrail: Validate stock (AC-06)
     if (variant.stock < quantity) {
       throw new BadRequestException(
         `Stock insuficiente. Solo quedan ${variant.stock} unidades de ${product.name} - ${variant.name}`,
@@ -138,7 +159,7 @@ export class CartService {
         `Updated item quantity in cart ${cartId}: variant ${variantId} -> ${newQuantity}`,
       );
     } else {
-      // Create new item with price snapshot (REQ-15, AC-04)
+      // Create new item with price snapshot (AC-04)
       try {
         await this.cartItemRepository.create({
           cart: { connect: { id: cartId } },
@@ -164,7 +185,7 @@ export class CartService {
           if (nowExistingItem) {
             const newQuantity = nowExistingItem.quantity + quantity;
 
-            // REQ-16/AC-17: Re-validate stock for new quantity (concurrency guardrail)
+            // AC-06: Re-validate stock for new quantity (concurrency guardrail)
             if (variant.stock < newQuantity) {
               throw new BadRequestException(
                 `Stock insuficiente. Solo quedan ${variant.stock} unidades (tienes ${nowExistingItem.quantity} en carrito)`,
@@ -184,6 +205,9 @@ export class CartService {
         }
       }
     }
+
+    // AC-13: Refresh TTL on cart operations (extend expiresAt)
+    await this.refreshCartTTL(cartId);
 
     // Return updated cart with items
     const updatedCart = await this.cartRepository.findByIdWithItems(cartId);
@@ -244,14 +268,39 @@ export class CartService {
     await this.cartItemRepository.updateQuantity(itemId, quantity);
     this.logger.log(`Updated item ${itemId} quantity to ${quantity} in cart ${cartId}`);
 
+    // AC-13: Refresh TTL on cart operations
+    await this.refreshCartTTL(cartId);
+
     const updatedCart = await this.cartRepository.findByIdWithItems(cartId);
     return updatedCart;
   }
 
   /**
-   * AC-07: Remove item from cart
+   * Remove item from cart by CartItem ID
    * REQ-06: Deletes item by ID
    */
+  /**
+   * AC-13: Helper to refresh cart TTL respecting playbook config
+   * Reads merchant TTL config and extends expiresAt
+   */
+  private async refreshCartTTL(cartId: string): Promise<void> {
+    const cart = await this.cartRepository.findById(cartId);
+    if (!cart) {
+      throw new NotFoundException(`Cart ${cartId} not found`);
+    }
+
+    const merchant = await this.merchantResolverService.getById(cart.merchantId);
+    const ttlHours = merchant.playbookConfig?.cartConfig?.ttlHours ?? this.defaultTtlHours;
+
+    const newExpiresAt = new Date();
+    newExpiresAt.setHours(newExpiresAt.getHours() + ttlHours);
+    await this.cartRepository.refreshTTL(cartId, newExpiresAt);
+
+    this.logger.log(
+      `Refreshed cart ${cartId} TTL with ${ttlHours}h, expires at ${newExpiresAt.toISOString()}`,
+    );
+  }
+
   async removeItem(cartId: string, itemId: string): Promise<CartWithItems> {
     const item = await this.cartItemRepository.findById(itemId);
     if (!item || item.cartId !== cartId) {
@@ -260,6 +309,9 @@ export class CartService {
 
     await this.cartItemRepository.delete(itemId);
     this.logger.log(`Removed item ${itemId} from cart ${cartId}`);
+
+    // AC-13: Refresh TTL on cart operations
+    await this.refreshCartTTL(cartId);
 
     const updatedCart = await this.cartRepository.findByIdWithItems(cartId);
     if (!updatedCart) {
@@ -270,7 +322,7 @@ export class CartService {
   }
 
   /**
-   * AC-08: Get cart summary with totals
+   * Get cart summary with calculated totals (subtotal, total, itemCount)
    * REQ-07: Returns items with calculated subtotal and total
    */
   async getCartSummary(cartId: string): Promise<CartSummary> {
@@ -299,16 +351,6 @@ export class CartService {
   }
 
   /**
-   * AC-09: Clear cart and mark as abandoned
-   * REQ-08: Removes all items and changes status to abandoned
-   */
-  async clearCart(cartId: string): Promise<void> {
-    await this.cartItemRepository.deleteByCartId(cartId);
-    await this.cartRepository.updateStatus(cartId, CartStatus.abandoned);
-    this.logger.log(`Cleared cart ${cartId} and marked as abandoned`);
-  }
-
-  /**
    * Get cart by ID with items
    */
   async getCart(cartId: string): Promise<CartWithItems> {
@@ -321,7 +363,7 @@ export class CartService {
 
   /**
    * Mark expired carts as abandoned (called by cleanup job)
-   * AC-19: Cleanup job
+   * Cleanup expired carts job (edge case: mark EXPIRED carts as abandoned)
    */
   async markExpiredCartsAsAbandoned(): Promise<number> {
     const expiredCarts = await this.cartRepository.findExpiredCarts();

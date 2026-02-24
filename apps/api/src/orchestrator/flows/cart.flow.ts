@@ -4,7 +4,7 @@ import { CatalogService } from '../../services/catalog.service';
 
 /**
  * CartFlow
- * Handles conversational cart operations (add, show, remove, clear)
+ * Handles conversational cart operations (add, view, update, remove)
  * PR-04: Cart CRUD conversational
  */
 @Injectable()
@@ -23,19 +23,27 @@ export class CartFlow {
    * @param customerId - Customer ID
    * @param merchantId - Merchant ID
    * @param productQuery - Product name/description extracted from message
+   * @param fullText - Full message text for quantity extraction
    * @returns Formatted response message
    */
   async handleAddToCart(
     customerId: string,
     merchantId: string,
     productQuery: string,
+    fullText?: string,
   ): Promise<string> {
     this.logger.log(`Adding to cart for customer ${customerId}: "${productQuery}"`);
 
-    try {
-      // Get or create active cart
-      const cart = await this.cartService.createOrGetActiveCart(customerId, merchantId);
+    // Extract quantity from message (e.g., "quiero 2 camisas", "agregar 5", default 1)
+    const quantityMatch = fullText?.match(/\b(\d+)\b/);
+    const quantity = quantityMatch ? parseInt(quantityMatch[1], 10) : 1;
 
+    // Validate quantity range
+    if (quantity < 1 || quantity > 99) {
+      return `❌ La cantidad debe estar entre 1 y 99 unidades.`;
+    }
+
+    try {
       // Search for product matching query
       const products = await this.catalogService.searchProducts(merchantId, productQuery, 5);
 
@@ -76,12 +84,17 @@ export class CartFlow {
         return `*${product.name}* tiene varias opciones:\n\n${variantList}\n\n¿Cuál variante quieres? Responde con el nombre.`;
       }
 
-      // Add single variant to cart (quantity = 1)
+      // Add single variant to cart with parsed quantity (AC-04: addItem creates cart if needed)
       const variant = availableVariants[0];
-      await this.cartService.addItem(cart.id, variant.id, 1);
+      const updatedCart = await this.cartService.addItem(
+        customerId,
+        merchantId,
+        variant.id,
+        quantity,
+      );
 
       // Get updated cart summary
-      const summary = await this.cartService.getCartSummary(cart.id);
+      const summary = await this.cartService.getCartSummary(updatedCart.id);
 
       return this.formatAddConfirmation(
         product.name,
@@ -102,8 +115,8 @@ export class CartFlow {
   }
 
   /**
-   * AC-11: Handle SHOW_CART intent
-   * REQ-10: Shows cart summary in WhatsApp-friendly format
+   * AC-08: Handle VIEW_CART intent
+   * REQ-05: Shows cart summary in WhatsApp-friendly format
    *
    * @param customerId - Customer ID
    * @param merchantId - Merchant ID
@@ -183,22 +196,73 @@ ${updatedSummary.items.length > 0 ? `Total actualizado: *$${updatedSummary.total
   }
 
   /**
-   * Handle CLEAR_CART intent
-   * Clears cart and marks as abandoned
+   * AC-09: Handle UPDATE_CART intent
+   * REQ-06: Updates quantity of existing cart item (1-99)
+   *
+   * @param customerId - Customer ID
+   * @param merchantId - Merchant ID
+   * @param productQuery - Product name extracted from message
+   * @param quantity - New quantity (extracted from message text)
+   * @returns Formatted response message
    */
-  async handleClearCart(customerId: string, merchantId: string): Promise<string> {
-    this.logger.log(`Clearing cart for customer ${customerId}`);
+  async handleUpdateQuantity(
+    customerId: string,
+    merchantId: string,
+    productQuery: string,
+    quantity: number,
+  ): Promise<string> {
+    this.logger.log(
+      `Updating cart quantity for customer ${customerId}: "${productQuery}" -> ${quantity}`,
+    );
 
     try {
       const cart = await this.cartService.createOrGetActiveCart(customerId, merchantId);
-      await this.cartService.clearCart(cart.id);
+      const summary = await this.cartService.getCartSummary(cart.id);
 
-      return `✅ Carrito vaciado correctamente
+      if (summary.items.length === 0) {
+        return `🛒 Tu carrito está vacío, no hay nada que actualizar.`;
+      }
 
-Escribe "buscar" cuando quieras empezar de nuevo.`;
+      // Find matching item in cart
+      const matchingItem = summary.items.find(
+        (item) =>
+          item.productName.toLowerCase().includes(productQuery.toLowerCase()) ||
+          item.variantName.toLowerCase().includes(productQuery.toLowerCase()),
+      );
+
+      if (!matchingItem) {
+        const itemsList = summary.items
+          .map((item, i) => `${i + 1}. ${item.productName} - ${item.variantName}`)
+          .join('\n');
+        return `No encontré "${productQuery}" en tu carrito.\n\nTu carrito tiene:\n${itemsList}\n\n¿Cuál quieres actualizar?`;
+      }
+
+      // Validate quantity
+      if (quantity < 1 || quantity > 99) {
+        return `❌ La cantidad debe estar entre 1 y 99 unidades.`;
+      }
+
+      // Update quantity
+      await this.cartService.updateQuantity(cart.id, matchingItem.id, quantity);
+
+      // Get updated summary
+      const updatedSummary = await this.cartService.getCartSummary(cart.id);
+
+      return `✅ *Cantidad actualizada*
+
+📦 ${matchingItem.productName} - ${matchingItem.variantName}
+➡️ Ahora tienes ${quantity} ${quantity === 1 ? 'unidad' : 'unidades'}
+
+🛒 Total: *$${updatedSummary.total.toFixed(2)}*`;
     } catch (error) {
-      this.logger.error(`Failed to clear cart: ${error.message}`, error.stack);
-      return '❌ Error al vaciar el carrito. Intenta de nuevo.';
+      this.logger.error(`Failed to update quantity: ${error.message}`, error.stack);
+
+      // Handle stock validation errors gracefully
+      if (error.message.includes('Stock insuficiente')) {
+        return `😔 ${error.message}`;
+      }
+
+      return '❌ Error al actualizar cantidad. Intenta de nuevo.';
     }
   }
 

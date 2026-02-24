@@ -8,6 +8,10 @@ import { MerchantResolverService } from '../services/merchant-resolver.service';
 import { SearchCatalogFlow } from './flows/search-catalog.flow';
 import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
+import { AddToCartFlow } from './flows/add-to-cart.flow'; // PR-04
+import { ViewCartFlow } from './flows/view-cart.flow'; // PR-04
+import { UpdateCartItemFlow } from './flows/update-cart-item.flow'; // PR-04
+import { RemoveFromCartFlow } from './flows/remove-from-cart.flow'; // PR-04
 import { LlmService } from '../llm/llm.service';
 import { Customer, Merchant, Conversation } from '@prisma/client';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
@@ -22,6 +26,10 @@ describe('ConversationOrchestrator', () => {
   let searchCatalogFlow: SearchCatalogFlow;
   let greetingFlow: GreetingFlow;
   let helpFlow: HelpFlow;
+  let addToCartFlow: AddToCartFlow;
+  let viewCartFlow: ViewCartFlow;
+  let updateCartItemFlow: UpdateCartItemFlow;
+  let removeFromCartFlow: RemoveFromCartFlow;
 
   const mockMerchant: Merchant = {
     id: 'merchant-1',
@@ -110,6 +118,30 @@ describe('ConversationOrchestrator', () => {
           },
         },
         {
+          provide: AddToCartFlow,
+          useValue: {
+            execute: jest.fn().mockResolvedValue('Item added to cart'),
+          },
+        },
+        {
+          provide: ViewCartFlow,
+          useValue: {
+            execute: jest.fn().mockResolvedValue('Cart summary'),
+          },
+        },
+        {
+          provide: UpdateCartItemFlow,
+          useValue: {
+            execute: jest.fn().mockResolvedValue('Quantity updated'),
+          },
+        },
+        {
+          provide: RemoveFromCartFlow,
+          useValue: {
+            execute: jest.fn().mockResolvedValue('Item removed'),
+          },
+        },
+        {
           provide: LlmService,
           useValue: {
             generateConversationalResponse: jest.fn(),
@@ -141,6 +173,10 @@ describe('ConversationOrchestrator', () => {
     searchCatalogFlow = module.get<SearchCatalogFlow>(SearchCatalogFlow);
     greetingFlow = module.get<GreetingFlow>(GreetingFlow);
     helpFlow = module.get<HelpFlow>(HelpFlow);
+    addToCartFlow = module.get<AddToCartFlow>(AddToCartFlow);
+    viewCartFlow = module.get<ViewCartFlow>(ViewCartFlow);
+    updateCartItemFlow = module.get<UpdateCartItemFlow>(UpdateCartItemFlow);
+    removeFromCartFlow = module.get<RemoveFromCartFlow>(RemoveFromCartFlow);
   });
 
   it('should be defined', () => {
@@ -286,6 +322,31 @@ describe('ConversationOrchestrator', () => {
       });
 
       expect(searchCatalogFlow.handle).toHaveBeenCalledWith('merchant-1', 'some text');
+    });
+
+    it('AC-12: should route ADD_TO_CART to AddToCartFlow.execute', async () => {
+      jest.spyOn(intentRouter, 'classify').mockReturnValue({
+        intent: 'ADD_TO_CART',
+        confidence: 0.85,
+        entities: {
+          productName: 'camiseta roja',
+        },
+      });
+
+      const result = await orchestrator.process({
+        ...baseInput,
+        text: 'quiero agregar una camiseta roja',
+      });
+
+      expect(result.intent).toBe('ADD_TO_CART');
+      expect(result.shouldSend).toBe(true);
+      expect(addToCartFlow.execute).toHaveBeenCalledWith(
+        mockCustomer.id,
+        mockMerchant.id,
+        'camiseta roja',
+        'quiero agregar una camiseta roja',
+      );
+      expect(result.response).toBe('Item added to cart');
     });
   });
 });
