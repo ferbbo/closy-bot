@@ -2,6 +2,11 @@
 
 > Objetivo del documento: convertir el conocimiento del **CORE V1 MVP** en un formato accionable para que una IA/agente de código pueda empezar a construir la primera versión técnica.
 
+**Premisa del producto:**
+- **WhatsApp-first:** Canal principal de venta conversacional para PYMEs
+- **"Tienda WhatsApp en 10 minutos"**: Onboarding wizard con presets de industria (PlaybookConfig + MerchantConfig) para lanzar sin configuración técnica
+- **Template-first:** Flows determinísticos ejecutan primero; LLM solo como fallback para UNKNOWN/AMBIGUOUS
+
 ---
 
 ## 0) Resumen ejecutivo
