@@ -9,7 +9,10 @@ import type { MerchantPlaybookData } from '../services/playbook.service';
 import { SearchCatalogFlow } from './flows/search-catalog.flow';
 import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
-import { CartFlow } from './flows/cart.flow'; // PR-04
+import { AddToCartFlow } from './flows/add-to-cart.flow'; // PR-04 AC-07
+import { ViewCartFlow } from './flows/view-cart.flow'; // PR-04 AC-08
+import { UpdateCartItemFlow } from './flows/update-cart-item.flow'; // PR-04 AC-09
+import { RemoveFromCartFlow } from './flows/remove-from-cart.flow'; // PR-04 AC-10
 import { LlmService } from '../llm/llm.service';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10 AC-06
@@ -57,7 +60,10 @@ export class ConversationOrchestrator {
     private readonly searchCatalogFlow: SearchCatalogFlow,
     private readonly greetingFlow: GreetingFlow,
     private readonly helpFlow: HelpFlow,
-    private readonly cartFlow: CartFlow, // PR-04
+    private readonly addToCartFlow: AddToCartFlow, // PR-04 AC-07
+    private readonly viewCartFlow: ViewCartFlow, // PR-04 AC-08
+    private readonly updateCartItemFlow: UpdateCartItemFlow, // PR-04 AC-09
+    private readonly removeFromCartFlow: RemoveFromCartFlow, // PR-04 AC-10
     private readonly llmService: LlmService,
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
     private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
@@ -177,10 +183,10 @@ export class ConversationOrchestrator {
           response = await this.searchCatalogFlow.handle(merchant.id, query);
           break;
 
-        // PR-04: Cart intents (AC-10, AC-11, AC-12)
+        // PR-04: Cart intents (AC-07, AC-08, AC-09, AC-10)
         case 'ADD_TO_CART':
           const productQuery = intentResult.entities?.productName || input.text;
-          response = await this.cartFlow.handleAddToCart(
+          response = await this.addToCartFlow.execute(
             customer.id,
             merchant.id,
             productQuery,
@@ -189,12 +195,12 @@ export class ConversationOrchestrator {
           break;
 
         case 'VIEW_CART':
-          response = await this.cartFlow.handleShowCart(customer.id, merchant.id);
+          response = await this.viewCartFlow.execute(customer.id, merchant.id);
           break;
 
         case 'REMOVE_FROM_CART':
           const removeQuery = intentResult.entities?.productName || input.text;
-          response = await this.cartFlow.handleRemoveItem(customer.id, merchant.id, removeQuery);
+          response = await this.removeFromCartFlow.execute(customer.id, merchant.id, removeQuery);
           break;
 
         case 'UPDATE_CART':
@@ -202,7 +208,7 @@ export class ConversationOrchestrator {
           // Extract quantity from text (e.g., "cambiar a 3", "poner 5", "actualizar a 2")
           const quantityMatch = input.text.match(/\b(\d+)\b/);
           const newQuantity = quantityMatch ? parseInt(quantityMatch[1], 10) : 1;
-          response = await this.cartFlow.handleUpdateQuantity(
+          response = await this.updateCartItemFlow.execute(
             customer.id,
             merchant.id,
             updateQuery,

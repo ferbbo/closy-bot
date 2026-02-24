@@ -38,6 +38,16 @@ export class CartRepository {
   }
 
   /**
+   * Find cart by ID (without items)
+   * REQ-02: Basic cart lookup for operations that don't need full items
+   */
+  async findById(id: string): Promise<Cart | null> {
+    return this.prisma.cart.findUnique({
+      where: { id },
+    });
+  }
+
+  /**
    * Find cart by ID with items
    */
   async findByIdWithItems(id: string): Promise<CartWithItems | null> {

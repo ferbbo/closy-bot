@@ -1,6 +1,6 @@
 # Brief — PR-04 — Carrito: CRUD conversacional persistido
 
-> **Status**: `APPROVED`
+> **Status**: `AMENDED`
 > **Archivo**: `docs/plan/pr-briefs/PR-04-cart-crud-conversational.md`
 > **Issue**: [#72](https://github.com/ferbbo/closy-bot/issues/72)
 > **Regla**: Max 2 páginas. Spec-locked. Sin scope extra.
@@ -37,7 +37,7 @@ Habilitar gestión conversacional de carrito de compras: crear carrito por custo
 | ID | Requisito | Issue | AC |
 |--------|-----------|-------|------|
 | REQ-01 | Modelos Cart y CartItem persistidos con relaciones FK y constraints | [#72](https://github.com/ferbbo/closy-bot/issues/72) | AC-01, AC-02 |
-| REQ-02 | CartRepository con métodos: create, findById, findActiveByCustomerAndMerchant, save, expire | [#72](https://github.com/ferbbo/closy-bot/issues/72) | AC-03 |
+| REQ-02 | CartRepository con métodos: create, findById, findActiveByCustomerAndMerchant, updateStatus, refreshTTL, findExpiredCarts | [#72](https://github.com/ferbbo/closy-bot/issues/72) | AC-03 |
 | REQ-03 | CartService con addItem, removeItem, updateItemQuantity, getCart, expiración automática, validación de stock | [#72](https://github.com/ferbbo/closy-bot/issues/72) | AC-04, AC-05, AC-06 |
 | REQ-04 | AddToCartFlow: detectar producto por nombre/SKU, confirmar variante, agregar al carrito, responder con confirmación | [#72](https://github.com/ferbbo/closy-bot/issues/72) | AC-07 |
 | REQ-05 | ViewCartFlow: mostrar items, cantidades, precios snapshot, subtotal | [#72](https://github.com/ferbbo/closy-bot/issues/72) | AC-08 |
@@ -76,16 +76,16 @@ Habilitar gestión conversacional de carrito de compras: crear carrito por custo
 
 ```prisma
 enum CartStatus {
-  ACTIVE
-  EXPIRED
-  CONVERTED  // Cuando se convierte en Order
+  active     // Currently active cart
+  abandoned  // TTL expired or manually cleared
+  completed  // Converted to Order
 }
 
 model Cart {
   id         String     @id @default(cuid())
   customerId String     @map("customer_id")
   merchantId String     @map("merchant_id")
-  status     CartStatus @default(ACTIVE)
+  status     CartStatus @default(active)
   expiresAt  DateTime   @map("expires_at")
   createdAt  DateTime   @default(now()) @map("created_at")
   updatedAt  DateTime   @updatedAt @map("updated_at")
@@ -159,7 +159,7 @@ export type IntentType =
 
 ### Idempotencia
 
-- **Key**: `(customerId, merchantId)` → 1 carrito ACTIVE por customer/merchant
+- **Key**: `(customerId, merchantId)` → 1 carrito activo (status=`active`) por customer/merchant
 - **Constraint**: cuando se agrega item con mismo variantId, se incrementa quantity (no se crea nuevo item)
 - **Unique constraint**: `cart_items(cartId, variantId)` para evitar duplicados
 
@@ -174,7 +174,7 @@ export type IntentType =
    - Si hay 1 variante → agrega directamente
    - Si hay múltiples variantes → pide aclaración (talla/color)
 4. CartService.addItem():
-   - Busca/crea carrito ACTIVE para (customerId, merchantId)
+   - Busca/crea carrito activo (status=`active`) para (customerId, merchantId)
    - Valida stock disponible >= quantity
    - Snapshot de precio actual desde ProductVariant
    - Agrega/incrementa CartItem
@@ -212,8 +212,8 @@ export type IntentType =
 - Si stock < quantity → responde: "❌ Solo hay X unidades disponibles de Camisa Roja M"
 
 #### Carrito expirado
-- Job periódico marca como `EXPIRED` carritos con `expiresAt < now()`
-- Al agregar item a carrito EXPIRED → crea nuevo carrito ACTIVE
+- Job periódico marca como `abandoned` carritos con `expiresAt < now()`
+- Al agregar item a carrito abandonado → crea nuevo carrito activo (status=`active`)
 
 #### Out-of-order / reintentos
 - No aplica idempotencia estricta por dedupe key externo (no hay webhook)
@@ -233,7 +233,7 @@ export type IntentType =
 |--------|----------|-----------|
 | AC-01 | Migración crea tablas `carts` y `cart_items` con relaciones FK correctas | test: `pnpm db:migrate` success + schema validación |
 | AC-02 | Índices existen en (customerId, merchantId, status) y expiresAt | grep schema.prisma |
-| AC-03 | CartRepository.findActiveByCustomerAndMerchant retorna carrito ACTIVE o null | test: `cart.repository.spec.ts` → `should return active cart` |
+| AC-03 | CartRepository.findActiveByCustomerAndMerchant retorna carrito activo (status=`active`) o null | test: `cart.repository.spec.ts` → `should return active cart` |
 | AC-04 | CartService.addItem crea carrito si no existe, snapshot precio, valida stock | test: `cart.service.spec.ts` → `should create cart and add item with price snapshot` |
 | AC-05 | CartService.addItem incrementa quantity si item ya existe (mismo variantId) | test: `cart.service.spec.ts` → `should increment quantity for existing item` |
 | AC-06 | CartService.addItem lanza error si stock insuficiente | test: `cart.service.spec.ts` → `should throw error when insufficient stock` |
@@ -263,7 +263,7 @@ export type IntentType =
   - removeItem: eliminar item
   - updateItemQuantity: cambiar qty
   - calculateSubtotal: suma correcta
-  - getActiveCart: retorna solo ACTIVE
+  - getActiveCart: retorna solo carritos activos (status=`active`)
   - multi-tenancy: no acceder carrito de otro merchant
 
 - **Flows** (`*.flow.spec.ts`):
@@ -354,4 +354,5 @@ export type IntentType =
 | Fecha | Cambio | Motivo |
 |-------|--------|--------|
 | 2026-02-23 | Status: DRAFT → APPROVED | Humano aprobó spec completa. Issue #72 creado, branch PR-04-cart-crud-conversational activa. |
+| 2026-02-24 | Status: APPROVED → AMENDED. Correcciones: REQ-02 métodos reales (create, findById, findActiveByCustomerAndMerchant, updateStatus, refreshTTL, findExpiredCarts), enum @default(active), referencias textuales ACTIVE/EXPIRED → active/abandoned | SCR #74: alinear spec con schema Prisma implementado (enum minúscula) y métodos reales del repository. |
 

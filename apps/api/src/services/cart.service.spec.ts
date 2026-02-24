@@ -200,6 +200,62 @@ describe('CartService', () => {
       );
     });
 
+    it('AC-05: should increment quantity for existing item', async () => {
+      const existingItem = {
+        id: 'item-1',
+        cartId: 'cart-1',
+        variantId: 'variant-1',
+        quantity: 2,
+        priceSnapshot: new Decimal(25),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      productRepository.findByVariantId.mockResolvedValue(mockProduct);
+      cartItemRepository.findByCartAndVariant.mockResolvedValue(existingItem);
+      cartItemRepository.updateQuantity.mockResolvedValue({ ...existingItem, quantity: 5 });
+      // AC-04: Mock cart retrieval
+      cartRepository.findActiveCart.mockResolvedValue(mockCart);
+      cartRepository.findByIdWithItems
+        .mockResolvedValueOnce({ ...mockCart, items: [] }) // First call in createOrGetActiveCart
+        .mockResolvedValueOnce({ ...mockCart, items: [] }); // Second call after update
+
+      await service.addItem('customer-1', 'merchant-1', 'variant-1', 3);
+
+      expect(cartItemRepository.updateQuantity).toHaveBeenCalledWith('item-1', 5); // 2 + 3
+      // AC-05: Validate stock for new quantity (2 + 3 = 5)
+      expect(productRepository.findByVariantId).toHaveBeenCalledWith('variant-1');
+    });
+
+    it('AC-05: should validate stock for new quantity when incrementing', async () => {
+      const existingItem = {
+        id: 'item-1',
+        cartId: 'cart-1',
+        variantId: 'variant-1',
+        quantity: 8,
+        priceSnapshot: new Decimal(25),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      productRepository.findByVariantId.mockResolvedValue({
+        ...mockProduct,
+        variants: [{ ...mockVariant, stock: 10 }],
+      });
+      cartItemRepository.findByCartAndVariant.mockResolvedValue(existingItem);
+      // AC-04: Mock cart retrieval
+      cartRepository.findActiveCart.mockResolvedValue(mockCart);
+      cartRepository.findByIdWithItems.mockResolvedValue({ ...mockCart, items: [] });
+
+      // Try to add 3 more (would be 8 + 3 = 11, but stock is only 10)
+      await expect(service.addItem('customer-1', 'merchant-1', 'variant-1', 3)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.addItem('customer-1', 'merchant-1', 'variant-1', 3)).rejects.toThrow(
+        'Stock insuficiente',
+      );
+    });
+
     it('AC-06: should validate stock', async () => {
       productRepository.findByVariantId.mockResolvedValue({
         ...mockProduct,

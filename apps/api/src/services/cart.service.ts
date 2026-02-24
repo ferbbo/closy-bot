@@ -27,9 +27,9 @@ export interface CartSummary {
  * PR-04: Cart CRUD conversacional
  *
  * Guardrails:
- * - Precio siempre capturado desde ProductVariant.price (REQ-15)
- * - Stock validado antes de agregar (REQ-16)
- * - TTL respetado al crear carrito (REQ-17)
+ * - Precio siempre capturado desde ProductVariant.price (AC-04)
+ * - Stock validado antes de agregar (AC-06)
+ * - TTL respetado al crear carrito (AC-13)
  */
 @Injectable()
 export class CartService {
@@ -159,7 +159,7 @@ export class CartService {
         `Updated item quantity in cart ${cartId}: variant ${variantId} -> ${newQuantity}`,
       );
     } else {
-      // Create new item with price snapshot (REQ-15, AC-04)
+      // Create new item with price snapshot (AC-04)
       try {
         await this.cartItemRepository.create({
           cart: { connect: { id: cartId } },
