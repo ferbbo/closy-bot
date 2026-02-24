@@ -292,7 +292,7 @@ describe('Catalog FTS E2E - AC-03, AC-09, AC-10', () => {
       }
 
       await prisma.$executeRawUnsafe(
-        `INSERT INTO "Product" (name, description, brand, tags, image_urls, search_text, category_id, merchant_id, is_active, created_at, updated_at) VALUES ${placeholders.join(', ')}`,
+        `INSERT INTO "products" (name, description, brand, tags, image_urls, search_text, category_id, merchant_id, is_active, created_at, updated_at) VALUES ${placeholders.join(', ')}`,
         ...values,
       );
 
@@ -315,13 +315,13 @@ describe('Catalog FTS E2E - AC-03, AC-09, AC-10', () => {
       }
     });
 
-    it('AC-09: should handle 500 products search with GIN index and < 200ms latency', async () => {
+    it('AC-09: should handle 500 products search with GIN index and < 50ms latency', async () => {
       const start = Date.now();
       const results = await catalogService.searchProducts(merchantId, 'producto marca', 10);
       const elapsed = Date.now() - start;
 
       expect(results.length).toBeGreaterThan(0);
-      expect(elapsed).toBeLessThan(200);
+      expect(elapsed).toBeLessThan(50);
     });
 
     it('AC-09: should use GIN index for FTS queries (EXPLAIN ANALYZE validation)', async () => {
@@ -332,7 +332,7 @@ describe('Catalog FTS E2E - AC-03, AC-09, AC-10', () => {
         `
         EXPLAIN ANALYZE
         SELECT id, name, ts_rank(to_tsvector('simple', COALESCE(search_text, '')), plainto_tsquery('simple', $1)) AS rank
-        FROM "Product"
+        FROM "products"
         WHERE merchant_id = $2
           AND to_tsvector('simple', COALESCE(search_text, '')) @@ plainto_tsquery('simple', $1)
         ORDER BY rank DESC
@@ -346,7 +346,7 @@ describe('Catalog FTS E2E - AC-03, AC-09, AC-10', () => {
 
       // Verify GIN index is used (not Sequential Scan)
       expect(planText).toContain('Bitmap Index Scan');
-      expect(planText).toContain('idx_product_search_text');
+      expect(planText).toContain('idx_product_search_fts');
     });
   });
 });
