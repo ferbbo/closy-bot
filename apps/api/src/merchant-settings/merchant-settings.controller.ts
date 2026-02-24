@@ -16,6 +16,8 @@ import { MerchantSettingsService } from './merchant-settings.service';
 import { UpdateMerchantDto } from './dto/update-merchant.dto';
 import { UpdatePlaybookConfigDto } from './dto/update-playbook-config.dto';
 import { MerchantProfileResponseDto } from './dto/merchant-profile-response.dto';
+import { MerchantConfigService } from './merchant-config.service';
+import { UpdateMerchantConfigDto, MerchantConfigResponseDto } from './dto/merchant-config.dto';
 
 /**
  * MerchantSettingsController
@@ -26,7 +28,10 @@ import { MerchantProfileResponseDto } from './dto/merchant-profile-response.dto'
 export class MerchantSettingsController {
   private readonly logger = new Logger(MerchantSettingsController.name);
 
-  constructor(private readonly merchantSettingsService: MerchantSettingsService) {}
+  constructor(
+    private readonly merchantSettingsService: MerchantSettingsService,
+    private readonly merchantConfigService: MerchantConfigService,
+  ) {}
 
   /**
    * GET /merchants/me
@@ -88,5 +93,42 @@ export class MerchantSettingsController {
   ): Promise<MerchantProfileResponseDto> {
     this.logger.log(`PATCH /merchants/me/playbook - merchant: ${req.merchant.id}`);
     return this.merchantSettingsService.mergePlaybookConfig(req.merchant.id, partialConfig);
+  }
+
+  // ---------------------------------------------------------------------------
+  // PR-04.5: Merchant operational config
+  // ---------------------------------------------------------------------------
+
+  /**
+   * GET /merchants/me/config
+   * Returns merchant operational config (payment methods, shipping, return policy).
+   * Creates config with industry preset if it doesn't exist yet.
+   * AC-08
+   */
+  @Get('me/config')
+  async getMerchantConfig(@Req() req: AuthenticatedRequest): Promise<MerchantConfigResponseDto> {
+    this.logger.log(`GET /merchants/me/config - merchant: ${req.merchant.id}`);
+    return this.merchantConfigService.getOrCreateConfig(req.merchant.id);
+  }
+
+  /**
+   * PATCH /merchants/me/config
+   * Partially updates merchant operational config. Only provided fields are updated.
+   * AC-09
+   */
+  @Patch('me/config')
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  )
+  async updateMerchantConfig(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: UpdateMerchantConfigDto,
+  ): Promise<MerchantConfigResponseDto> {
+    this.logger.log(`PATCH /merchants/me/config - merchant: ${req.merchant.id}`);
+    return this.merchantConfigService.updateConfig(req.merchant.id, dto);
   }
 }

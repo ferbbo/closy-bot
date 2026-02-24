@@ -17,9 +17,33 @@ async function main() {
       name: 'Dev Test Store',
       whatsappNumber: '+573133898468',
       apiKey: 'sk_test_dev_merchant_001',
+      industry: 'ropa',
     },
   });
   console.log('✅ Created merchant:', merchant.id);
+
+  // PR-04.5: Create MerchantConfig with ropa preset (AC-10)
+  await prisma.merchantConfig.upsert({
+    where: { merchantId: merchant.id },
+    update: {},
+    create: {
+      merchantId: merchant.id,
+      paymentMethods: [
+        { type: 'cod', label: 'Contraentrega' },
+        { type: 'transfer', label: 'Transferencia bancaria' },
+      ],
+      shippingConfig: {
+        flatRate: 10000,
+        estimatedDays: '3-5 días hábiles',
+      },
+      returnPolicy:
+        'Aceptamos cambios hasta 10 días después de recibir tu pedido. El producto debe estar sin usar, con etiquetas.',
+      currency: 'COP',
+      orderCodePrefix: 'ORD',
+      autoConfirmCod: true,
+    },
+  });
+  console.log('✅ Created MerchantConfig for dev merchant (ropa preset)');
 
   // Create test customers
   const customer1 = await prisma.customer.upsert({

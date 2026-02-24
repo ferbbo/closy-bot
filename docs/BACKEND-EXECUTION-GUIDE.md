@@ -1079,7 +1079,169 @@ Ejemplo:
 
 ---
 
+## Flujo 5.5: Merchant Config — Políticas operativas (PR-04.5)
+
+### Descripción
+
+Permite al merchant autenticado gestionar su configuración operativa: métodos de pago aceptados, política de envío, política de devolución, moneda y prefijo del código de orden.  
+Si no existe config, se crea automáticamente con el preset de la industria del merchant.
+
+**Endpoints:**
+
+| Método | Endpoint | Auth | Descripción |
+|--------|----------|------|-------------|
+| GET | `/merchants/me/config` | Session Cookie | Obtiene config con presets aplicados |
+| PATCH | `/merchants/me/config` | Session Cookie | Actualiza solo los campos enviados |
+
+**Industrias y presets:**
+
+| Industry | `orderCodePrefix` | Métodos de pago | Envío |
+|----------|-------------------|-----------------|-------|
+| `ropa` | `ORD` | COD + Transfer | Tarifa plana $10.000 |
+| `belleza` | `ORDEN` | COD + Transfer + Link | Gratis sobre $50.000 |
+| `minimarket` | `PED` | Solo COD | Mismo día |
+
+### Pre-requisitos
+
+1. Merchant autenticado (cookie `session_id` válida - ver Flujo 1)
+
+---
+
+### Probar con cURL
+
+#### 1. Obtener config actual (auto-crea con preset si no existe)
+
+```bash
+curl -X GET http://localhost:3000/merchants/me/config \
+  -H "Cookie: session_id=<tu-session-id>"
+```
+
+**Respuesta esperada (200):**
+```json
+{
+  "id": "clxxx...",
+  "merchantId": "clyyy...",
+  "paymentMethods": [
+    { "type": "cod", "label": "Contraentrega" },
+    { "type": "transfer", "label": "Transferencia bancaria" }
+  ],
+  "shippingConfig": {
+    "flatRate": 10000,
+    "estimatedDays": "3-5 días hábiles"
+  },
+  "returnPolicy": "Aceptamos cambios hasta 10 días...",
+  "currency": "COP",
+  "orderCodePrefix": "ORD",
+  "autoConfirmCod": true,
+  "createdAt": "2026-02-24T21:00:00.000Z",
+  "updatedAt": "2026-02-24T21:00:00.000Z"
+}
+```
+
+#### 2. Actualizar solo `returnPolicy` (PATCH parcial)
+
+```bash
+curl -X PATCH http://localhost:3000/merchants/me/config \
+  -H "Cookie: session_id=<tu-session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "returnPolicy": "Cambios hasta 15 días con producto sin usar y con etiquetas originales."
+  }'
+```
+
+**Respuesta esperada (200):** Igual que GET pero con `returnPolicy` actualizado. Todos los demás campos sin cambio.
+
+#### 3. Actualizar métodos de pago con info bancaria
+
+```bash
+curl -X PATCH http://localhost:3000/merchants/me/config \
+  -H "Cookie: session_id=<tu-session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "paymentMethods": [
+      { "type": "cod", "label": "Contraentrega" },
+      {
+        "type": "transfer",
+        "label": "Transferencia Bancolombia",
+        "instructions": "Enviar comprobante al WhatsApp después de transferir.",
+        "bankInfo": {
+          "bankName": "Bancolombia",
+          "accountNumber": "1234567890",
+          "accountType": "ahorros",
+          "accountHolder": "Mi Tienda SAS"
+        }
+      }
+    ]
+  }'
+```
+
+#### 4. Actualizar config de envío
+
+```bash
+curl -X PATCH http://localhost:3000/merchants/me/config \
+  -H "Cookie: session_id=<tu-session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "shippingConfig": {
+      "flatRate": 8000,
+      "freeAbove": 100000,
+      "estimatedDays": "2-3 días hábiles",
+      "zones": ["Bogotá", "Medellín", "Cali"]
+    }
+  }'
+```
+
+#### 5. Actualizar varios campos a la vez
+
+```bash
+curl -X PATCH http://localhost:3000/merchants/me/config \
+  -H "Cookie: session_id=<tu-session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "currency": "COP",
+    "orderCodePrefix": "ORDEN",
+    "autoConfirmCod": false
+  }'
+```
+
+#### 6. Error — tipo de pago inválido (400)
+
+```bash
+curl -X PATCH http://localhost:3000/merchants/me/config \
+  -H "Cookie: session_id=<tu-session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "paymentMethods": [{ "type": "bitcoin", "label": "Cripto" }]
+  }'
+```
+
+**Respuesta esperada (400):**
+```json
+{
+  "statusCode": 400,
+  "message": ["paymentMethods.0.type must be one of the following values: cod, transfer, payment_link"],
+  "error": "Bad Request"
+}
+```
+
+#### 7. Error — sin autenticación (401)
+
+```bash
+curl -X GET http://localhost:3000/merchants/me/config
+```
+
+**Respuesta esperada (401):**
+```json
+{
+  "statusCode": 401,
+  "message": "Unauthorized"
+}
+```
+
+---
+
 ## Flujo 6: Cart CRUD Conversacional (PR-04)
+
 
 ### Descripción
 
