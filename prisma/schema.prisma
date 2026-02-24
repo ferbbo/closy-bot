@@ -191,6 +191,10 @@ model Product {
   id          String   @id @default(cuid())
   name        String
   description String?
+  brand       String? // PR-03.5.2: Product brand
+  tags        String[] // PR-03.5.2: Keywords for enhanced search
+  imageUrls   String[] @map("image_urls") // PR-03.5.2: Product images
+  searchText  String?  @map("search_text") // PR-03.5.2: Derived field for FTS (auto-generated)
   categoryId  String   @map("category_id")
   merchantId  String   @map("merchant_id")
   isActive    Boolean  @default(true) @map("is_active")
