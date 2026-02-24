@@ -1,52 +1,48 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CatalogService } from '../../services/catalog.service';
+import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.service';
 import { ProductWithVariants } from '../../persistence/repositories/product.repository';
 
 /**
  * SearchCatalogFlow
  * Handles product search and formats results
+ * PR-GAP-1: All user-facing messages via PlaybookService.getMessage()
  */
 @Injectable()
 export class SearchCatalogFlow {
   private readonly logger = new Logger(SearchCatalogFlow.name);
 
-  constructor(private readonly catalogService: CatalogService) {}
+  constructor(
+    private readonly catalogService: CatalogService,
+    private readonly playbookService: PlaybookService,
+  ) {}
 
   /**
-   * Search products and format response
-   *
+   * @param merchant  - Merchant data (used to resolve playbook messages) [PR-GAP-1]
    * @param merchantId - Merchant ID
-   * @param query - Search query
-   * @returns Formatted product list message
+   * @param query     - Search query
    */
-  async handle(merchantId: string, query: string): Promise<string> {
+  async handle(merchant: MerchantPlaybookData, merchantId: string, query: string): Promise<string> {
     this.logger.log(`Searching catalog for merchant ${merchantId} (query length: ${query.length})`);
 
     // Search products (max 5 for WhatsApp readability)
     const products = await this.catalogService.searchProducts(merchantId, query, 5);
 
     if (products.length === 0) {
-      return this.formatNoResults(query);
+      return this.playbookService.getMessage(merchant, 'searchNoResults', { query });
     }
 
-    return this.formatResults(query, products);
-  }
-
-  /**
-   * Format no results message
-   */
-  private formatNoResults(query: string): string {
-    return `😔 No encontré productos para "${query}"
-
-Intenta con otras palabras o escribe "ayuda" para ver opciones.`;
+    return this.formatResults(merchant, query, products);
   }
 
   /**
    * Format products as WhatsApp message
    */
-  private formatResults(query: string, products: ProductWithVariants[]): string {
-    const header = `🔍 Resultados para "${query}":\n\n`;
-
+  private formatResults(
+    merchant: MerchantPlaybookData,
+    query: string,
+    products: ProductWithVariants[],
+  ): string {
     const productLines = products
       .map((product, index) => {
         const variants = product.variants.filter((v) => v.stock > 0);
@@ -75,10 +71,14 @@ Intenta con otras palabras o escribe "ayuda" para ver opciones.`;
 
     // If all products have zero stock after filtering
     if (productLines.length === 0) {
-      return this.formatNoResults(query);
+      return this.playbookService.getMessage(merchant, 'searchNoResults', { query });
     }
 
-    const footer = `\n\n💬 Para agregar al carrito, escribe el nombre del producto`;
+    const header = this.playbookService.getMessage(merchant, 'searchResultsHeader', {
+      query,
+      count: productLines.length,
+    });
+    const footer = this.playbookService.getMessage(merchant, 'searchResultsFooter');
 
     return header + productLines.join('\n\n') + footer;
   }

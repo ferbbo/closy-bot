@@ -1,11 +1,16 @@
 /**
- * Playbook defaults for ROPA (Clothing) industry (PR-11)
+ * Playbook defaults for ROPA (Clothing) industry (PR-11 / PR-GAP-1)
  */
 
 import { PlaybookConfig } from '../playbook-config.interface';
 
 export const RopaPlaybookDefaults: PlaybookConfig = {
   industry: 'ropa',
+  botPersonality: {
+    style: 'enthusiastic',
+    emojiUsage: 'frequent',
+    signatureEmoji: '👗',
+  },
   llmPrompt: {
     tone: 'Conversacional, moderno, entusiasta. Usa emojis de moda 👗👕✨',
     focusAreas: ['talla', 'color', 'estilo', 'ocasión'],
@@ -35,11 +40,34 @@ export const RopaPlaybookDefaults: PlaybookConfig = {
   ],
   messages: {
     greeting: '¡Hola! 👗 Soy tu asistente de {merchant_name}. ¿Qué estilo buscas hoy?',
-    addToCartConfirm: '¡Genial! Agregado al carrito 🛒',
-    noStock:
-      'Uy, ese modelo está agotado 😔. Te puedo notificar cuando llegue o mostrarte algo similar?',
+    addToCartConfirm:
+      '¡Genial! Agregado al carrito 🛒\n\n👗 {product_name} - {variant_name}\n💰 ${price}\n\n🛒 Total: *${cart_total}* ({cart_item_count} {cart_item_word})\n\nEscribe "ver carrito" para revisar o "buscar" para agregar más.',
+    noStock: 'Uy, ese modelo está agotado 😔. ¿Te notifico cuando llegue o vemos algo similar?',
     upsellTemplate: 'Este {product} combina perfecto con lo que elegiste ✨',
     checkoutStart: '¡Perfecto! Vamos a confirmar tu pedido 📦',
+    searchNoResults:
+      '😔 No encontré prendas para "{query}"\n\nIntenta con otras palabras o escribe "ayuda" para ver opciones.',
+    searchResultsHeader: '🔍 Resultados para "{query}" ({count}):\n\n',
+    searchResultsFooter: '\n\n💬 Para agregar al carrito, escribe el nombre de la prenda 👗',
+    helpMenu:
+      '📋 *Opciones disponibles*\n\n🔍 *Buscar prendas*\nEscribe lo que buscas: "camisas", "vestido azul", "talla M"\n\n🛒 *Ver carrito*\nEscribe "ver carrito" o "carrito"\n\n❓ *Ayuda*\nEscribe "ayuda" o "menú"\n\n💬 *Hablar con un humano*\nEscribe "hablar con agente" o "ayuda humana"\n\n---\n\n¿En qué puedo ayudarte? 👗',
+    cartEmpty:
+      '🛒 *Tu carrito está vacío*\n\nEscribe "buscar" para explorar nuestra ropa o dime qué estilo buscas.',
+    cartSummaryHeader: '🛒 *Tu carrito* ({item_count} {item_word})\n\n',
+    cartSummaryFooter: '\n\n💰 *Total: ${total}*\n\n✏️ Para modificar, dime qué quieres cambiar.',
+    removeConfirm: '✅ *{product_name} - {variant_name}* removido del carrito 👗',
+    updateConfirm: '✅ *Cantidad actualizada*\n\n{product_name}: {quantity} unidades',
+    quantityInvalid: '❌ La cantidad debe estar entre 1 y 99 unidades.',
+    productNotFound: '😔 No encontré "{query}"\n\nEscribe "buscar" para ver el catálogo 👗',
+    productMultipleOptions:
+      'Encontré varias opciones:\n\n{product_list}\n\n¿Cuál quieres agregar? Responde con el nombre exacto.',
+    variantMultipleOptions:
+      '*{product_name}* tiene varias opciones:\n\n{variant_list}\n\n¿Cuál variante quieres? Responde con el nombre.',
+    itemNotInCart:
+      'No encontré "{query}" en tu carrito.\n\nTu carrito tiene:\n{items_list}\n\n¿Cuál quieres modificar?',
+    cartEmptyNoAction: '🛒 Tu carrito está vacío, no hay nada que {action}.',
+    genericError: '❌ Error al {action}. Intenta de nuevo.',
+    unknownIntent: 'No entendí tu mensaje. Escribe "ayuda" para ver opciones 👗',
   },
   rules: {
     askSizeBeforeCart: true,

@@ -261,7 +261,11 @@ describe('ConversationOrchestrator', () => {
       expect(result.intent).toBe('SEARCH_PRODUCT');
       expect(result.shouldSend).toBe(true);
       // V2 passes full text (no entity extraction)
-      expect(searchCatalogFlow.handle).toHaveBeenCalledWith('merchant-1', 'busco zapatillas');
+      expect(searchCatalogFlow.handle).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'merchant-1', name: 'Test Store' }),
+        'merchant-1',
+        'busco zapatillas',
+      );
     });
 
     it('should handle unknown intent with fallback search', async () => {
@@ -344,7 +348,11 @@ describe('ConversationOrchestrator', () => {
         text: 'some text',
       });
 
-      expect(searchCatalogFlow.handle).toHaveBeenCalledWith('merchant-1', 'some text');
+      expect(searchCatalogFlow.handle).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'merchant-1' }),
+        'merchant-1',
+        'some text',
+      );
     });
 
     it('AC-12: should route ADD_TO_CART to AddToCartFlow.execute', async () => {
@@ -365,6 +373,7 @@ describe('ConversationOrchestrator', () => {
       expect(result.shouldSend).toBe(true);
       // V2 passes full text (no entity extraction)
       expect(addToCartFlow.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'merchant-1', name: 'Test Store' }),
         mockCustomer.id,
         mockMerchant.id,
         'quiero agregar una camiseta roja',

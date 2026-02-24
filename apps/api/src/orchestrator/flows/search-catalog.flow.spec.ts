@@ -2,28 +2,63 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { SearchCatalogFlow } from './search-catalog.flow';
 import { CatalogService } from '../../services/catalog.service';
 import { ProductWithVariants } from '../../persistence/repositories/product.repository';
+import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.service';
+import { PlaybookMessages } from '../../domain/entities/playbook-config.interface';
+import { GenericPlaybookDefaults } from '../../domain/entities/playbook-defaults/generic.config';
 
-describe('SearchCatalogFlow', () => {
+function buildMockGetMessage() {
+  return jest
+    .fn()
+    .mockImplementation(
+      (
+        merchant: MerchantPlaybookData,
+        key: keyof PlaybookMessages,
+        placeholders?: Record<string, string | number>,
+      ) => {
+        let template: string = GenericPlaybookDefaults.messages[key] ?? String(key);
+        if (placeholders) {
+          for (const [k, v] of Object.entries(placeholders)) {
+            template = template.replace(`{${k}}`, String(v));
+          }
+        }
+        return template;
+      },
+    );
+}
+
+const mockMerchant: MerchantPlaybookData = { id: 'merchant-123', name: 'TestMerchant' };
+
+/**
+ * SearchCatalogFlow Unit Tests
+ * PR-GAP-1 AC-04: Verifica que SearchCatalogFlow usa PlaybookService.getMessage() sin hardcode
+ */
+describe('AC-04: SearchCatalogFlow uses PlaybookService.getMessage() (PR-GAP-1)', () => {
   let flow: SearchCatalogFlow;
   let catalogService: jest.Mocked<CatalogService>;
+  let playbookService: jest.Mocked<PlaybookService>;
 
   beforeEach(async () => {
-    const mockCatalogService = {
-      searchProducts: jest.fn(),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SearchCatalogFlow,
         {
           provide: CatalogService,
-          useValue: mockCatalogService,
+          useValue: {
+            searchProducts: jest.fn(),
+          },
+        },
+        {
+          provide: PlaybookService,
+          useValue: {
+            getMessage: buildMockGetMessage(),
+          },
         },
       ],
     }).compile();
 
     flow = module.get<SearchCatalogFlow>(SearchCatalogFlow);
     catalogService = module.get(CatalogService);
+    playbookService = module.get(PlaybookService);
   });
 
   it('should be defined', () => {
@@ -36,10 +71,16 @@ describe('SearchCatalogFlow', () => {
     it('should return no results message when no products found', async () => {
       catalogService.searchProducts.mockResolvedValue([]);
 
-      const result = await flow.handle(merchantId, 'nonexistent product');
+      const result = await flow.handle(mockMerchant, merchantId, 'nonexistent product');
 
       expect(result).toContain('No encontré productos');
       expect(result).toContain('nonexistent product');
+      // AC-04: getMessage called for searchNoResults, no hardcode
+      expect(playbookService.getMessage).toHaveBeenCalledWith(
+        mockMerchant,
+        'searchNoResults',
+        expect.objectContaining({ query: 'nonexistent product' }),
+      );
     });
 
     it('should format single product with stock', async () => {
@@ -68,12 +109,18 @@ describe('SearchCatalogFlow', () => {
 
       catalogService.searchProducts.mockResolvedValue(products);
 
-      const result = await flow.handle(merchantId, 'zapatillas');
+      const result = await flow.handle(mockMerchant, merchantId, 'zapatillas');
 
       expect(result).toContain('Resultados para "zapatillas"');
       expect(result).toContain('Zapatillas Running');
       expect(result).toContain('$50000.00');
       expect(result).toContain('Stock: 10 unidades');
+      // AC-04: getMessage called for searchResultsHeader
+      expect(playbookService.getMessage).toHaveBeenCalledWith(
+        mockMerchant,
+        'searchResultsHeader',
+        expect.any(Object),
+      );
     });
 
     it('should format multiple products with price ranges', async () => {
@@ -132,7 +179,7 @@ describe('SearchCatalogFlow', () => {
 
       catalogService.searchProducts.mockResolvedValue(products);
 
-      const result = await flow.handle(merchantId, 'camisa');
+      const result = await flow.handle(mockMerchant, merchantId, 'camisa');
 
       expect(result).toContain('Camisa Azul');
       expect(result).toContain('Camisa Roja');
@@ -196,7 +243,7 @@ describe('SearchCatalogFlow', () => {
 
       catalogService.searchProducts.mockResolvedValue(products);
 
-      const result = await flow.handle(merchantId, 'product');
+      const result = await flow.handle(mockMerchant, merchantId, 'product');
 
       // Should include product with stock
       expect(result).toContain('Product With Stock');
@@ -230,7 +277,7 @@ describe('SearchCatalogFlow', () => {
 
       catalogService.searchProducts.mockResolvedValue(products);
 
-      const result = await flow.handle(merchantId, 'product');
+      const result = await flow.handle(mockMerchant, merchantId, 'product');
 
       expect(result).toContain('No encontré productos');
       expect(result).not.toContain('Out of Stock Product');
@@ -261,7 +308,7 @@ describe('SearchCatalogFlow', () => {
 
       catalogService.searchProducts.mockResolvedValue(products);
 
-      await flow.handle(merchantId, 'product');
+      await flow.handle(mockMerchant, merchantId, 'product');
 
       // Verify catalog service was called with limit 5
       expect(catalogService.searchProducts).toHaveBeenCalledWith(merchantId, 'product', 5);
@@ -295,7 +342,7 @@ describe('SearchCatalogFlow', () => {
 
       catalogService.searchProducts.mockResolvedValue(products);
 
-      const result = await flow.handle(merchantId, 'product');
+      const result = await flow.handle(mockMerchant, merchantId, 'product');
 
       expect(result).toContain('...');
       expect(result).toContain(longDescription.substring(0, 60));

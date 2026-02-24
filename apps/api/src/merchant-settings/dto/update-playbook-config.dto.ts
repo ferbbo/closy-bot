@@ -66,6 +66,7 @@ export class CheckoutQuestionDto {
 }
 
 export class PlaybookMessagesDto {
+  // ── Existing (PR-11) ──────────────────────────────────────────────────────
   @IsString()
   @IsOptional()
   greeting?: string;
@@ -85,6 +86,75 @@ export class PlaybookMessagesDto {
   @IsString()
   @IsOptional()
   checkoutStart?: string;
+
+  // ── New (PR-GAP-1) ────────────────────────────────────────────────────────
+  @IsString()
+  @IsOptional()
+  searchNoResults?: string;
+
+  @IsString()
+  @IsOptional()
+  searchResultsHeader?: string;
+
+  @IsString()
+  @IsOptional()
+  searchResultsFooter?: string;
+
+  @IsString()
+  @IsOptional()
+  helpMenu?: string;
+
+  @IsString()
+  @IsOptional()
+  cartEmpty?: string;
+
+  @IsString()
+  @IsOptional()
+  cartSummaryHeader?: string;
+
+  @IsString()
+  @IsOptional()
+  cartSummaryFooter?: string;
+
+  @IsString()
+  @IsOptional()
+  removeConfirm?: string;
+
+  @IsString()
+  @IsOptional()
+  updateConfirm?: string;
+
+  @IsString()
+  @IsOptional()
+  quantityInvalid?: string;
+
+  @IsString()
+  @IsOptional()
+  productNotFound?: string;
+
+  @IsString()
+  @IsOptional()
+  productMultipleOptions?: string;
+
+  @IsString()
+  @IsOptional()
+  variantMultipleOptions?: string;
+
+  @IsString()
+  @IsOptional()
+  itemNotInCart?: string;
+
+  @IsString()
+  @IsOptional()
+  cartEmptyNoAction?: string;
+
+  @IsString()
+  @IsOptional()
+  genericError?: string;
+
+  @IsString()
+  @IsOptional()
+  unknownIntent?: string;
 }
 
 export class PlaybookRulesDto {
@@ -109,6 +179,23 @@ export class PlaybookRulesDto {
   @Max(10)
   @IsOptional()
   maxRecommendations?: number;
+}
+
+/**
+ * PR-GAP-1: BotPersonality DTO
+ */
+export class BotPersonalityDto {
+  @IsEnum(['friendly', 'professional', 'enthusiastic', 'minimal'])
+  @IsOptional()
+  style?: 'friendly' | 'professional' | 'enthusiastic' | 'minimal';
+
+  @IsEnum(['none', 'moderate', 'frequent'])
+  @IsOptional()
+  emojiUsage?: 'none' | 'moderate' | 'frequent';
+
+  @IsString()
+  @IsOptional()
+  signatureEmoji?: string;
 }
 
 /**
@@ -142,4 +229,11 @@ export class UpdatePlaybookConfigDto {
   @ValidateNested()
   @Type(() => PlaybookRulesDto)
   rules?: PlaybookRulesDto;
+
+  /** PR-GAP-1: High-level bot personality selector */
+  @IsObject()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BotPersonalityDto)
+  botPersonality?: BotPersonalityDto;
 }

@@ -238,25 +238,37 @@ export class ConversationOrchestrator {
         return await this.greetingFlow.handle(customerName, merchantPlaybook);
 
       case 'HELP':
-        return await this.helpFlow.handle();
+        return await this.helpFlow.handle(merchantPlaybook);
 
       case 'SEARCH_PRODUCT':
-        return await this.searchCatalogFlow.handle(merchantId, originalText);
+        return await this.searchCatalogFlow.handle(merchantPlaybook, merchantId, originalText);
 
       case 'ADD_TO_CART':
-        return await this.addToCartFlow.execute(customerId, merchantId, originalText, originalText);
+        return await this.addToCartFlow.execute(
+          merchantPlaybook,
+          customerId,
+          merchantId,
+          originalText,
+          originalText,
+        );
 
       case 'VIEW_CART':
-        return await this.viewCartFlow.execute(customerId, merchantId);
+        return await this.viewCartFlow.execute(merchantPlaybook, customerId, merchantId);
 
       case 'REMOVE_FROM_CART':
-        return await this.removeFromCartFlow.execute(customerId, merchantId, originalText);
+        return await this.removeFromCartFlow.execute(
+          merchantPlaybook,
+          customerId,
+          merchantId,
+          originalText,
+        );
 
       case 'UPDATE_CART':
         // Extract quantity from text (e.g., "cambiar a 3", "poner 5", "actualizar a 2")
         const quantityMatch = originalText.match(/\b(\d+)\b/);
         const newQuantity = quantityMatch ? parseInt(quantityMatch[1], 10) : 1;
         return await this.updateCartItemFlow.execute(
+          merchantPlaybook,
           customerId,
           merchantId,
           originalText,
@@ -274,7 +286,7 @@ export class ConversationOrchestrator {
       default:
         // Should not reach here (RouteDecisionService handles UNKNOWN)
         // But keep as safety fallback
-        return await this.searchCatalogFlow.handle(merchantId, originalText);
+        return await this.searchCatalogFlow.handle(merchantPlaybook, merchantId, originalText);
     }
   }
 

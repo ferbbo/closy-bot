@@ -1,17 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CartService, CartSummary } from '../../services/cart.service';
+import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.service';
 
 /**
  * ViewCartFlow
  * AC-08: Handles VIEW_CART intent
  * REQ-05: Shows cart summary in WhatsApp-friendly format
  * PR-04: Cart CRUD conversational
+ * PR-GAP-1: All user-facing messages via PlaybookService.getMessage()
  */
 @Injectable()
 export class ViewCartFlow {
   private readonly logger = new Logger(ViewCartFlow.name);
 
-  constructor(private readonly cartService: CartService) {}
+  constructor(
+    private readonly cartService: CartService,
+    private readonly playbookService: PlaybookService,
+  ) {}
 
   /**
    * AC-08: Handle VIEW_CART intent
@@ -21,7 +26,14 @@ export class ViewCartFlow {
    * @param merchantId - Merchant ID
    * @returns Formatted cart summary
    */
-  async execute(customerId: string, merchantId: string): Promise<string> {
+  /**
+   * @param merchant  - Merchant data (used to resolve playbook messages) [PR-GAP-1]
+   */
+  async execute(
+    merchant: MerchantPlaybookData,
+    customerId: string,
+    merchantId: string,
+  ): Promise<string> {
     this.logger.log(`Showing cart for customer ${customerId}`);
 
     try {
@@ -29,23 +41,26 @@ export class ViewCartFlow {
       const summary = await this.cartService.getCartSummary(cart.id);
 
       if (summary.items.length === 0) {
-        return `🛒 *Tu carrito está vacío*
-
-Escribe "buscar" para explorar productos o simplemente dime qué necesitas.`;
+        return this.playbookService.getMessage(merchant, 'cartEmpty');
       }
 
-      return this.formatCartSummary(summary);
+      return this.formatCartSummary(merchant, summary);
     } catch (error) {
       this.logger.error(`Failed to show cart: ${error.message}`, error.stack);
-      return '❌ Error al mostrar el carrito. Intenta de nuevo.';
+      return this.playbookService.getMessage(merchant, 'genericError', {
+        action: 'mostrar el carrito',
+      });
     }
   }
 
   /**
    * Format cart summary message (WhatsApp-friendly)
    */
-  private formatCartSummary(summary: CartSummary): string {
-    const header = `🛒 *Tu carrito* (${summary.itemCount} ${summary.itemCount === 1 ? 'producto' : 'productos'})\n\n`;
+  private formatCartSummary(merchant: MerchantPlaybookData, summary: CartSummary): string {
+    const header = this.playbookService.getMessage(merchant, 'cartSummaryHeader', {
+      item_count: summary.itemCount,
+      item_word: summary.itemCount === 1 ? 'producto' : 'productos',
+    });
 
     const items = summary.items
       .map(
@@ -54,9 +69,9 @@ Escribe "buscar" para explorar productos o simplemente dime qué necesitas.`;
       )
       .join('\n\n');
 
-    const footer = `\n\n💰 *Total: $${summary.total.toFixed(2)}*
-
-✏️ Para modificar cantidades o remover items, escríbeme qué quieres cambiar.`;
+    const footer = this.playbookService.getMessage(merchant, 'cartSummaryFooter', {
+      total: summary.total.toFixed(2),
+    });
 
     return header + items + footer;
   }

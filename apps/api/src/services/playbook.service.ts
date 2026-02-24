@@ -1,10 +1,15 @@
 /**
- * PlaybookService (PR-11)
+ * PlaybookService (PR-11 / PR-GAP-1)
  * Handles playbook selection, composition, and validation
  */
 
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
-import { PlaybookConfig, Industry } from '../domain/entities/playbook-config.interface';
+import {
+  PlaybookConfig,
+  PlaybookMessages,
+  BotPersonality,
+  Industry,
+} from '../domain/entities/playbook-config.interface';
 import { RopaPlaybookDefaults } from '../domain/entities/playbook-defaults/ropa.config';
 import { BellezaPlaybookDefaults } from '../domain/entities/playbook-defaults/belleza.config';
 import { MinimarketPlaybookDefaults } from '../domain/entities/playbook-defaults/minimarket.config';
@@ -51,6 +56,41 @@ export class PlaybookService {
   getGreetingMessage(merchant: MerchantPlaybookData): string {
     const playbook = this.getPlaybookForMerchant(merchant);
     return this.interpolateMessage(playbook.messages.greeting, merchant.name);
+  }
+
+  /**
+   * PR-GAP-1 — REQ-02 / AC-02
+   * Get a playbook message by key with simple {placeholder} interpolation.
+   * Falls back to GenericPlaybookDefaults when key is missing from merchant playbook.
+   *
+   * @param merchant  - Merchant data (used to resolve playbook)
+   * @param key       - Message key (keyof PlaybookMessages)
+   * @param placeholders - Optional map of placeholder → value
+   * @returns Interpolated string
+   */
+  getMessage(
+    merchant: MerchantPlaybookData,
+    key: keyof PlaybookMessages,
+    placeholders?: Record<string, string | number>,
+  ): string {
+    const playbook = this.getPlaybookForMerchant(merchant);
+    let template: string | undefined = playbook.messages[key];
+
+    // Fallback to generic defaults when key is absent (backward compat)
+    if (template === undefined) {
+      this.logger.warn(
+        `getMessage: key "${key}" not found in playbook for merchant ${merchant.id}, using generic default`,
+      );
+      template = GenericPlaybookDefaults.messages[key];
+    }
+
+    // Last-resort: return key name so the bot is never silent
+    if (template === undefined) {
+      this.logger.error(`getMessage: key "${key}" not found in GenericPlaybookDefaults`);
+      return key;
+    }
+
+    return this.interpolatePlaceholders(template, placeholders);
   }
 
   /**
@@ -106,6 +146,7 @@ export class PlaybookService {
     if (customConfig.messages !== undefined) {
       result.messages = { ...baseConfig.messages };
       const partial = customConfig.messages;
+      // ── existing fields (PR-11) ──────────────────────────────────────────
       if (partial.greeting !== undefined) result.messages.greeting = partial.greeting;
       if (partial.addToCartConfirm !== undefined)
         result.messages.addToCartConfirm = partial.addToCartConfirm;
@@ -114,6 +155,52 @@ export class PlaybookService {
         result.messages.upsellTemplate = partial.upsellTemplate;
       if (partial.checkoutStart !== undefined)
         result.messages.checkoutStart = partial.checkoutStart;
+      // ── new fields (PR-GAP-1) ────────────────────────────────────────────
+      if (partial.searchNoResults !== undefined)
+        result.messages.searchNoResults = partial.searchNoResults;
+      if (partial.searchResultsHeader !== undefined)
+        result.messages.searchResultsHeader = partial.searchResultsHeader;
+      if (partial.searchResultsFooter !== undefined)
+        result.messages.searchResultsFooter = partial.searchResultsFooter;
+      if (partial.helpMenu !== undefined) result.messages.helpMenu = partial.helpMenu;
+      if (partial.cartEmpty !== undefined) result.messages.cartEmpty = partial.cartEmpty;
+      if (partial.cartSummaryHeader !== undefined)
+        result.messages.cartSummaryHeader = partial.cartSummaryHeader;
+      if (partial.cartSummaryFooter !== undefined)
+        result.messages.cartSummaryFooter = partial.cartSummaryFooter;
+      if (partial.removeConfirm !== undefined)
+        result.messages.removeConfirm = partial.removeConfirm;
+      if (partial.updateConfirm !== undefined)
+        result.messages.updateConfirm = partial.updateConfirm;
+      if (partial.quantityInvalid !== undefined)
+        result.messages.quantityInvalid = partial.quantityInvalid;
+      if (partial.productNotFound !== undefined)
+        result.messages.productNotFound = partial.productNotFound;
+      if (partial.productMultipleOptions !== undefined)
+        result.messages.productMultipleOptions = partial.productMultipleOptions;
+      if (partial.variantMultipleOptions !== undefined)
+        result.messages.variantMultipleOptions = partial.variantMultipleOptions;
+      if (partial.itemNotInCart !== undefined)
+        result.messages.itemNotInCart = partial.itemNotInCart;
+      if (partial.cartEmptyNoAction !== undefined)
+        result.messages.cartEmptyNoAction = partial.cartEmptyNoAction;
+      if (partial.genericError !== undefined) result.messages.genericError = partial.genericError;
+      if (partial.unknownIntent !== undefined)
+        result.messages.unknownIntent = partial.unknownIntent;
+    }
+
+    // PR-GAP-1: merge botPersonality
+    if (customConfig.botPersonality !== undefined) {
+      const base: BotPersonality = baseConfig.botPersonality ?? {
+        style: 'friendly',
+        emojiUsage: 'moderate',
+      };
+      result.botPersonality = { ...base };
+      const partial = customConfig.botPersonality as Partial<BotPersonality>;
+      if (partial.style !== undefined) result.botPersonality.style = partial.style;
+      if (partial.emojiUsage !== undefined) result.botPersonality.emojiUsage = partial.emojiUsage;
+      if (partial.signatureEmoji !== undefined)
+        result.botPersonality.signatureEmoji = partial.signatureEmoji;
     }
 
     if (customConfig.rules !== undefined) {
@@ -180,6 +267,26 @@ export class PlaybookService {
    */
   private interpolateMessage(template: string, merchantName: string): string {
     return template.replace('{merchant_name}', merchantName);
+  }
+
+  /**
+   * PR-GAP-1: Simple {placeholder} → value interpolation.
+   * Missing placeholders are left as-is (logged as warning).
+   */
+  private interpolatePlaceholders(
+    template: string,
+    placeholders?: Record<string, string | number>,
+  ): string {
+    if (!placeholders) return template;
+
+    return template.replace(/\{(\w+)\}/g, (match, key: string) => {
+      if (key in placeholders) {
+        return String(placeholders[key] ?? '');
+      }
+      // Placeholder in template but not in provided values — leave as-is
+      this.logger.warn(`interpolatePlaceholders: "{${key}}" has no value in provided placeholders`);
+      return match;
+    });
   }
 
   /**

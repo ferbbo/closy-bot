@@ -402,4 +402,36 @@ describe('MerchantSettings (e2e) - PR-15', () => {
       expect(playbookConfig?.['unknownTopLevel']).toBeUndefined();
     });
   });
+
+  describe('AC-08 (PR-GAP-1): PATCH /merchants/me/playbook accepts botPersonality', () => {
+    it('should accept botPersonality fields and persist them', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/merchants/me/playbook')
+        .set('Cookie', [`session_id=${sessionId}`])
+        .send({ botPersonality: { style: 'minimal', emojiUsage: 'none', signatureEmoji: '🎯' } })
+        .expect(200);
+
+      expect(response.body.playbookConfig.botPersonality.style).toBe('minimal');
+      expect(response.body.playbookConfig.botPersonality.emojiUsage).toBe('none');
+      expect(response.body.playbookConfig.botPersonality.signatureEmoji).toBe('🎯');
+
+      // Verify in DB
+      const merchant = await prisma.merchant.findUnique({ where: { id: testMerchant.id } });
+      const playbook = merchant?.playbookConfig as Record<string, unknown> | null;
+      const bp = playbook?.['botPersonality'] as Record<string, string> | undefined;
+      expect(bp?.['style']).toBe('minimal');
+      expect(bp?.['signatureEmoji']).toBe('🎯');
+    });
+
+    it('should accept botPersonality without optional signatureEmoji', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/merchants/me/playbook')
+        .set('Cookie', [`session_id=${sessionId}`])
+        .send({ botPersonality: { style: 'professional', emojiUsage: 'moderate' } })
+        .expect(200);
+
+      expect(response.body.playbookConfig.botPersonality.style).toBe('professional');
+      expect(response.body.playbookConfig.botPersonality.emojiUsage).toBe('moderate');
+    });
+  });
 });

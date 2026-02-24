@@ -340,7 +340,7 @@ graph TD
 
 #### Fase 1.1 (paralelizable)
 
-##### PR-04 — Carrito: CRUD conversacional persistido 🔴 CRÍTICO
+##### PR-04 — Carrito: CRUD conversacional persistido ✅ MERGED
 - **Objetivo:** crear carrito por customer/merchant, agregar/remover/actualizar qty, y mostrar resumen.
 - **Depende de:** PR-03.5 ✅, PR-03.6 ✅.
 - **Incluye:**
@@ -364,7 +364,7 @@ graph TD
   - Cart se asocia a `Conversation` activa (customerId + merchantId)
   - Cart `active` → máximo 1 por customer+merchant
 
-##### PR-03.5.1 — Template-First Router + IntentRouter V2 🔴 CRÍTICO NUEVO
+##### PR-03.5.1 — Template-First Router + IntentRouter V2 ✅ MERGED
 - **Objetivo:** (1) Invertir la lógica del orchestrator para que flows determinísticos ejecuten SIEMPRE primero. (2) Mejorar IntentRouter con scoring, confidence real, normalización y resolución de colisiones. (3) Minimizar costos LLM desde día 1.
 - **Depende de:** PR-03.5 ✅ (orchestrator), PR-03.6 ✅ (LLM adapter), PR-04 ✅ (Cart, para tener todos los flows determinísticos).
 - **Incluye:**
@@ -444,7 +444,7 @@ graph TD
   - Los flows son los "templates" de V1 — en Bloque 7 (P2) se migran a Handlebars/DB
   - Modelo de costos: de ~100 LLM calls/100 msgs → ~15-20 (solo UNKNOWN), reducción 80-100%
 
-##### PR-03.5.2 — Catálogo FTS: search_text + tsvector + ranking 🟡 NUEVO
+##### PR-03.5.2 — Catálogo FTS: search_text + tsvector + ranking ✅ MERGED
 - **Objetivo:** Mejorar búsqueda de catálogo con Full-Text Search español sin romper search actual.
 - **Depende de:** PR-03 ✅ (catálogo).
 - **Incluye:**
