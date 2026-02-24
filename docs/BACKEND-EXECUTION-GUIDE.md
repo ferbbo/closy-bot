@@ -1070,7 +1070,7 @@ model Cart {
   
   items       CartItem[]
   customer    Customer    @relation(fields: [customerId], references: [id])
-  merchant    Merchant    @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  merchant    Merchant    @relation(fields: [merchantId], references: [id])
   
   @@index([customerId, merchantId, status])
   @@index([expiresAt])  // Para cleanup job
@@ -1493,11 +1493,12 @@ curl -X PATCH http://localhost:3000/merchants/me/playbook \
 
 # 3. Verificar TTL en DB
 SELECT 
-  expires_at,
-  EXTRACT(EPOCH FROM (expires_at - created_at)) / 3600 AS ttl_hours
-FROM carts
-WHERE customer_id = '<phone-number>'
-ORDER BY created_at DESC
+  c.expires_at,
+  EXTRACT(EPOCH FROM (c.expires_at - c.created_at)) / 3600 AS ttl_hours
+FROM carts c
+JOIN customers cu ON c.customer_id = cu.id
+WHERE cu.phone = '<phone-number>'  -- e.g., '+573001234567'
+ORDER BY c.created_at DESC
 LIMIT 1;
 # => ttl_hours debe ser ~48
 ```

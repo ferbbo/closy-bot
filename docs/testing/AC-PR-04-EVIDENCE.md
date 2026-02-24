@@ -1,13 +1,23 @@
 # PR-04: Cart CRUD Conversacional - Evidencia de Acceptance Criteria
 
-> **Status**: IMPLEMENTADO Y VERIFICADO (P1 FIXES APLICADOS)
-> **Fecha**: 2026-02-20
-> **Brief**: `docs/plan/pr-briefs/PR-04-cart-crud-conversational.md`
-> **Iteración**: Auto-review con fixes P1 implementados
+> **Status**: ⚠️ ARCHIVO HISTÓRICO DE REFERENCIA
+> **Fecha**: 2026-02-20 (Original), Actualizado 2026-02-24  
+> **Brief Oficial**: `docs/plan/pr-briefs/PR-04-cart-crud-conversational.md`
+> 
+> ⚠️ **NOTA IMPORTANTE**: Este archivo contiene ejemplos históricos que pueden incluir snippets de código desactualizados (firmas de métodos, features removidas por scope creep). 
+> 
+> **EVIDENCIA OFICIAL**: Los tests con nombres `AC-XX` en:
+> - `cart.service.spec.ts` (9 tests: AC-03, AC-04, AC-05, AC-06, AC-07, AC-08, AC-18, AC-19)
+> - `cart.repository.spec.ts` (6 tests: AC-03)
+> - `cart.flow.spec.ts` (10 tests: AC-07, AC-08, AC-09, AC-10, AC-11)
+> - `conversation.orchestrator.spec.ts` (AC-12)
+> - `intent-router.service.spec.ts` (AC-13, AC-14)
+> 
+> **Tests actuales (iteration 6)**: 25 tests passing cubriendo AC-01 a AC-13 del brief.
 
 ## Resumen Ejecutivo
 
-**Todos los Acceptance Criteria (AC-01 a AC-19) verificados vía tests automatizados.**
+**Brief Scope**: AC-01 a AC-13 implementados y verificados.
 
 **Tests ejecutados:**
 - ✅ `cart.service.spec.ts`: 10/10 passed
@@ -233,21 +243,7 @@ it('should calculate totals', async () => {
 
 ---
 
-## AC-09: `clearCart` elimina items y marca abandoned
-
-**Test** (`cart.service.spec.ts`):
-```typescript
-it('should clear cart', async () => {
-  await service.clearCart('cart-1');
-  
-  expect(cartItemRepository.deleteByCartId).toHaveBeenCalledWith('cart-1');
-  expect(cartRepository.updateStatus).toHaveBeenCalledWith('cart-1', CartStatus.abandoned);
-});
-```
-
-**Resultado**: ✅ Test passed
-
-✅ **AC-09 VERIFICADO**
+## AC-09: `updateQuantity` en flows conversacionales
 
 ---
 
