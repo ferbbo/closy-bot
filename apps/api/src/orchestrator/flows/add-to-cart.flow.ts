@@ -1,12 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CartService, CartSummary } from '../../services/cart.service';
 import { CatalogService } from '../../services/catalog.service';
+import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.service';
 
 /**
  * AddToCartFlow
  * AC-07: Handles ADD_TO_CART intent
  * REQ-04: Detects product/variant, adds to cart, responds confirmation
  * PR-04: Cart CRUD conversational
+ * PR-GAP-1: All user-facing messages via PlaybookService.getMessage()
  */
 @Injectable()
 export class AddToCartFlow {
@@ -15,19 +17,21 @@ export class AddToCartFlow {
   constructor(
     private readonly cartService: CartService,
     private readonly catalogService: CatalogService,
+    private readonly playbookService: PlaybookService,
   ) {}
 
   /**
    * AC-07: Handle ADD_TO_CART intent
-   * REQ-04: Detects product/variant, adds to cart, responds confirmation
    *
-   * @param customerId - Customer ID
-   * @param merchantId - Merchant ID
+   * @param merchant     - Merchant data (used to resolve playbook messages) [PR-GAP-1]
+   * @param customerId   - Customer ID
+   * @param merchantId   - Merchant ID
    * @param productQuery - Product name/description extracted from message
-   * @param fullText - Full message text for quantity extraction
+   * @param fullText     - Full message text for quantity extraction
    * @returns Formatted response message
    */
   async execute(
+    merchant: MerchantPlaybookData,
     customerId: string,
     merchantId: string,
     productQuery: string,
@@ -43,7 +47,7 @@ export class AddToCartFlow {
 
     // Validate quantity range
     if (quantity < 1 || quantity > 99) {
-      return `❌ La cantidad debe estar entre 1 y 99 unidades.`;
+      return this.playbookService.getMessage(merchant, 'quantityInvalid');
     }
 
     try {
@@ -51,7 +55,9 @@ export class AddToCartFlow {
       const products = await this.catalogService.searchProducts(merchantId, productQuery, 5);
 
       if (products.length === 0) {
-        return `😔 No encontré "${productQuery}"\n\nEscribe "buscar" para ver el catálogo.`;
+        return this.playbookService.getMessage(merchant, 'productNotFound', {
+          query: productQuery,
+        });
       }
 
       // If multiple products found, ask for clarification
@@ -64,7 +70,9 @@ export class AddToCartFlow {
           })
           .join('\n');
 
-        return `Encontré varias opciones:\n\n${productList}\n\n¿Cuál quieres agregar? Responde con el nombre exacto.`;
+        return this.playbookService.getMessage(merchant, 'productMultipleOptions', {
+          product_list: productList,
+        });
       }
 
       // Single product found - add first available variant
@@ -72,7 +80,9 @@ export class AddToCartFlow {
       const availableVariants = product.variants.filter((v) => v.stock > 0 && v.isActive);
 
       if (availableVariants.length === 0) {
-        return `😔 "${product.name}" no tiene stock disponible.\n\nEscribe "buscar" para ver otros productos.`;
+        return this.playbookService.getMessage(merchant, 'noStock', {
+          product_name: product.name,
+        });
       }
 
       // If multiple variants, ask for clarification
@@ -84,7 +94,10 @@ export class AddToCartFlow {
           )
           .join('\n');
 
-        return `*${product.name}* tiene varias opciones:\n\n${variantList}\n\n¿Cuál variante quieres? Responde con el nombre.`;
+        return this.playbookService.getMessage(merchant, 'variantMultipleOptions', {
+          product_name: product.name,
+          variant_list: variantList,
+        });
       }
 
       // Add single variant to cart with parsed quantity (AC-04: addItem creates cart if needed)
@@ -100,6 +113,7 @@ export class AddToCartFlow {
       const summary = await this.cartService.getCartSummary(updatedCart.id);
 
       return this.formatAddConfirmation(
+        merchant,
         product.name,
         variant.name,
         variant.price.toNumber(),
@@ -113,20 +127,29 @@ export class AddToCartFlow {
         return `😔 ${error.message}`;
       }
 
-      return '❌ Error al agregar al carrito. Intenta de nuevo.';
+      return this.playbookService.getMessage(merchant, 'genericError', {
+        action: 'agregar al carrito',
+      });
     }
   }
 
   /**
-   * Format add confirmation message
+   * Format add confirmation using playbook addToCartConfirm template
    */
   private formatAddConfirmation(
+    merchant: MerchantPlaybookData,
     productName: string,
     variantName: string,
     price: number,
     summary: CartSummary,
   ): string {
-    return `✅ *Agregado al carrito*
+    const confirmLine = this.playbookService.getMessage(merchant, 'addToCartConfirm', {
+      product_name: productName,
+      quantity: String(summary.itemCount),
+      total: summary.total.toFixed(2),
+    });
+
+    return `${confirmLine}
 
 📦 ${productName} - ${variantName}
 💰 $${price.toFixed(2)}

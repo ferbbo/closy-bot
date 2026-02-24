@@ -1,5 +1,5 @@
 /**
- * Generic playbook defaults (PR-11)
+ * Generic playbook defaults (PR-11 / PR-GAP-1)
  * Used as fallback when merchant has no industry set
  */
 
@@ -7,6 +7,10 @@ import { PlaybookConfig } from '../playbook-config.interface';
 
 export const GenericPlaybookDefaults: PlaybookConfig = {
   industry: undefined as unknown as 'ropa' | 'belleza' | 'minimarket',
+  botPersonality: {
+    style: 'friendly',
+    emojiUsage: 'moderate',
+  },
   llmPrompt: {
     tone: 'Amigable y profesional. Usa emojis con moderación',
     focusAreas: ['producto', 'cantidad', 'disponibilidad'],
@@ -21,6 +25,29 @@ export const GenericPlaybookDefaults: PlaybookConfig = {
     noStock: 'Ese producto está agotado. ¿Te gustaría ver otras opciones?',
     upsellTemplate: 'También tenemos {product} que podría interesarte',
     checkoutStart: '¡Perfecto! Vamos a confirmar tu pedido',
+    searchNoResults:
+      '😔 No encontré productos para "{query}"\n\nIntenta con otras palabras o escribe "ayuda" para ver opciones.',
+    searchResultsHeader: '🔍 Resultados para "{query}" ({count}):\n\n',
+    searchResultsFooter: '\n\n💬 Para agregar al carrito, escribe el nombre del producto',
+    helpMenu:
+      '📋 *Opciones disponibles*\n\n🔍 *Buscar productos*\nSimplemente escribe lo que buscas\nEjemplo: "busco zapatillas", "tienes camisas azules"\n\n🛒 *Ver carrito*\nEscribe "ver carrito" o "carrito"\n\n❓ *Ayuda*\nEscribe "ayuda" o "menú" para ver estas opciones\n\n💬 *Hablar con un humano*\nEscribe "hablar con agente" o "ayuda humana"\n\n---\n\n¿En qué puedo ayudarte?',
+    cartEmpty: '🛒 *Tu carrito está vacío*\n\nEscribe "buscar" para explorar productos.',
+    cartSummaryHeader: '🛒 *Tu carrito* ({item_count} {item_word})\n\n',
+    cartSummaryFooter:
+      '\n\n💰 *Total: ${total}*\n\n✏️ Para modificar cantidades o remover items, escríbeme qué quieres cambiar.',
+    removeConfirm: '✅ *{product_name} - {variant_name}* removido del carrito',
+    updateConfirm: '✅ *Cantidad actualizada*\n\n{product_name}: {quantity} unidades',
+    quantityInvalid: '❌ La cantidad debe estar entre 1 y 99 unidades.',
+    productNotFound: '😔 No encontré "{query}"\n\nEscribe "buscar" para ver el catálogo.',
+    productMultipleOptions:
+      'Encontré varias opciones:\n\n{product_list}\n\n¿Cuál quieres agregar? Responde con el nombre exacto.',
+    variantMultipleOptions:
+      '*{product_name}* tiene varias opciones:\n\n{variant_list}\n\n¿Cuál variante quieres? Responde con el nombre.',
+    itemNotInCart:
+      'No encontré "{query}" en tu carrito.\n\nTu carrito tiene:\n{items_list}\n\n¿Cuál quieres modificar?',
+    cartEmptyNoAction: '🛒 Tu carrito está vacío, no hay nada que {action}.',
+    genericError: '❌ Error al {action}. Intenta de nuevo.',
+    unknownIntent: 'No entendí tu mensaje. Escribe "ayuda" para ver opciones.',
   },
   rules: {
     askSizeBeforeCart: false,

@@ -1,36 +1,45 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CartService } from '../../services/cart.service';
+import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.service';
 
 /**
  * RemoveFromCartFlow
  * AC-10: Handles REMOVE_FROM_CART intent
  * REQ-07: Removes item from cart by product name/position
  * PR-04: Cart CRUD conversational
+ * PR-GAP-1: All user-facing messages via PlaybookService.getMessage()
  */
 @Injectable()
 export class RemoveFromCartFlow {
   private readonly logger = new Logger(RemoveFromCartFlow.name);
 
-  constructor(private readonly cartService: CartService) {}
+  constructor(
+    private readonly cartService: CartService,
+    private readonly playbookService: PlaybookService,
+  ) {}
 
   /**
-   * AC-10: Handle REMOVE_FROM_CART intent
-   * REQ-07: Detects item, removes, responds confirmation
-   *
-   * @param customerId - Customer ID
-   * @param merchantId - Merchant ID
+   * @param merchant     - Merchant data (used to resolve playbook messages) [PR-GAP-1]
+   * @param customerId   - Customer ID
+   * @param merchantId   - Merchant ID
    * @param productQuery - Product name extracted from message
-   * @returns Formatted response message
    */
-  async execute(customerId: string, merchantId: string, productQuery: string): Promise<string> {
-    this.logger.log(`Removing from cart for customer ${customerId}: "${productQuery}"`);
+  async execute(
+    merchant: MerchantPlaybookData,
+    customerId: string,
+    merchantId: string,
+    productQuery: string,
+  ): Promise<string> {
+    this.logger.log(`Removing from cart for customer ${customerId}`);
 
     try {
       const cart = await this.cartService.createOrGetActiveCart(customerId, merchantId);
       const summary = await this.cartService.getCartSummary(cart.id);
 
       if (summary.items.length === 0) {
-        return `🛒 Tu carrito está vacío, no hay nada que remover.`;
+        return this.playbookService.getMessage(merchant, 'cartEmptyNoAction', {
+          action: 'remover',
+        });
       }
 
       // Find matching item in cart
@@ -44,7 +53,10 @@ export class RemoveFromCartFlow {
         const itemsList = summary.items
           .map((item, i) => `${i + 1}. ${item.productName} - ${item.variantName}`)
           .join('\n');
-        return `No encontré "${productQuery}" en tu carrito.\n\nTu carrito tiene:\n${itemsList}\n\n¿Cuál quieres remover?`;
+        return this.playbookService.getMessage(merchant, 'itemNotInCart', {
+          query: productQuery,
+          items_list: itemsList,
+        });
       }
 
       // Remove item
@@ -53,12 +65,20 @@ export class RemoveFromCartFlow {
       // Get updated summary
       const updatedSummary = await this.cartService.getCartSummary(cart.id);
 
-      return `✅ *${matchingItem.productName} - ${matchingItem.variantName}* removido del carrito
+      const confirmation = this.playbookService.getMessage(merchant, 'removeConfirm', {
+        product_name: matchingItem.productName,
+        variant_name: matchingItem.variantName,
+      });
 
-${updatedSummary.items.length > 0 ? `Total actualizado: *$${updatedSummary.total.toFixed(2)}*` : '🛒 Tu carrito ahora está vacío'}`;
+      const postRemove =
+        updatedSummary.items.length > 0
+          ? `Total actualizado: *$${updatedSummary.total.toFixed(2)}*`
+          : this.playbookService.getMessage(merchant, 'cartEmpty');
+
+      return `${confirmation}\n\n${postRemove}`;
     } catch (error) {
       this.logger.error(`Failed to remove item: ${error.message}`, error.stack);
-      return '❌ Error al remover item. Intenta de nuevo.';
+      return this.playbookService.getMessage(merchant, 'genericError', { action: 'remover item' });
     }
   }
 }

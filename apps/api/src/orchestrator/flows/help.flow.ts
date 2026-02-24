@@ -1,36 +1,25 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.service';
 
 /**
  * HelpFlow
  * Provides help information and available commands
+ * PR-GAP-1: Help message via PlaybookService.getMessage()
  */
 @Injectable()
 export class HelpFlow {
   private readonly logger = new Logger(HelpFlow.name);
 
+  constructor(private readonly playbookService: PlaybookService) {}
+
   /**
-   * Generate help message with available options
+   * Generate help message from playbook
    *
+   * @param merchant - Merchant data (used to resolve playbook messages) [PR-GAP-1]
    * @returns Help message
    */
-  async handle(): Promise<string> {
-    const message = `📋 *Opciones disponibles*
-
-🔍 *Buscar productos*
-Simplemente escribe lo que buscas
-Ejemplo: "busco zapatillas", "tienes camisas azules"
-
-❓ *Ayuda*
-Escribe "ayuda" o "menú" para ver estas opciones
-
-💬 *Hablar con un humano*
-Escribe "hablar con agente" o "ayuda humana"
-
----
-
-¿En qué puedo ayudarte?`;
-
+  async handle(merchant: MerchantPlaybookData): Promise<string> {
     this.logger.debug('Generated help response');
-    return message;
+    return this.playbookService.getMessage(merchant, 'helpMenu');
   }
 }

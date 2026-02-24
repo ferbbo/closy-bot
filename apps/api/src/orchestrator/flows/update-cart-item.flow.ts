@@ -1,29 +1,32 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CartService } from '../../services/cart.service';
+import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.service';
 
 /**
  * UpdateCartItemFlow
  * AC-09: Handles UPDATE_CART intent
  * REQ-06: Updates quantity of existing cart item (1-99)
  * PR-04: Cart CRUD conversational
+ * PR-GAP-1: All user-facing messages via PlaybookService.getMessage()
  */
 @Injectable()
 export class UpdateCartItemFlow {
   private readonly logger = new Logger(UpdateCartItemFlow.name);
 
-  constructor(private readonly cartService: CartService) {}
+  constructor(
+    private readonly cartService: CartService,
+    private readonly playbookService: PlaybookService,
+  ) {}
 
   /**
-   * AC-09: Handle UPDATE_CART intent
-   * REQ-06: Updates quantity of existing cart item (1-99)
-   *
-   * @param customerId - Customer ID
-   * @param merchantId - Merchant ID
+   * @param merchant     - Merchant data (used to resolve playbook messages) [PR-GAP-1]
+   * @param customerId   - Customer ID
+   * @param merchantId   - Merchant ID
    * @param productQuery - Product name extracted from message
-   * @param quantity - New quantity (extracted from message text)
-   * @returns Formatted response message
+   * @param quantity     - New quantity (extracted from message text)
    */
   async execute(
+    merchant: MerchantPlaybookData,
     customerId: string,
     merchantId: string,
     productQuery: string,
@@ -38,7 +41,9 @@ export class UpdateCartItemFlow {
       const summary = await this.cartService.getCartSummary(cart.id);
 
       if (summary.items.length === 0) {
-        return `🛒 Tu carrito está vacío, no hay nada que actualizar.`;
+        return this.playbookService.getMessage(merchant, 'cartEmptyNoAction', {
+          action: 'actualizar',
+        });
       }
 
       // Find matching item in cart
@@ -52,26 +57,24 @@ export class UpdateCartItemFlow {
         const itemsList = summary.items
           .map((item, i) => `${i + 1}. ${item.productName} - ${item.variantName}`)
           .join('\n');
-        return `No encontré "${productQuery}" en tu carrito.\n\nTu carrito tiene:\n${itemsList}\n\n¿Cuál quieres actualizar?`;
+        return this.playbookService.getMessage(merchant, 'itemNotInCart', {
+          query: productQuery,
+          items_list: itemsList,
+        });
       }
 
       // Validate quantity
       if (quantity < 1 || quantity > 99) {
-        return `❌ La cantidad debe estar entre 1 y 99 unidades.`;
+        return this.playbookService.getMessage(merchant, 'quantityInvalid');
       }
 
       // Update quantity
       await this.cartService.updateQuantity(cart.id, matchingItem.id, quantity);
 
-      // Get updated summary
-      const updatedSummary = await this.cartService.getCartSummary(cart.id);
-
-      return `✅ *Cantidad actualizada*
-
-📦 ${matchingItem.productName} - ${matchingItem.variantName}
-➡️ Ahora tienes ${quantity} ${quantity === 1 ? 'unidad' : 'unidades'}
-
-🛒 Total: *$${updatedSummary.total.toFixed(2)}*`;
+      return this.playbookService.getMessage(merchant, 'updateConfirm', {
+        product_name: matchingItem.productName,
+        quantity: String(quantity),
+      });
     } catch (error) {
       this.logger.error(`Failed to update quantity: ${error.message}`, error.stack);
 
@@ -80,7 +83,9 @@ export class UpdateCartItemFlow {
         return `😔 ${error.message}`;
       }
 
-      return '❌ Error al actualizar cantidad. Intenta de nuevo.';
+      return this.playbookService.getMessage(merchant, 'genericError', {
+        action: 'actualizar cantidad',
+      });
     }
   }
 }

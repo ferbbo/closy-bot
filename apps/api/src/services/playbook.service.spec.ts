@@ -3,7 +3,10 @@
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import { PlaybookService } from './playbook.service';
+import { GenericPlaybookDefaults } from '../domain/entities/playbook-defaults/generic.config';
+import { RopaPlaybookDefaults } from '../domain/entities/playbook-defaults/ropa.config';
 
 describe('PlaybookService', () => {
   let service: PlaybookService;
@@ -257,5 +260,158 @@ describe('PlaybookService', () => {
         'maxRecommendations must be a number between 0 and 10',
       );
     });
+  });
+});
+
+/**
+ * PR-GAP-1 AC-02: getMessage(merchant, key, placeholders?) returns correct message
+ *                 with placeholder interpolation and GenericPlaybookDefaults fallback.
+ */
+
+describe('AC-02: PlaybookService.getMessage() (PR-GAP-1)', () => {
+  let service: PlaybookService;
+
+  beforeAll(() => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => undefined);
+  });
+
+  afterAll(() => {
+    jest.restoreAllMocks();
+  });
+
+  const genericMerchant = { id: 'mg-1', name: 'Generic', industry: null, playbookConfig: null };
+  const ropaMerchant = {
+    id: 'mr-1',
+    name: 'Ropa Store',
+    industry: 'ropa' as const,
+    playbookConfig: null,
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [PlaybookService],
+    }).compile();
+    service = module.get<PlaybookService>(PlaybookService);
+  });
+
+  it('AC-02: returns GenericPlaybookDefaults message for null industry', () => {
+    expect(service.getMessage(genericMerchant, 'cartEmpty')).toBe(
+      GenericPlaybookDefaults.messages.cartEmpty,
+    );
+  });
+
+  it('AC-02: returns industry-specific message for Ropa merchant', () => {
+    expect(service.getMessage(ropaMerchant, 'cartEmpty')).toBe(
+      RopaPlaybookDefaults.messages.cartEmpty,
+    );
+  });
+
+  it('AC-02: interpolates {placeholder} in template', () => {
+    const result = service.getMessage(genericMerchant, 'productNotFound', {
+      query: 'camiseta roja',
+    });
+    expect(result).toContain('camiseta roja');
+    expect(result).not.toContain('{query}');
+  });
+
+  it('AC-02: interpolates multiple placeholders correctly', () => {
+    const result = service.getMessage(genericMerchant, 'updateConfirm', {
+      product_name: 'Camiseta',
+      variant_name: 'Talla M',
+      quantity: 3,
+    });
+    expect(result).toContain('Camiseta');
+    expect(result).toContain('3');
+    expect(result).not.toContain('{product_name}');
+    expect(result).not.toContain('{quantity}');
+  });
+
+  it('AC-02: returns key as last-resort when completely unknown', () => {
+    // @ts-expect-error testing invalid key
+    expect(service.getMessage(genericMerchant, '__unknown_key__')).toBe('__unknown_key__');
+  });
+
+  it('AC-02: safe when called without placeholders argument', () => {
+    const result = service.getMessage(genericMerchant, 'helpMenu');
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('AC-02: partial playbookConfig override falls back to generic for missing keys', () => {
+    const merchant = {
+      id: 'mp-1',
+      name: 'Partial',
+      industry: null,
+      playbookConfig: { messages: { greeting: 'Hola!' } },
+    };
+    const result = service.getMessage(merchant, 'helpMenu');
+    expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * PR-GAP-1 AC-06: mergePlaybookConfig supports botPersonality + all new messages fields
+ */
+describe('AC-06: PlaybookService mergePlaybookConfig — botPersonality + new messages (PR-GAP-1)', () => {
+  let service: PlaybookService;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [PlaybookService],
+    }).compile();
+    service = module.get<PlaybookService>(PlaybookService);
+  });
+
+  it('AC-06: custom cartEmpty message overrides default', () => {
+    const merchant = {
+      id: 'mc-1',
+      name: 'Custom',
+      industry: null,
+      playbookConfig: { messages: { cartEmpty: 'Mi carrito vacío personalizado.' } },
+    };
+    expect(service.getMessage(merchant, 'cartEmpty')).toBe('Mi carrito vacío personalizado.');
+  });
+
+  it('AC-06: botPersonality from playbookConfig is applied', () => {
+    const merchant = {
+      id: 'mc-2',
+      name: 'Personality',
+      industry: null,
+      playbookConfig: {
+        botPersonality: { style: 'minimal', emojiUsage: 'none', signatureEmoji: '🎯' },
+      },
+    };
+    const playbook = service.getPlaybookForMerchant(merchant);
+    expect(playbook.botPersonality?.style).toBe('minimal');
+    expect(playbook.botPersonality?.emojiUsage).toBe('none');
+    expect(playbook.botPersonality?.signatureEmoji).toBe('🎯');
+  });
+
+  it('AC-06: all 17 new PlaybookMessages fields present in GenericPlaybookDefaults', () => {
+    const msgs = GenericPlaybookDefaults.messages;
+    const requiredNew: (keyof typeof msgs)[] = [
+      'searchNoResults',
+      'searchResultsHeader',
+      'searchResultsFooter',
+      'helpMenu',
+      'cartEmpty',
+      'cartSummaryHeader',
+      'cartSummaryFooter',
+      'removeConfirm',
+      'updateConfirm',
+      'quantityInvalid',
+      'productNotFound',
+      'productMultipleOptions',
+      'variantMultipleOptions',
+      'itemNotInCart',
+      'cartEmptyNoAction',
+      'genericError',
+      'unknownIntent',
+    ];
+    for (const key of requiredNew) {
+      expect(msgs[key].length).toBeGreaterThan(0);
+    }
   });
 });

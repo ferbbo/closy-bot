@@ -1,11 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CartService, CartSummary } from '../../services/cart.service';
 import { CatalogService } from '../../services/catalog.service';
+import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.service';
 
 /**
  * CartFlow
  * Handles conversational cart operations (add, view, update, remove)
  * PR-04: Cart CRUD conversational
+ * PR-GAP-1: All user-facing messages via PlaybookService.getMessage()
  */
 @Injectable()
 export class CartFlow {
@@ -14,19 +16,16 @@ export class CartFlow {
   constructor(
     private readonly cartService: CartService,
     private readonly catalogService: CatalogService,
+    private readonly playbookService: PlaybookService,
   ) {}
 
   /**
    * AC-10: Handle ADD_TO_CART intent
    * REQ-09: Detects product/variant, adds to cart, responds confirmation
-   *
-   * @param customerId - Customer ID
-   * @param merchantId - Merchant ID
-   * @param productQuery - Product name/description extracted from message
-   * @param fullText - Full message text for quantity extraction
-   * @returns Formatted response message
+   * PR-GAP-1: Uses PlaybookService.getMessage()
    */
   async handleAddToCart(
+    merchant: MerchantPlaybookData,
     customerId: string,
     merchantId: string,
     productQuery: string,
@@ -40,18 +39,18 @@ export class CartFlow {
 
     // Validate quantity range
     if (quantity < 1 || quantity > 99) {
-      return `❌ La cantidad debe estar entre 1 y 99 unidades.`;
+      return this.playbookService.getMessage(merchant, 'quantityInvalid');
     }
 
     try {
-      // Search for product matching query
       const products = await this.catalogService.searchProducts(merchantId, productQuery, 5);
 
       if (products.length === 0) {
-        return `😔 No encontré "${productQuery}"\n\nEscribe "buscar" para ver el catálogo.`;
+        return this.playbookService.getMessage(merchant, 'productNotFound', {
+          query: productQuery,
+        });
       }
 
-      // If multiple products found, ask for clarification
       if (products.length > 1) {
         const productList = products
           .map((p, i) => {
@@ -60,19 +59,18 @@ export class CartFlow {
             return `${i + 1}. ${p.name} - $${minPrice.toFixed(2)}`;
           })
           .join('\n');
-
-        return `Encontré varias opciones:\n\n${productList}\n\n¿Cuál quieres agregar? Responde con el nombre exacto.`;
+        return this.playbookService.getMessage(merchant, 'productMultipleOptions', {
+          product_list: productList,
+        });
       }
 
-      // Single product found - add first available variant
       const product = products[0];
       const availableVariants = product.variants.filter((v) => v.stock > 0 && v.isActive);
 
       if (availableVariants.length === 0) {
-        return `😔 "${product.name}" no tiene stock disponible.\n\nEscribe "buscar" para ver otros productos.`;
+        return this.playbookService.getMessage(merchant, 'noStock', { product_name: product.name });
       }
 
-      // If multiple variants, ask for clarification
       if (availableVariants.length > 1) {
         const variantList = availableVariants
           .map(
@@ -80,11 +78,12 @@ export class CartFlow {
               `${i + 1}. ${v.name} - $${Number(v.price).toFixed(2)} (${v.stock} disponibles)`,
           )
           .join('\n');
-
-        return `*${product.name}* tiene varias opciones:\n\n${variantList}\n\n¿Cuál variante quieres? Responde con el nombre.`;
+        return this.playbookService.getMessage(merchant, 'variantMultipleOptions', {
+          product_name: product.name,
+          variant_list: variantList,
+        });
       }
 
-      // Add single variant to cart with parsed quantity (AC-04: addItem creates cart if needed)
       const variant = availableVariants[0];
       const updatedCart = await this.cartService.addItem(
         customerId,
@@ -92,11 +91,9 @@ export class CartFlow {
         variant.id,
         quantity,
       );
-
-      // Get updated cart summary
       const summary = await this.cartService.getCartSummary(updatedCart.id);
-
       return this.formatAddConfirmation(
+        merchant,
         product.name,
         variant.name,
         variant.price.toNumber(),
@@ -104,25 +101,25 @@ export class CartFlow {
       );
     } catch (error) {
       this.logger.error(`Failed to add to cart: ${error.message}`, error.stack);
-
-      // Handle stock validation errors gracefully
       if (error.message.includes('Stock insuficiente')) {
         return `😔 ${error.message}`;
       }
-
-      return '❌ Error al agregar al carrito. Intenta de nuevo.';
+      return this.playbookService.getMessage(merchant, 'genericError', {
+        action: 'agregar al carrito',
+      });
     }
   }
 
   /**
    * AC-08: Handle VIEW_CART intent
    * REQ-05: Shows cart summary in WhatsApp-friendly format
-   *
-   * @param customerId - Customer ID
-   * @param merchantId - Merchant ID
-   * @returns Formatted cart summary
+   * PR-GAP-1: Uses PlaybookService.getMessage()
    */
-  async handleShowCart(customerId: string, merchantId: string): Promise<string> {
+  async handleShowCart(
+    merchant: MerchantPlaybookData,
+    customerId: string,
+    merchantId: string,
+  ): Promise<string> {
     this.logger.log(`Showing cart for customer ${customerId}`);
 
     try {
@@ -130,28 +127,25 @@ export class CartFlow {
       const summary = await this.cartService.getCartSummary(cart.id);
 
       if (summary.items.length === 0) {
-        return `🛒 *Tu carrito está vacío*
-
-Escribe "buscar" para explorar productos o simplemente dime qué necesitas.`;
+        return this.playbookService.getMessage(merchant, 'cartEmpty');
       }
 
-      return this.formatCartSummary(summary);
+      return this.formatCartSummary(merchant, summary);
     } catch (error) {
       this.logger.error(`Failed to show cart: ${error.message}`, error.stack);
-      return '❌ Error al mostrar el carrito. Intenta de nuevo.';
+      return this.playbookService.getMessage(merchant, 'genericError', {
+        action: 'mostrar el carrito',
+      });
     }
   }
 
   /**
    * AC-12: Handle REMOVE_FROM_CART intent
    * REQ-11: Detects item, removes, responds confirmation
-   *
-   * @param customerId - Customer ID
-   * @param merchantId - Merchant ID
-   * @param productQuery - Product name extracted from message
-   * @returns Formatted response message
+   * PR-GAP-1: Uses PlaybookService.getMessage()
    */
   async handleRemoveItem(
+    merchant: MerchantPlaybookData,
     customerId: string,
     merchantId: string,
     productQuery: string,
@@ -163,10 +157,11 @@ Escribe "buscar" para explorar productos o simplemente dime qué necesitas.`;
       const summary = await this.cartService.getCartSummary(cart.id);
 
       if (summary.items.length === 0) {
-        return `🛒 Tu carrito está vacío, no hay nada que remover.`;
+        return this.playbookService.getMessage(merchant, 'cartEmptyNoAction', {
+          action: 'remover',
+        });
       }
 
-      // Find matching item in cart
       const matchingItem = summary.items.find(
         (item) =>
           item.productName.toLowerCase().includes(productQuery.toLowerCase()) ||
@@ -177,35 +172,39 @@ Escribe "buscar" para explorar productos o simplemente dime qué necesitas.`;
         const itemsList = summary.items
           .map((item, i) => `${i + 1}. ${item.productName} - ${item.variantName}`)
           .join('\n');
-        return `No encontré "${productQuery}" en tu carrito.\n\nTu carrito tiene:\n${itemsList}\n\n¿Cuál quieres remover?`;
+        return this.playbookService.getMessage(merchant, 'itemNotInCart', {
+          query: productQuery,
+          items_list: itemsList,
+        });
       }
 
-      // Remove item
       await this.cartService.removeItem(cart.id, matchingItem.id);
-
-      // Get updated summary
       const updatedSummary = await this.cartService.getCartSummary(cart.id);
 
-      return `✅ *${matchingItem.productName} - ${matchingItem.variantName}* removido del carrito
+      const confirmation = this.playbookService.getMessage(merchant, 'removeConfirm', {
+        product_name: matchingItem.productName,
+        variant_name: matchingItem.variantName,
+      });
 
-${updatedSummary.items.length > 0 ? `Total actualizado: *$${updatedSummary.total.toFixed(2)}*` : '🛒 Tu carrito ahora está vacío'}`;
+      const postRemove =
+        updatedSummary.items.length > 0
+          ? `Total actualizado: *$${updatedSummary.total.toFixed(2)}*`
+          : this.playbookService.getMessage(merchant, 'cartEmpty');
+
+      return `${confirmation}\n\n${postRemove}`;
     } catch (error) {
       this.logger.error(`Failed to remove item: ${error.message}`, error.stack);
-      return '❌ Error al remover item. Intenta de nuevo.';
+      return this.playbookService.getMessage(merchant, 'genericError', { action: 'remover item' });
     }
   }
 
   /**
    * AC-09: Handle UPDATE_CART intent
    * REQ-06: Updates quantity of existing cart item (1-99)
-   *
-   * @param customerId - Customer ID
-   * @param merchantId - Merchant ID
-   * @param productQuery - Product name extracted from message
-   * @param quantity - New quantity (extracted from message text)
-   * @returns Formatted response message
+   * PR-GAP-1: Uses PlaybookService.getMessage()
    */
   async handleUpdateQuantity(
+    merchant: MerchantPlaybookData,
     customerId: string,
     merchantId: string,
     productQuery: string,
@@ -220,10 +219,11 @@ ${updatedSummary.items.length > 0 ? `Total actualizado: *$${updatedSummary.total
       const summary = await this.cartService.getCartSummary(cart.id);
 
       if (summary.items.length === 0) {
-        return `🛒 Tu carrito está vacío, no hay nada que actualizar.`;
+        return this.playbookService.getMessage(merchant, 'cartEmptyNoAction', {
+          action: 'actualizar',
+        });
       }
 
-      // Find matching item in cart
       const matchingItem = summary.items.find(
         (item) =>
           item.productName.toLowerCase().includes(productQuery.toLowerCase()) ||
@@ -234,48 +234,47 @@ ${updatedSummary.items.length > 0 ? `Total actualizado: *$${updatedSummary.total
         const itemsList = summary.items
           .map((item, i) => `${i + 1}. ${item.productName} - ${item.variantName}`)
           .join('\n');
-        return `No encontré "${productQuery}" en tu carrito.\n\nTu carrito tiene:\n${itemsList}\n\n¿Cuál quieres actualizar?`;
+        return this.playbookService.getMessage(merchant, 'itemNotInCart', {
+          query: productQuery,
+          items_list: itemsList,
+        });
       }
 
-      // Validate quantity
       if (quantity < 1 || quantity > 99) {
-        return `❌ La cantidad debe estar entre 1 y 99 unidades.`;
+        return this.playbookService.getMessage(merchant, 'quantityInvalid');
       }
 
-      // Update quantity
       await this.cartService.updateQuantity(cart.id, matchingItem.id, quantity);
 
-      // Get updated summary
-      const updatedSummary = await this.cartService.getCartSummary(cart.id);
-
-      return `✅ *Cantidad actualizada*
-
-📦 ${matchingItem.productName} - ${matchingItem.variantName}
-➡️ Ahora tienes ${quantity} ${quantity === 1 ? 'unidad' : 'unidades'}
-
-🛒 Total: *$${updatedSummary.total.toFixed(2)}*`;
+      return this.playbookService.getMessage(merchant, 'updateConfirm', {
+        product_name: matchingItem.productName,
+        quantity: String(quantity),
+      });
     } catch (error) {
       this.logger.error(`Failed to update quantity: ${error.message}`, error.stack);
-
-      // Handle stock validation errors gracefully
       if (error.message.includes('Stock insuficiente')) {
         return `😔 ${error.message}`;
       }
-
-      return '❌ Error al actualizar cantidad. Intenta de nuevo.';
+      return this.playbookService.getMessage(merchant, 'genericError', {
+        action: 'actualizar cantidad',
+      });
     }
   }
 
-  /**
-   * Format add confirmation message
-   */
   private formatAddConfirmation(
+    merchant: MerchantPlaybookData,
     productName: string,
     variantName: string,
     price: number,
     summary: CartSummary,
   ): string {
-    return `✅ *Agregado al carrito*
+    const confirmLine = this.playbookService.getMessage(merchant, 'addToCartConfirm', {
+      product_name: productName,
+      quantity: String(summary.itemCount),
+      total: summary.total.toFixed(2),
+    });
+
+    return `${confirmLine}
 
 📦 ${productName} - ${variantName}
 💰 $${price.toFixed(2)}
@@ -285,11 +284,11 @@ ${updatedSummary.items.length > 0 ? `Total actualizado: *$${updatedSummary.total
 Escribe "ver carrito" para revisar o "buscar" para agregar más productos.`;
   }
 
-  /**
-   * Format cart summary message (WhatsApp-friendly)
-   */
-  private formatCartSummary(summary: CartSummary): string {
-    const header = `🛒 *Tu carrito* (${summary.itemCount} ${summary.itemCount === 1 ? 'producto' : 'productos'})\n\n`;
+  private formatCartSummary(merchant: MerchantPlaybookData, summary: CartSummary): string {
+    const header = this.playbookService.getMessage(merchant, 'cartSummaryHeader', {
+      item_count: summary.itemCount,
+      item_word: summary.itemCount === 1 ? 'producto' : 'productos',
+    });
 
     const items = summary.items
       .map(
@@ -298,9 +297,9 @@ Escribe "ver carrito" para revisar o "buscar" para agregar más productos.`;
       )
       .join('\n\n');
 
-    const footer = `\n\n💰 *Total: $${summary.total.toFixed(2)}*
-
-✏️ Para modificar cantidades o remover items, escríbeme qué quieres cambiar.`;
+    const footer = this.playbookService.getMessage(merchant, 'cartSummaryFooter', {
+      total: summary.total.toFixed(2),
+    });
 
     return header + items + footer;
   }
