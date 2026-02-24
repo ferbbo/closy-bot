@@ -6,6 +6,8 @@ import { ImportService } from './import.service';
 import { MerchantResolverService } from './merchant-resolver.service';
 import { PlaybookService } from './playbook.service';
 import { CartService } from './cart.service';
+import { CheckoutService } from './checkout.service'; // PR-05
+import { MerchantNotificationService } from './merchant-notification.service'; // PR-05
 import { PersistenceModule } from '../persistence/persistence.module';
 
 /**
@@ -20,11 +22,8 @@ import { PersistenceModule } from '../persistence/persistence.module';
  * - ImportService: CSV product import with validation
  * - MerchantResolverService: merchant resolution by WhatsApp phone
  * - CartService: shopping cart CRUD (PR-04)
- *
- * Future responsibilities:
- * - Payment service (payment gateway integration)
- * - Delivery service (tracking, zones)
- * - Knowledge base service (RAG for FAQs)
+ * - CheckoutService: checkout flow logic (PR-05)
+ * - MerchantNotificationService: merchant WhatsApp notifications (PR-05)
  */
 @Module({
   imports: [PersistenceModule],
@@ -36,6 +35,8 @@ import { PersistenceModule } from '../persistence/persistence.module';
     MerchantResolverService,
     PlaybookService,
     CartService,
+    CheckoutService, // PR-05
+    MerchantNotificationService, // PR-05
   ],
   exports: [
     CustomerService,
@@ -45,6 +46,8 @@ import { PersistenceModule } from '../persistence/persistence.module';
     MerchantResolverService,
     PlaybookService,
     CartService,
+    CheckoutService, // PR-05
+    MerchantNotificationService, // PR-05
   ],
 })
 export class ServicesModule {}

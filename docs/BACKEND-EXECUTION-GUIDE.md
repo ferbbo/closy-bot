@@ -1879,6 +1879,295 @@ LIMIT 1;
 
 ---
 
+## Flujo 7: Checkout Conversacional (PR-05)
+
+Flujo completo: el cliente inicia el checkout desde WhatsApp enviando "quiero pagar". El bot captura nombre, dirección y método de pago, crea la orden y notifica al merchant.
+
+**Prerrequisitos:**
+- Merchant + Channel (WHATSAPP) creados
+- `MerchantConfig.paymentMethods` configurado (ver Flujo 5.5)
+- Cliente con carrito activo con ≥ 1 artículo (ver Flujo 6)
+
+**Variables de entorno necesarias:**
+```bash
+PHONE_NUMBER_ID=<externalId del Canal>  # ej: 123456789012345
+CUSTOMER_PHONE=+573001234567
+```
+
+### Paso 1 — Cliente envía "quiero pagar" → Bot pide nombre
+
+```bash
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "changes": [{
+        "value": {
+          "messaging_product": "whatsapp",
+          "metadata": { "phone_number_id": "'$PHONE_NUMBER_ID'" },
+          "messages": [{
+            "from": "'$CUSTOMER_PHONE'",
+            "id": "chk-msg-001",
+            "timestamp": "1700000001",
+            "type": "text",
+            "text": { "body": "quiero pagar" }
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }'
+```
+
+**Respuesta esperada:** `{ "received": true }` — el bot envía por outbox: _"¿Cuál es tu nombre completo para la entrega?"_
+
+**Estado en DB:**
+```sql
+SELECT metadata->'checkout' FROM conversations
+WHERE customer_id = (SELECT id FROM customers WHERE phone = '+573001234567')
+ORDER BY updated_at DESC LIMIT 1;
+-- { "step": "ASK_NAME", "cartId": "...", "merchantId": "...", "customerId": "..." }
+```
+
+---
+
+### Paso 2 — Cliente envía su nombre → Bot pide dirección
+
+```bash
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "changes": [{
+        "value": {
+          "messaging_product": "whatsapp",
+          "metadata": { "phone_number_id": "'$PHONE_NUMBER_ID'" },
+          "messages": [{
+            "from": "'$CUSTOMER_PHONE'",
+            "id": "chk-msg-002",
+            "timestamp": "1700000002",
+            "type": "text",
+            "text": { "body": "María García López" }
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }'
+```
+
+**Respuesta esperada:** _"¿Cuál es tu dirección de entrega completa?"_
+
+**Estado en DB:** `step: "ASK_ADDRESS"`, `customerName: "María García López"`
+
+---
+
+### Paso 3 — Cliente envía su dirección → Bot muestra métodos de pago
+
+```bash
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "changes": [{
+        "value": {
+          "messaging_product": "whatsapp",
+          "metadata": { "phone_number_id": "'$PHONE_NUMBER_ID'" },
+          "messages": [{
+            "from": "'$CUSTOMER_PHONE'",
+            "id": "chk-msg-003",
+            "timestamp": "1700000003",
+            "type": "text",
+            "text": { "body": "Calle 82 #15-23 Apto 401, Bogotá" }
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }'
+```
+
+**Respuesta esperada (AC-08):**
+```
+💳 Selecciona tu método de pago:
+1. Contraentrega
+2. Transferencia bancaria
+```
+
+**Estado en DB:** `step: "SELECT_PAYMENT"`, `shippingAddress: "Calle 82 #15-23 Apto 401, Bogotá"`
+
+---
+
+### Paso 4 — Cliente selecciona método de pago → Bot muestra resumen de confirmación
+
+```bash
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "changes": [{
+        "value": {
+          "messaging_product": "whatsapp",
+          "metadata": { "phone_number_id": "'$PHONE_NUMBER_ID'" },
+          "messages": [{
+            "from": "'$CUSTOMER_PHONE'",
+            "id": "chk-msg-004",
+            "timestamp": "1700000004",
+            "type": "text",
+            "text": { "body": "1" }
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }'
+```
+
+**Respuesta esperada:**
+```
+📋 Resumen de tu pedido:
+
+👤 Nombre: María García López
+📍 Dirección: Calle 82 #15-23 Apto 401, Bogotá
+💳 Pago: Contraentrega
+
+🛍️ Productos:
+  • Camiseta M x2 — $60.000 c/u
+  • Camiseta L x1 — $60.000 c/u
+
+💰 Total: $180.000
+
+Escribe *confirmar* para finalizar tu pedido ✅
+```
+
+**Estado en DB:** `step: "CONFIRM"`, `paymentMethod: "cod"`, `paymentLabel: "Contraentrega"`
+
+---
+
+### Paso 5 — Cliente confirma → Orden creada + notificación al merchant
+
+```bash
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "changes": [{
+        "value": {
+          "messaging_product": "whatsapp",
+          "metadata": { "phone_number_id": "'$PHONE_NUMBER_ID'" },
+          "messages": [{
+            "from": "'$CUSTOMER_PHONE'",
+            "id": "chk-msg-005",
+            "timestamp": "1700000005",
+            "type": "text",
+            "text": { "body": "confirmar" }
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }'
+```
+
+**Verificar orden creada (AC-15):**
+```sql
+SELECT o.order_code, o.status, o.total_amount, o.customer_name, o.shipping_address, o.payment_method
+FROM orders o
+JOIN customers c ON o.customer_id = c.id
+WHERE c.phone = '+573001234567'
+ORDER BY o.created_at DESC LIMIT 1;
+-- order_code | status          | total_amount | customer_name      | shipping_address              | payment_method
+-- ORD-001    | pending_payment | 180000.00    | María García López | Calle 82 #15-23 Apto 401 ...  | cod
+```
+
+**Verificar items con snapshot (AC-09):**
+```sql
+SELECT oi.quantity, oi.unit_price, oi.snapshot_name
+FROM order_items oi
+JOIN orders o ON oi.order_id = o.id
+WHERE o.order_code = 'ORD-001';
+```
+
+**Verificar carrito completado (AC-10):**
+```sql
+SELECT status FROM carts
+WHERE customer_id = (SELECT id FROM customers WHERE phone = '+573001234567')
+  AND status = 'completed';
+```
+
+**Verificar notificación merchant en outbox (AC-11):**
+```sql
+SELECT dedupe_key, status, payload
+FROM outbox_messages
+WHERE dedupe_key LIKE 'new-order-ORD-001-%'
+ORDER BY created_at DESC LIMIT 1;
+```
+
+---
+
+### Flujo alternativo — Carrito vacío (AC-13)
+
+Si el cliente envía "quiero pagar" sin carrito activo:
+
+```bash
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "changes": [{
+        "value": {
+          "messaging_product": "whatsapp",
+          "metadata": { "phone_number_id": "'$PHONE_NUMBER_ID'" },
+          "messages": [{
+            "from": "+573000000099",
+            "id": "chk-empty-001",
+            "timestamp": "1700000006",
+            "type": "text",
+            "text": { "body": "quiero pagar" }
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }'
+```
+
+**Respuesta esperada:** _"Tu carrito está vacío. Primero agrega productos."_ (sin crear orden)
+
+---
+
+### Acceptance Criteria (PR-05)
+
+**Implementados:**
+- ✅ **AC-03**: `orderCode` secuencial por merchant con prefijo (`ORD-001`, `ORD-002`…)
+- ✅ **AC-04**: No inicia checkout si carrito vacío → mensaje de error
+- ✅ **AC-05**: Estado checkout persiste en `Conversation.metadata.checkout` (JSON)
+- ✅ **AC-06**: Estado se recupera entre mensajes (multi-step continuity)
+- ✅ **AC-07**: Flujo en orden: `ASK_NAME → ASK_ADDRESS → SELECT_PAYMENT → CONFIRM → COMPLETED`
+- ✅ **AC-08**: Métodos de pago numerados desde `MerchantConfig.paymentMethods`
+- ✅ **AC-09**: `OrderItem` con snapshot `unitPrice` + `snapshotName` del momento de compra
+- ✅ **AC-10**: `Cart.status = completed` tras crear orden (transaccional)
+- ✅ **AC-11**: Notificación merchant encolada en outbox con `dedupeKey`
+- ✅ **AC-12**: Intent `CHECKOUT` con 10 keywords (`quiero pagar`, `checkout`, `finalizar`…)
+- ✅ **AC-13**: Carrito vacío → `startCheckout` lanza error → flujo termina con mensaje
+- ✅ **AC-15**: Flujo e2e completo probado en `checkout-flow.e2e-spec.ts`
+- ✅ **AC-16**: Esta documentación (Flujo 7 en BACKEND-EXECUTION-GUIDE.md)
+
+**Coverage:** ~33 tests passing
+- 15 service tests (checkout.service.spec.ts)
+- 5 service tests (merchant-notification.service.spec.ts)
+- 13 flow tests (checkout.flow.spec.ts)
+- E2E tests (checkout-flow.e2e-spec.ts)
+- Extended: keyword-configs.spec.ts, intent-router.service.spec.ts
+
+---
+
 ## Troubleshooting
 
 ### Error: "Channel not found"

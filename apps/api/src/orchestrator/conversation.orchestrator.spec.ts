@@ -14,6 +14,7 @@ import { ViewCartFlow } from './flows/view-cart.flow'; // PR-04
 import { UpdateCartItemFlow } from './flows/update-cart-item.flow'; // PR-04
 import { RemoveFromCartFlow } from './flows/remove-from-cart.flow'; // PR-04
 import { FaqFlow } from './flows/faq.flow'; // PR-GAP-2
+import { CheckoutFlow } from './flows/checkout.flow'; // PR-05
 import { LlmService } from '../llm/llm.service';
 import { Customer, Merchant, Conversation } from '@prisma/client';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
@@ -156,6 +157,13 @@ describe('ConversationOrchestrator', () => {
           provide: FaqFlow, // PR-GAP-2
           useValue: {
             handle: jest.fn().mockReturnValue(null), // returns null by default (no FAQ match)
+          },
+        },
+        {
+          provide: CheckoutFlow, // PR-05
+          useValue: {
+            getActiveState: jest.fn().mockResolvedValue(null), // no active checkout by default
+            handle: jest.fn().mockResolvedValue('Checkout response'),
           },
         },
         {

@@ -12,6 +12,7 @@ import { MessageLogRepository } from './repositories/message-log.repository'; //
 import { ChannelRepository } from './repositories/channel.repository'; // PR-03.11
 import { CartRepository } from './repositories/cart.repository'; // PR-04
 import { CartItemRepository } from './repositories/cart-item.repository'; // PR-04
+import { OrderRepository } from './repositories/order.repository'; // PR-05
 
 @Global()
 @Module({
@@ -29,6 +30,7 @@ import { CartItemRepository } from './repositories/cart-item.repository'; // PR-
     ChannelRepository, // PR-03.11
     CartRepository, // PR-04
     CartItemRepository, // PR-04
+    OrderRepository, // PR-05
   ],
   exports: [
     PrismaService,
@@ -44,6 +46,7 @@ import { CartItemRepository } from './repositories/cart-item.repository'; // PR-
     ChannelRepository, // PR-03.11
     CartRepository, // PR-04
     CartItemRepository, // PR-04
+    OrderRepository, // PR-05
   ],
 })
 export class PersistenceModule {}
