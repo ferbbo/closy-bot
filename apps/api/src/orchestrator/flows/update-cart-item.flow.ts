@@ -80,7 +80,7 @@ export class UpdateCartItemFlow {
 
       // Handle stock validation errors gracefully
       if (error.message.includes('Stock insuficiente')) {
-        return `😔 ${error.message}`;
+        return this.playbookService.getMessage(merchant, 'noStock', { product_name: '' });
       }
 
       return this.playbookService.getMessage(merchant, 'genericError', {

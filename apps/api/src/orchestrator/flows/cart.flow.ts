@@ -102,7 +102,7 @@ export class CartFlow {
     } catch (error) {
       this.logger.error(`Failed to add to cart: ${error.message}`, error.stack);
       if (error.message.includes('Stock insuficiente')) {
-        return `😔 ${error.message}`;
+        return this.playbookService.getMessage(merchant, 'noStock', { product_name: '' });
       }
       return this.playbookService.getMessage(merchant, 'genericError', {
         action: 'agregar al carrito',
@@ -253,7 +253,7 @@ export class CartFlow {
     } catch (error) {
       this.logger.error(`Failed to update quantity: ${error.message}`, error.stack);
       if (error.message.includes('Stock insuficiente')) {
-        return `😔 ${error.message}`;
+        return this.playbookService.getMessage(merchant, 'noStock', { product_name: '' });
       }
       return this.playbookService.getMessage(merchant, 'genericError', {
         action: 'actualizar cantidad',
@@ -268,20 +268,16 @@ export class CartFlow {
     price: number,
     summary: CartSummary,
   ): string {
-    const confirmLine = this.playbookService.getMessage(merchant, 'addToCartConfirm', {
+    return this.playbookService.getMessage(merchant, 'addToCartConfirm', {
       product_name: productName,
+      variant_name: variantName,
+      price: price.toFixed(2),
       quantity: String(summary.itemCount),
       total: summary.total.toFixed(2),
+      cart_total: summary.total.toFixed(2),
+      cart_item_count: summary.itemCount,
+      cart_item_word: summary.itemCount === 1 ? 'producto' : 'productos',
     });
-
-    return `${confirmLine}
-
-📦 ${productName} - ${variantName}
-💰 $${price.toFixed(2)}
-
-🛒 Total en tu carrito: *$${summary.total.toFixed(2)}* (${summary.itemCount} ${summary.itemCount === 1 ? 'producto' : 'productos'})
-
-Escribe "ver carrito" para revisar o "buscar" para agregar más productos.`;
   }
 
   private formatCartSummary(merchant: MerchantPlaybookData, summary: CartSummary): string {
