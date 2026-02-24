@@ -230,23 +230,26 @@
 
 **Evidencia**:
 ```typescript
-// IntentRouter logs
+// conversation.orchestrator.ts lines 150-160
+// REQ-13, AC-13: Structured logging with all classification metadata
 this.logger.log(
-  `Intent: ${decision.intent} | Confidence: ${decision.confidence} | Latency: ${latencyMs}ms`,
+  JSON.stringify({
+    intent: routeDecision.intent,
+    confidence: routeDecision.confidence,
+    signals: routeDecision.signals,
+    route: routeDecision.route,
+    latencyMs,
+  }),
 );
-
-// RouteDecisionService logs
-this.logger.log(`TEMPLATE route: ${decision.intent} (${decision.confidence}) | ${latencyMs}ms`);
-this.logger.log(`LLM_FALLBACK route: ${decision.intent} | ${latencyMs}ms`);
-this.logger.log(`GENERIC route: ${decision.intent} (no LLM) | ${latencyMs}ms`);
 ```
 
 **Formato esperado**: ✅
+- JSON object con todos los campos
 - intent ✅
 - confidence ✅
+- signals ✅
 - route ✅
 - latencyMs ✅
-- signals (debug level) ✅
 
 ---
 

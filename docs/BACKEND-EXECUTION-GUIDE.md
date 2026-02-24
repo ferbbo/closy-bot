@@ -2,7 +2,7 @@
 
 > Documentación para probar los flujos implementados desde backend (sin frontend).
 > 
-> **Última actualización:** 2026-02-19
+> **Última actualización:** 2026-02-24
 
 ---
 
