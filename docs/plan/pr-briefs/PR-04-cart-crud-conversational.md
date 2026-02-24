@@ -1,6 +1,6 @@
 # Brief — PR-04 — Carrito: CRUD conversacional persistido
 
-> **Status**: `AMENDED`
+> **Status**: `APPROVED`
 > **Archivo**: `docs/plan/pr-briefs/PR-04-cart-crud-conversational.md`
 > **Issue**: [#72](https://github.com/ferbbo/closy-bot/issues/72)
 > **Regla**: Max 2 páginas. Spec-locked. Sin scope extra.
