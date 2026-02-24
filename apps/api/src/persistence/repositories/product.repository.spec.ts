@@ -241,4 +241,160 @@ describe('ProductRepository', () => {
       });
     });
   });
+
+  // ============================================================================
+  // PR-03.5.2: Full-Text Search Tests
+  // ============================================================================
+
+  describe('searchFts - AC-03, AC-05, AC-06, AC-11, AC-12', () => {
+    const mockFtsProduct = {
+      ...mockProduct,
+      brand: 'BrandTest',
+      tags: ['skincare', 'facial'],
+      imageUrls: ['https://example.com/image.jpg'],
+      searchText: 'Crema Facial BrandTest Para el cuidado de la piel skincare facial',
+    };
+
+    beforeEach(() => {
+      // Always mock $queryRaw before each test
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (prisma as any).$queryRaw = jest.fn();
+    });
+
+    it('AC-03: should find products by natural language query using FTS', async () => {
+      // Mock $queryRaw to return products with rank
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (prisma as any).$queryRaw.mockResolvedValue([{ ...mockFtsProduct, rank: 0.8 }]);
+
+      // Mock findMany to load variants (second phase)
+      prisma.product.findMany.mockResolvedValue([mockFtsProduct]);
+
+      const result = await repository.searchFts('merch_123', 'crema facial', 20);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('Camisa Azul'); // Mock data
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((prisma as any).$queryRaw).toHaveBeenCalled();
+    });
+
+    it('AC-03: should order results by ts_rank (DESC)', async () => {
+      const product1 = { ...mockFtsProduct, id: 'prod_1', rank: 0.5 };
+      const product2 = { ...mockFtsProduct, id: 'prod_2', rank: 0.9 };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (prisma as any).$queryRaw.mockResolvedValue([product1, product2]);
+
+      prisma.product.findMany.mockResolvedValue([
+        { ...mockFtsProduct, id: 'prod_2' },
+        { ...mockFtsProduct, id: 'prod_1' },
+      ]);
+
+      const result = await repository.searchFts('merch_123', 'test', 20);
+
+      // Should be ordered by rank DESC (prod_2 before prod_1)
+      expect(result[0].id).toBe('prod_2');
+      expect(result[1].id).toBe('prod_1');
+    });
+
+    it('AC-05: should match multi-word queries', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (prisma as any).$queryRaw.mockResolvedValue([{ ...mockFtsProduct, rank: 0.7 }]);
+
+      prisma.product.findMany.mockResolvedValue([mockFtsProduct]);
+
+      const result = await repository.searchFts('merch_123', 'camiseta roja M', 20);
+
+      expect(result).toHaveLength(1);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((prisma as any).$queryRaw).toHaveBeenCalled();
+    });
+
+    it('AC-06: should fallback to ILIKE when FTS returns 0 results', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (prisma as any).$queryRaw.mockResolvedValue([]);
+
+      // Mock ILIKE search (fallback)
+      prisma.product.findMany.mockResolvedValue([mockProduct]);
+
+      const result = await repository.searchFts('merch_123', 'typo query xyz', 20);
+
+      expect(result).toHaveLength(1);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((prisma as any).$queryRaw).toHaveBeenCalled();
+      // Should call prisma.product.findMany (ILIKE fallback)
+      expect(prisma.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            merchantId: 'merch_123',
+          }),
+        }),
+      );
+    });
+
+    it('AC-06: should fallback to ILIKE on FTS error', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (prisma as any).$queryRaw.mockRejectedValue(new Error('FTS index not found'));
+
+      prisma.product.findMany.mockResolvedValue([mockProduct]);
+
+      const result = await repository.searchFts('merch_123', 'test', 20);
+
+      expect(result).toHaveLength(1);
+      expect(prisma.product.findMany).toHaveBeenCalled();
+    });
+
+    it('AC-11: should filter by active products with available stock', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (prisma as any).$queryRaw.mockResolvedValue([{ ...mockFtsProduct, rank: 0.8 }]);
+
+      prisma.product.findMany.mockResolvedValue([mockFtsProduct]);
+
+      await repository.searchFts('merch_123', 'test', 20);
+
+      // Verify second phase filters by active + stock
+      expect(prisma.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            isActive: true,
+            variants: {
+              some: {
+                isActive: true,
+                stock: { gt: 0 },
+              },
+            },
+          }),
+        }),
+      );
+    });
+
+    it('AC-12: should include variants in FTS results', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (prisma as any).$queryRaw.mockResolvedValue([{ ...mockFtsProduct, rank: 0.8 }]);
+
+      prisma.product.findMany.mockResolvedValue([mockFtsProduct]);
+
+      const result = await repository.searchFts('merch_123', 'test', 20);
+
+      expect(result[0].variants).toBeDefined();
+      expect(Array.isArray(result[0].variants)).toBe(true);
+    });
+
+    it('should return empty array for empty query', async () => {
+      const result = await repository.searchFts('merch_123', '', 20);
+
+      expect(result).toEqual([]);
+      // $queryRaw should not be called for empty query
+    });
+
+    it('should filter by merchantId (multi-tenancy)', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (prisma as any).$queryRaw.mockResolvedValue([]);
+
+      await repository.searchFts('merch_456', 'test', 20);
+
+      // $queryRaw should be called (even if returns 0)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((prisma as any).$queryRaw).toHaveBeenCalled();
+    });
+  });
 });

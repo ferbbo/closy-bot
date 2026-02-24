@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CatalogService } from './catalog.service';
 import { ProductRepository } from '../persistence/repositories/product.repository';
 import { CategoryRepository } from '../persistence/repositories/category.repository';
+import { ConfigService } from '@nestjs/config';
 import { NotFoundException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import { Product, ProductVariant } from '@prisma/client';
@@ -11,6 +12,7 @@ describe('CatalogService', () => {
   let productRepository: jest.Mocked<ProductRepository>;
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let categoryRepository: jest.Mocked<CategoryRepository>;
+  let configService: jest.Mocked<ConfigService>;
 
   const mockVariant: ProductVariant = {
     id: 'var_123',
@@ -39,6 +41,7 @@ describe('CatalogService', () => {
   beforeEach(async () => {
     const mockProductRepo = {
       search: jest.fn(),
+      searchFts: jest.fn(), // PR-03.5.2
       findById: jest.fn(),
       findByCategory: jest.fn(),
       findByMerchant: jest.fn(),
@@ -46,6 +49,16 @@ describe('CatalogService', () => {
 
     const mockCategoryRepo = {
       findById: jest.fn(),
+    };
+
+    const mockConfigService = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      get: jest.fn((key: string, defaultValue?: any) => {
+        if (key === 'CATALOG_FTS_ENABLED') {
+          return defaultValue ?? true; // Default to true
+        }
+        return defaultValue;
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -59,12 +72,17 @@ describe('CatalogService', () => {
           provide: CategoryRepository,
           useValue: mockCategoryRepo,
         },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
+        },
       ],
     }).compile();
 
     service = module.get<CatalogService>(CatalogService);
     productRepository = module.get(ProductRepository);
     categoryRepository = module.get(CategoryRepository);
+    configService = module.get(ConfigService);
   });
 
   it('should be defined', () => {
@@ -72,22 +90,17 @@ describe('CatalogService', () => {
   });
 
   describe('searchProducts', () => {
-    it('should search products by query', async () => {
-      productRepository.search.mockResolvedValue([mockProduct]);
+    it('should search products by query (with FTS enabled by default)', async () => {
+      productRepository.searchFts.mockResolvedValue([mockProduct]);
 
       const result = await service.searchProducts('merch_123', 'camisa', 20);
 
       expect(result).toEqual([mockProduct]);
-      expect(productRepository.search).toHaveBeenCalledWith(
-        'merch_123',
-        'camisa',
-        20,
-        true, // Only available products
-      );
+      expect(productRepository.searchFts).toHaveBeenCalledWith('merch_123', 'camisa', 20);
     });
 
     it('should return empty array when no products found', async () => {
-      productRepository.search.mockResolvedValue([]);
+      productRepository.searchFts.mockResolvedValue([]);
 
       const result = await service.searchProducts('merch_123', 'nonexistent', 20);
 
@@ -95,11 +108,11 @@ describe('CatalogService', () => {
     });
 
     it('should use default limit if not provided', async () => {
-      productRepository.search.mockResolvedValue([]);
+      productRepository.searchFts.mockResolvedValue([]);
 
       await service.searchProducts('merch_123', 'camisa');
 
-      expect(productRepository.search).toHaveBeenCalledWith('merch_123', 'camisa', 20, true);
+      expect(productRepository.searchFts).toHaveBeenCalledWith('merch_123', 'camisa', 20);
     });
   });
 
@@ -163,6 +176,63 @@ describe('CatalogService', () => {
 
       expect(result).toEqual([mockProduct]);
       expect(productRepository.findByMerchant).toHaveBeenCalledWith('merch_123');
+    });
+  });
+
+  // ============================================================================
+  // PR-03.5.2: Full-Text Search Feature Flag Tests (AC-04)
+  // ============================================================================
+
+  describe('searchProducts with FTS flag - AC-04', () => {
+    it('AC-04: should use FTS when CATALOG_FTS_ENABLED=true (default)', async () => {
+      // Default behavior (flag enabled)
+      productRepository.searchFts.mockResolvedValue([mockProduct]);
+
+      const result = await service.searchProducts('merch_123', 'test', 20);
+
+      expect(result).toEqual([mockProduct]);
+      expect(productRepository.searchFts).toHaveBeenCalledWith('merch_123', 'test', 20);
+      expect(productRepository.search).not.toHaveBeenCalled();
+    });
+
+    it('AC-04: should use ILIKE search when CATALOG_FTS_ENABLED=false', async () => {
+      // Mock flag disabled
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      configService.get.mockImplementation((key: string, defaultValue?: any) => {
+        if (key === 'CATALOG_FTS_ENABLED') {
+          return false;
+        }
+        return defaultValue;
+      });
+
+      // Recreate service with flag disabled
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          CatalogService,
+          {
+            provide: ProductRepository,
+            useValue: productRepository,
+          },
+          {
+            provide: CategoryRepository,
+            useValue: categoryRepository,
+          },
+          {
+            provide: ConfigService,
+            useValue: configService,
+          },
+        ],
+      }).compile();
+
+      const serviceWithFlagOff = module.get<CatalogService>(CatalogService);
+
+      productRepository.search.mockResolvedValue([mockProduct]);
+
+      const result = await serviceWithFlagOff.searchProducts('merch_123', 'test', 20);
+
+      expect(result).toEqual([mockProduct]);
+      expect(productRepository.search).toHaveBeenCalledWith('merch_123', 'test', 20, true);
+      expect(productRepository.searchFts).not.toHaveBeenCalled();
     });
   });
 });
