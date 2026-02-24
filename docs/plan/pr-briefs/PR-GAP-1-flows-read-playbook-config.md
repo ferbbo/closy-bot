@@ -1,8 +1,8 @@
 # Brief — PR-GAP-1 — Flows leen PlaybookConfig.messages + botPersonality
 
-> **Status**: `DRAFT`
+> **Status**: `APPROVED`
 > **Archivo**: `docs/plan/pr-briefs/PR-GAP-1-flows-read-playbook-config.md`
-> **Issue**: TBD (post-BRIEF GATE)
+> **Issue**: [#80](https://github.com/ferbbo/closy-bot/issues/80)
 > **Regla**: Max 2 páginas. Spec-locked. Sin scope extra.
 
 ## Objetivo
@@ -35,16 +35,16 @@ Eliminar todos los mensajes hardcoded de flows (CartFlow, SearchCatalogFlow, Hel
 
 | ID | Requisito | Issue | AC |
 |--------|-----------|-------|------|
-| REQ-01 | Extensión de `PlaybookConfig` con `botPersonality` y 18+ nuevos campos en `messages` | TBD | AC-01 |
-| REQ-02 | Método `PlaybookService.getMessage(merchant, key, placeholders?)` con interpolación | TBD | AC-02 |
-| REQ-03 | Refactor de CartFlow para usar `getMessage()` (eliminar 8+ strings hardcoded) | TBD | AC-03 |
-| REQ-04 | Refactor de SearchCatalogFlow para usar `getMessage()` (eliminar 3 strings hardcoded) | TBD | AC-04 |
-| REQ-05 | Refactor de HelpFlow para usar `getMessage()` (eliminar 1 string hardcoded) | TBD | AC-05 |
-| REQ-06 | Actualización de 4 industry presets con todos los mensajes + `botPersonality` | TBD | AC-06 |
-| REQ-07 | Tests unit verificando que flows NO tienen strings hardcoded | TBD | AC-07 |
-| REQ-08 | `UpdatePlaybookConfigDto` acepta nuevos campos y valida correctamente | TBD | AC-08 |
+| REQ-01 | Extensión de `PlaybookConfig` con `botPersonality` y 18+ nuevos campos en `messages` | [#80](https://github.com/ferbbo/closy-bot/issues/80) | AC-01 |
+| REQ-02 | Método `PlaybookService.getMessage(merchant, key, placeholders?)` con interpolación | [#80](https://github.com/ferbbo/closy-bot/issues/80) | AC-02 |
+| REQ-03 | Refactor de CartFlow para usar `getMessage()` (eliminar 8+ strings hardcoded) | [#80](https://github.com/ferbbo/closy-bot/issues/80) | AC-03 |
+| REQ-04 | Refactor de SearchCatalogFlow para usar `getMessage()` (eliminar 3 strings hardcoded) | [#80](https://github.com/ferbbo/closy-bot/issues/80) | AC-04 |
+| REQ-05 | Refactor de HelpFlow para usar `getMessage()` (eliminar 1 string hardcoded) | [#80](https://github.com/ferbbo/closy-bot/issues/80) | AC-05 |
+| REQ-06 | Actualización de 4 industry presets con todos los mensajes + `botPersonality` | [#80](https://github.com/ferbbo/closy-bot/issues/80) | AC-06 |
+| REQ-07 | Tests unit verificando que flows NO tienen strings hardcoded | [#80](https://github.com/ferbbo/closy-bot/issues/80) | AC-07 |
+| REQ-08 | `UpdatePlaybookConfigDto` acepta nuevos campos y valida correctamente | [#80](https://github.com/ferbbo/closy-bot/issues/80) | AC-08 |
 
-> **Nota**: Todos los REQs apuntan al mismo issue (TBD post-BRIEF GATE).
+> **Nota**: Todos los REQs apuntan al mismo issue (#80).
 
 ## Paths a tocar (concretos)
 
