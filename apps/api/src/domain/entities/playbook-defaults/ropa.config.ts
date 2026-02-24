@@ -40,7 +40,8 @@ export const RopaPlaybookDefaults: PlaybookConfig = {
   ],
   messages: {
     greeting: '¡Hola! 👗 Soy tu asistente de {merchant_name}. ¿Qué estilo buscas hoy?',
-    addToCartConfirm: '¡Genial! Agregado al carrito 🛒',
+    addToCartConfirm:
+      '¡Genial! Agregado al carrito 🛒\n\n👗 {product_name} - {variant_name}\n💰 ${price}\n\n🛒 Total: *${cart_total}* ({cart_item_count} {cart_item_word})\n\nEscribe "ver carrito" para revisar o "buscar" para agregar más.',
     noStock: 'Uy, ese modelo está agotado 😔. ¿Te notifico cuando llegue o vemos algo similar?',
     upsellTemplate: 'Este {product} combina perfecto con lo que elegiste ✨',
     checkoutStart: '¡Perfecto! Vamos a confirmar tu pedido 📦',

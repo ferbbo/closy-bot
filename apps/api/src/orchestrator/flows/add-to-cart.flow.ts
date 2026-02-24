@@ -124,7 +124,7 @@ export class AddToCartFlow {
 
       // Handle stock validation errors gracefully
       if (error.message.includes('Stock insuficiente')) {
-        return `😔 ${error.message}`;
+        return this.playbookService.getMessage(merchant, 'noStock', { product_name: '' });
       }
 
       return this.playbookService.getMessage(merchant, 'genericError', {
@@ -134,7 +134,8 @@ export class AddToCartFlow {
   }
 
   /**
-   * Format add confirmation using playbook addToCartConfirm template
+   * Format add confirmation using playbook addToCartConfirm template (PR-GAP-1)
+   * All emojis and text come from the playbook template — zero hardcode.
    */
   private formatAddConfirmation(
     merchant: MerchantPlaybookData,
@@ -143,19 +144,15 @@ export class AddToCartFlow {
     price: number,
     summary: CartSummary,
   ): string {
-    const confirmLine = this.playbookService.getMessage(merchant, 'addToCartConfirm', {
+    return this.playbookService.getMessage(merchant, 'addToCartConfirm', {
       product_name: productName,
+      variant_name: variantName,
+      price: price.toFixed(2),
       quantity: String(summary.itemCount),
       total: summary.total.toFixed(2),
+      cart_total: summary.total.toFixed(2),
+      cart_item_count: summary.itemCount,
+      cart_item_word: summary.itemCount === 1 ? 'producto' : 'productos',
     });
-
-    return `${confirmLine}
-
-📦 ${productName} - ${variantName}
-💰 $${price.toFixed(2)}
-
-🛒 Total en tu carrito: *$${summary.total.toFixed(2)}* (${summary.itemCount} ${summary.itemCount === 1 ? 'producto' : 'productos'})
-
-Escribe "ver carrito" para revisar o "buscar" para agregar más productos.`;
   }
 }

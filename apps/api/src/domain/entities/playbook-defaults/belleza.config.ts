@@ -41,7 +41,8 @@ export const BellezaPlaybookDefaults: PlaybookConfig = {
   ],
   messages: {
     greeting: '¡Hola! ✨ Soy tu asistente de {merchant_name}. ¿Qué producto de belleza necesitas?',
-    addToCartConfirm: 'Perfecto! Agregado a tu carrito 💄',
+    addToCartConfirm:
+      'Perfecto! Agregado a tu carrito 💄\n\n✨ {product_name} - {variant_name}\n💰 ${price}\n\n🛒 Total: *${cart_total}* ({cart_item_count} {cart_item_word})\n\nEscribe "ver carrito" para revisar o "buscar" para agregar más.',
     noStock:
       'Ese producto está agotado temporalmente. ¿Puedo recomendarte una alternativa similar?',
     upsellTemplate: 'Para complementar, te recomiendo {product} ✨',
