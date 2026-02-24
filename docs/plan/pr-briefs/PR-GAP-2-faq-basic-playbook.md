@@ -1,8 +1,8 @@
 # Brief — PR-GAP-2 — FAQ básico: PlaybookConfig + FaqFlow
 
-> **Status**: `DRAFT`
+> **Status**: `APPROVED`
 > **Archivo**: `docs/plan/pr-briefs/PR-GAP-2-faq-basic-playbook.md`
-> **Issue**: [TBD](link) (1 issue con todos los REQs)
+> **Issue**: [#84](https://github.com/ferbbo/closy-bot/issues/84) (1 issue con todos los REQs)
 > **Regla**: Max 2 páginas. Spec-locked. Sin scope extra.
 
 ## Objetivo
@@ -37,15 +37,15 @@ Habilitar respuestas automáticas a preguntas frecuentes (envío, devoluciones, 
 
 | ID | Requisito | Issue | AC |
 |--------|-----------|-------|------|
-| REQ-01 | Extender `PlaybookConfig` interface con `faqs` array | [#TBD](link) | AC-01 |
-| REQ-02 | Agregar keywords para intent `QUERY_FAQ` en `INTENT_KEYWORDS` | [#TBD](link) | AC-02 |
-| REQ-03 | Crear `FaqFlow` con keyword scoring y threshold | [#TBD](link) | AC-03 |
-| REQ-04 | Actualizar industry presets con 5+ FAQs base | [#TBD](link) | AC-04 |
-| REQ-05 | Integrar FaqFlow en `ConversationOrchestrator` | [#TBD](link) | AC-05 |
-| REQ-06 | Merchant puede actualizar FAQs via `PATCH /merchants/me/playbook` | [#TBD](link) | AC-06 |
-| REQ-07 | Tests unit + e2e con casos positivos y negativos | [#TBD](link) | AC-07 |
+| REQ-01 | Extender `PlaybookConfig` interface con `faqs` array | [#84](https://github.com/ferbbo/closy-bot/issues/84) | AC-01 |
+| REQ-02 | Agregar keywords para intent `QUERY_FAQ` en `INTENT_KEYWORDS` | [#84](https://github.com/ferbbo/closy-bot/issues/84) | AC-02 |
+| REQ-03 | Crear `FaqFlow` con keyword scoring y threshold | [#84](https://github.com/ferbbo/closy-bot/issues/84) | AC-03 |
+| REQ-04 | Actualizar industry presets con 5+ FAQs base | [#84](https://github.com/ferbbo/closy-bot/issues/84) | AC-04 |
+| REQ-05 | Integrar FaqFlow en `ConversationOrchestrator` | [#84](https://github.com/ferbbo/closy-bot/issues/84) | AC-05 |
+| REQ-06 | Merchant puede actualizar FAQs via `PATCH /merchants/me/playbook` | [#84](https://github.com/ferbbo/closy-bot/issues/84) | AC-06 |
+| REQ-07 | Tests unit + e2e con casos positivos y negativos | [#84](https://github.com/ferbbo/closy-bot/issues/84) | AC-07 |
 
-> **Nota**: Todos los REQs apuntan al mismo issue (#TBD).
+> **Nota**: Todos los REQs apuntan al mismo issue (#84).
 
 ## Paths a tocar (concretos)
 
