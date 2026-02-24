@@ -8,6 +8,8 @@ import { PlaybookService } from './playbook.service';
 import { CartService } from './cart.service';
 import { CheckoutService } from './checkout.service'; // PR-05
 import { MerchantNotificationService } from './merchant-notification.service'; // PR-05
+import { MerchantCommandParserService } from './merchant-command-parser.service'; // PR-05.1
+import { MerchantCommandService } from './merchant-command.service'; // PR-05.1
 import { PersistenceModule } from '../persistence/persistence.module';
 
 /**
@@ -24,6 +26,8 @@ import { PersistenceModule } from '../persistence/persistence.module';
  * - CartService: shopping cart CRUD (PR-04)
  * - CheckoutService: checkout flow logic (PR-05)
  * - MerchantNotificationService: merchant WhatsApp notifications (PR-05)
+ * - MerchantCommandParserService: parse merchant WhatsApp commands (PR-05.1)
+ * - MerchantCommandService: execute merchant admin commands (PR-05.1)
  */
 @Module({
   imports: [PersistenceModule],
@@ -37,6 +41,8 @@ import { PersistenceModule } from '../persistence/persistence.module';
     CartService,
     CheckoutService, // PR-05
     MerchantNotificationService, // PR-05
+    MerchantCommandParserService, // PR-05.1
+    MerchantCommandService, // PR-05.1
   ],
   exports: [
     CustomerService,
@@ -48,6 +54,8 @@ import { PersistenceModule } from '../persistence/persistence.module';
     CartService,
     CheckoutService, // PR-05
     MerchantNotificationService, // PR-05
+    MerchantCommandParserService, // PR-05.1
+    MerchantCommandService, // PR-05.1
   ],
 })
 export class ServicesModule {}

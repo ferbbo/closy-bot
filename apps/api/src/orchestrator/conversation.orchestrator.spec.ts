@@ -15,8 +15,10 @@ import { UpdateCartItemFlow } from './flows/update-cart-item.flow'; // PR-04
 import { RemoveFromCartFlow } from './flows/remove-from-cart.flow'; // PR-04
 import { FaqFlow } from './flows/faq.flow'; // PR-GAP-2
 import { CheckoutFlow } from './flows/checkout.flow'; // PR-05
+import { MerchantCommandParserService } from '../services/merchant-command-parser.service'; // PR-05.1
+import { MerchantCommandService } from '../services/merchant-command.service'; // PR-05.1
 import { LlmService } from '../llm/llm.service';
-import { Customer, Merchant, Conversation } from '@prisma/client';
+import { Customer, Merchant, Conversation, ConversationType } from '@prisma/client';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10
 
@@ -38,6 +40,7 @@ describe('ConversationOrchestrator', () => {
     apiKey: 'test-key',
     industry: null,
     playbookConfig: null,
+    botPaused: false, // PR-05.1
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -56,6 +59,7 @@ describe('ConversationOrchestrator', () => {
     customerId: 'customer-1',
     merchantId: 'merchant-1',
     channel: 'whatsapp',
+    type: ConversationType.CUSTOMER, // PR-05.1: ConversationType.CUSTOMER
     status: 'active',
     lastMessageAt: new Date(),
     createdAt: new Date(),
@@ -185,6 +189,21 @@ describe('ConversationOrchestrator', () => {
             getMessageHistoryDays: jest.fn().mockReturnValue(30),
             getMessageHistoryMaxPerConvo: jest.fn().mockReturnValue(50),
             getLlmContextLastK: jest.fn().mockReturnValue(10),
+          },
+        },
+        // PR-05.1: Merchant command services
+        {
+          provide: MerchantCommandParserService,
+          useValue: {
+            parse: jest
+              .fn()
+              .mockReturnValue({ command: 'confirmar', args: { orderCode: 'ORD-001' } }),
+          },
+        },
+        {
+          provide: MerchantCommandService,
+          useValue: {
+            executeCommand: jest.fn().mockResolvedValue('✅ Pedido ORD-001 confirmado'),
           },
         },
       ],
@@ -395,6 +414,76 @@ describe('ConversationOrchestrator', () => {
         'quiero agregar una camiseta roja',
       );
       expect(result.response).toBe('Item added to cart');
+    });
+
+    // -------------------------------------------------------------------------
+    // PR-05.1: Bifurcation tests
+    // -------------------------------------------------------------------------
+    describe('PR-05.1 AC-02: Merchant admin message routing', () => {
+      it('AC-02: should route merchant messages to admin pipeline (phone match)', async () => {
+        // Merchant's phone is '+573001111111' (mockMerchant.whatsappNumber)
+        const merchantInput = {
+          messageId: 'msg-merchant-001',
+          from: '+573001111111', // matches merchant.whatsappNumber
+          receiverPhoneId: 'phone-id-123',
+          text: 'confirmar ORD-001',
+          timestamp: new Date(),
+        };
+
+        // resolveByWhatsAppPhoneId called first for merchant lookup
+        const result = await orchestrator.process(merchantInput);
+
+        // Should be handled by merchant admin pipeline (not routeDecisionService)
+        expect(routeDecisionService.classifyAndRoute).not.toHaveBeenCalled();
+        expect(result.shouldSend).toBe(true);
+        expect(result.response).toBe('✅ Pedido ORD-001 confirmado');
+      });
+    });
+
+    describe('PR-05.1 AC-03: Customer messages follow normal pipeline', () => {
+      it('AC-03: should route customer messages (non-merchant phone) to normal pipeline', async () => {
+        // Customer phone is '+573001234567' (different from merchant.whatsappNumber)
+        jest.spyOn(routeDecisionService, 'classifyAndRoute').mockResolvedValue({
+          route: 'TEMPLATE',
+          intent: 'GREETING',
+          reason: 'HIGH confidence',
+          confidence: 'HIGH',
+          signals: ['hola'],
+        });
+
+        const customerInput = {
+          messageId: 'msg-customer-001',
+          from: '+573001234567', // NOT merchant.whatsappNumber
+          receiverPhoneId: 'phone-id-123',
+          text: 'hola',
+          timestamp: new Date(),
+        };
+
+        const result = await orchestrator.process(customerInput);
+
+        // Should go through normal route decision
+        expect(routeDecisionService.classifyAndRoute).toHaveBeenCalled();
+        expect(result.intent).toBe('GREETING');
+      });
+    });
+
+    describe('PR-05.1 AC-14: botPaused blocks customer messages', () => {
+      it('AC-14: should return shouldSend=false when merchant.botPaused=true', async () => {
+        // Setup paused merchant
+        const pausedMerchant = { ...mockMerchant, botPaused: true };
+        jest.spyOn(merchantResolver, 'resolveByWhatsAppPhoneId').mockResolvedValue(pausedMerchant);
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          from: '+573001234567', // customer (not merchant phone)
+          text: 'buscar zapatos',
+        });
+
+        expect(result.shouldSend).toBe(false);
+        expect(result.response).toBe('');
+        // routeDecision should NOT be called
+        expect(routeDecisionService.classifyAndRoute).not.toHaveBeenCalled();
+      });
     });
   });
 });

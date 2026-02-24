@@ -56,6 +56,7 @@ model Merchant {
   apiKey         String    @unique @map("api_key")
   industry       Industry? // PR-11: Playbook industry
   playbookConfig Json?     @map("playbook_config") // PR-11: Custom playbook overrides
+  botPaused      Boolean   @default(false) @map("bot_paused") // PR-05.1: Pause bot processing for customers
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
@@ -99,6 +100,12 @@ enum Industry {
   minimarket
 }
 
+/// ConversationType distinguishes customer conversations from merchant admin sessions (PR-05.1)
+enum ConversationType {
+  CUSTOMER       // Default: end-user conversation (sales flow)
+  MERCHANT_ADMIN // Merchant sending admin commands via WhatsApp
+}
+
 /// Channel type for multi-channel support (PR-03.11)
 enum ChannelType {
   WHATSAPP
@@ -131,21 +138,22 @@ model Customer {
 
 /// Conversation represents a chat session between customer and merchant
 model Conversation {
-  id               String    @id @default(cuid())
-  customerId       String    @map("customer_id")
-  merchantId       String    @map("merchant_id")
-  channelId        String?   @map("channel_id") // PR-03.11: FK to Channel (nullable for backwards compat)
+  id               String           @id @default(cuid())
+  customerId       String           @map("customer_id")
+  merchantId       String           @map("merchant_id")
+  channelId        String?          @map("channel_id") // PR-03.11: FK to Channel (nullable for backwards compat)
   channel          String // whatsapp, webchat, instagram
-  status           String    @default("active") // active, closed, handoff
-  lastMessageAt    DateTime? @map("last_message_at")
+  type             ConversationType @default(CUSTOMER) // PR-05.1: CUSTOMER or MERCHANT_ADMIN
+  status           String           @default("active") // active, closed, handoff
+  lastMessageAt    DateTime?        @map("last_message_at")
   // PR-03.10: Memory fields for conversational continuity
-  summary          String?   @db.Text // Conversational summary (max 1000 chars)
-  memoryFacts      Json?     @map("memory_facts") // Persistent facts extracted from conversation
-  lastIntent       String?   @map("last_intent") // Last detected intent
-  lastSummarizedAt DateTime? @map("last_summarized_at") // Last time summary was generated
-  metadata         Json?     // PR-05: Generic metadata (checkout state, etc.)
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  summary          String?          @db.Text // Conversational summary (max 1000 chars)
+  memoryFacts      Json?            @map("memory_facts") // Persistent facts extracted from conversation
+  lastIntent       String?          @map("last_intent") // Last detected intent
+  lastSummarizedAt DateTime?        @map("last_summarized_at") // Last time summary was generated
+  metadata         Json?            // PR-05: Generic metadata (checkout state, etc.)
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
 
   customer    Customer     @relation(fields: [customerId], references: [id])
   merchant    Merchant     @relation(fields: [merchantId], references: [id])

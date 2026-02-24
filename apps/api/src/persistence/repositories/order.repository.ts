@@ -117,4 +117,70 @@ export class OrderRepository {
       skip,
     });
   }
+
+  // ---------------------------------------------------------------------------
+  // PR-05.1: Methods for MerchantCommandService
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Find order by orderCode + merchantId including items snapshot
+   * Used by MerchantCommandService.getOrderDetails() — AC-10
+   */
+  async findByOrderCodeWithItems(
+    orderCode: string,
+    merchantId: string,
+  ): Promise<OrderWithItems | null> {
+    return this.prisma.order.findUnique({
+      where: { orderCode_merchantId: { orderCode, merchantId } },
+      include: {
+        items: {
+          include: {
+            variant: {
+              include: { product: { select: { id: true, name: true } } },
+            },
+          },
+        },
+      },
+    }) as Promise<OrderWithItems | null>;
+  }
+
+  /**
+   * Find pending orders (pending_payment or confirmed) for a merchant
+   * Used by MerchantCommandService.listPendingOrders() — AC-11
+   */
+  async findPendingByMerchant(merchantId: string): Promise<Order[]> {
+    return this.prisma.order.findMany({
+      where: {
+        merchantId,
+        status: { in: ['pending_payment', 'confirmed'] as OrderStatus[] },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
+   * Get daily summary for merchant: count of orders created today and sum of totalAmount
+   * Used by MerchantCommandService.getDailySummary() — AC-12
+   * Timezone: UTC (merchant timezone is a future concern)
+   */
+  async getDailySummary(merchantId: string): Promise<{ count: number; total: number }> {
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setUTCHours(23, 59, 59, 999);
+
+    const result = await this.prisma.order.aggregate({
+      where: {
+        merchantId,
+        createdAt: { gte: startOfDay, lte: endOfDay },
+      },
+      _count: { id: true },
+      _sum: { totalAmount: true },
+    });
+
+    return {
+      count: result._count.id,
+      total: Number(result._sum.totalAmount ?? 0),
+    };
+  }
 }

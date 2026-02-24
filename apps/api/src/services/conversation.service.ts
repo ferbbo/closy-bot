@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConversationType } from '@prisma/client'; // PR-05.1
 import { Conversation, Channel, ConversationStatus } from '../domain/entities/conversation.entity';
 import { ConversationRepository } from '../persistence/repositories/conversation.repository';
 
@@ -15,10 +16,12 @@ export class ConversationService {
    * Get or create a conversation for a customer on a specific channel
    * Returns existing active conversation or creates a new one
    * PR-03.11 AC-11: Includes channelId for multi-channel support
+   * PR-05.1: Accepts optional type (CUSTOMER | MERCHANT_ADMIN)
    * @param customerId Customer ID
    * @param merchantId Merchant ID
    * @param channel Channel (whatsapp, webchat, instagram)
    * @param channelId Channel ID (PR-03.11)
+   * @param type Conversation type (default: CUSTOMER) — PR-05.1
    * @returns Active conversation
    */
   async getOrCreateConversation(
@@ -26,17 +29,19 @@ export class ConversationService {
     merchantId: string,
     channel: Channel,
     channelId?: string | null,
+    type?: ConversationType,
   ): Promise<Conversation> {
     this.logger.log(
-      `Getting or creating conversation: customer=${customerId}, merchant=${merchantId}, channel=${channel}, channelId=${channelId}`,
+      `Getting or creating conversation: customer=${customerId}, merchant=${merchantId}, channel=${channel}, channelId=${channelId}, type=${type ?? 'CUSTOMER'}`,
     );
 
-    // Try to find existing active conversation
+    // Try to find existing active conversation (filter by type if provided)
     let conversation = await this.conversationRepository.findByCustomerAndChannel(
       customerId,
       merchantId,
       channel,
       channelId ?? undefined,
+      type,
     );
 
     if (conversation) {
@@ -47,7 +52,7 @@ export class ConversationService {
 
     // Create new conversation if not found
     this.logger.log(
-      `Creating new conversation: customer=${customerId}, merchant=${merchantId}, channel=${channel}, channelId=${channelId}`,
+      `Creating new conversation: customer=${customerId}, merchant=${merchantId}, channel=${channel}, channelId=${channelId}, type=${type ?? 'CUSTOMER'}`,
     );
 
     // PR-03.11: Build create input with optional channelRef relation
@@ -55,6 +60,7 @@ export class ConversationService {
       customer: { connect: { id: string } };
       merchant: { connect: { id: string } };
       channel: string;
+      type?: ConversationType;
       status: string;
       lastMessageAt: Date;
       channelRef?: { connect: { id: string } };
@@ -65,6 +71,11 @@ export class ConversationService {
       status: ConversationStatus.ACTIVE,
       lastMessageAt: new Date(),
     };
+
+    // PR-05.1: Set conversation type if provided
+    if (type) {
+      createInput.type = type;
+    }
 
     // PR-03.11 AC-11: Connect channel if provided
     if (channelId) {
