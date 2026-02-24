@@ -86,7 +86,35 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
   ],
 
   CHECKOUT: [],
-  QUERY_FAQ: [],
+  QUERY_FAQ: [
+    // Envío
+    { phrase: 'envio', weight: 4 },
+    { phrase: 'envío', weight: 4 },
+    { phrase: 'demora', weight: 4 },
+    { phrase: 'llega', weight: 4 },
+    { phrase: 'dias', weight: 3 },
+    { phrase: 'cuanto demora', weight: 4 },
+    // Devoluciones
+    { phrase: 'devolver', weight: 4 },
+    { phrase: 'devolucion', weight: 4 },
+    { phrase: 'cambio', weight: 4 },
+    { phrase: 'garantia', weight: 4 },
+    // Pagos
+    { phrase: 'pago', weight: 3 },
+    { phrase: 'transferencia', weight: 3 },
+    { phrase: 'efectivo', weight: 3 },
+    { phrase: 'como pago', weight: 3 },
+    { phrase: 'metodo de pago', weight: 3 },
+    { phrase: 'metodos', weight: 3 },
+    // Horarios
+    { phrase: 'horario', weight: 3 },
+    { phrase: 'abierto', weight: 3 },
+    { phrase: 'cuando atienden', weight: 3 },
+    // Ubicación
+    { phrase: 'donde', weight: 2 },
+    { phrase: 'direccion', weight: 2 },
+    { phrase: 'ubicacion', weight: 2 },
+  ],
   HANDOFF: [],
   UNKNOWN: [],
   AMBIGUOUS: [], // REQ-05: No keywords, assigned when collision detected

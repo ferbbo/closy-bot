@@ -9,6 +9,7 @@ import { AddToCartFlow } from './flows/add-to-cart.flow'; // PR-04
 import { ViewCartFlow } from './flows/view-cart.flow'; // PR-04
 import { UpdateCartItemFlow } from './flows/update-cart-item.flow'; // PR-04
 import { RemoveFromCartFlow } from './flows/remove-from-cart.flow'; // PR-04
+import { FaqFlow } from './flows/faq.flow'; // PR-GAP-2
 import { ServicesModule } from '../services/services.module';
 import { LlmModule } from '../llm/llm.module';
 import { PersistenceModule } from '../persistence/persistence.module'; // PR-03.10
@@ -45,6 +46,7 @@ import { CommonModule } from '../common/common.module'; // PR-03.10 AC-06
     ViewCartFlow, // PR-04 AC-08
     UpdateCartItemFlow, // PR-04 AC-09
     RemoveFromCartFlow, // PR-04 AC-10
+    FaqFlow, // PR-GAP-2 AC-05
   ],
   exports: [ConversationOrchestrator],
 })

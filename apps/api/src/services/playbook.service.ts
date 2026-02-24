@@ -221,6 +221,11 @@ export class PlaybookService {
       result.checkoutQuestions = customConfig.checkoutQuestions;
     }
 
+    // PR-GAP-2: merge faqs (full replace — merchant overrides entire array)
+    if (customConfig.faqs !== undefined) {
+      result.faqs = customConfig.faqs;
+    }
+
     return result;
   }
 

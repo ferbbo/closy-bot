@@ -477,7 +477,7 @@ graph TD
   - Config `'spanish'` para stemming español (`camisetas` → `camiseta`)
 - **Paralelizable con:** PR-03.5.1, PR-GAP-1
 
-##### PR-GAP-1 — Flows leen PlaybookConfig.messages + botPersonality 🔴 CRÍTICO NUEVO
+##### PR-GAP-1 — Flows leen PlaybookConfig.messages + botPersonality ✅ MERGED
 - **Objetivo:** Eliminar copy hardcoded de flows para que todos los mensajes vengan de PlaybookConfig (personalizable por merchant). Agregar selector `botPersonality.style` de alto nivel.
 - **Depende de:** PR-11 ✅ (Playbooks), PR-04 (Cart flows).
 - **Incluye:**
@@ -581,7 +581,7 @@ graph TD
   - FAQs son parte de PlaybookConfig (JSON field), no tabla separada
 - **Depende de:** PR-03.5.1 (para que IntentRouter tenga QUERY_FAQ intent)
 
-##### PR-04.5 — MerchantConfig: políticas, métodos de pago, envío + presets 🔴 NUEVO
+##### PR-04.5 — MerchantConfig: políticas, métodos de pago, envío + presets ✅ MERGED
 - **Objetivo:** persistir configuración operativa del merchant (métodos de pago aceptados, política de envío, política de devolución) con presets por industria.
 - **Depende de:** PR-02 ✅ (Merchant), PR-11 ✅ (Playbooks pattern).
 - **Incluye:**

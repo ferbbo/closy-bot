@@ -79,4 +79,32 @@ export const RopaPlaybookDefaults: PlaybookConfig = {
   cartConfig: {
     ttlHours: 24, // PR-04: Cart expires after 24 hours
   },
+  // PR-GAP-2: FAQ presets para industria Ropa (AC-04)
+  faqs: [
+    {
+      question: '¿Cuánto demora el envío?',
+      keywords: ['envio', 'demora', 'llega'],
+      answer: 'Los envíos demoran 3-5 días hábiles 📦',
+    },
+    {
+      question: '¿Hacen cambios de talla?',
+      keywords: ['cambio', 'devolver', 'talla'],
+      answer: 'Aceptamos cambios hasta 15 días después de recibir tu pedido 👗',
+    },
+    {
+      question: '¿Qué tallas tienen disponibles?',
+      keywords: ['tallas', 'disponible', 'medidas'],
+      answer: 'Contamos con tallas XS a XXL. ¿Qué talla buscas? 📏',
+    },
+    {
+      question: '¿Cómo puedo pagar?',
+      keywords: ['pago', 'transferencia', 'efectivo'],
+      answer: 'Aceptamos transferencia y pago contra entrega 💳',
+    },
+    {
+      question: '¿Cuándo reabastecen stock?',
+      keywords: ['stock', 'reposicion', 'cuando llega'],
+      answer: 'Si no hay stock, te podemos notificar cuando llegue ✨',
+    },
+  ],
 };
