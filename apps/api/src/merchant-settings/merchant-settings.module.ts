@@ -4,11 +4,12 @@ import { AuthModule } from '../auth/auth.module';
 import { ServicesModule } from '../services/services.module';
 import { MerchantSettingsController } from './merchant-settings.controller';
 import { MerchantSettingsService } from './merchant-settings.service';
+import { MerchantConfigService } from './merchant-config.service';
 
 @Module({
   imports: [PersistenceModule, AuthModule, ServicesModule],
   controllers: [MerchantSettingsController],
-  providers: [MerchantSettingsService],
-  exports: [MerchantSettingsService],
+  providers: [MerchantSettingsService, MerchantConfigService],
+  exports: [MerchantSettingsService, MerchantConfigService],
 })
 export class MerchantSettingsModule {}

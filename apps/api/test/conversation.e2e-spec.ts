@@ -70,7 +70,11 @@ describe('AC-07: Custom playbook messages flow end-to-end (PR-GAP-1)', () => {
       cartService.createOrGetActiveCart.mockResolvedValue({ id: 'cart-1' } as any);
       cartService.getCartSummary.mockResolvedValue({ items: [], total: 0, itemCount: 0 });
 
-      const response = await viewCartFlow.execute(merchantWithCustom, 'customer-1', 'merchant-custom');
+      const response = await viewCartFlow.execute(
+        merchantWithCustom,
+        'customer-1',
+        'merchant-custom',
+      );
 
       // AC-07: Custom cartEmpty is used, not default
       expect(response).toBe('Tu carrito personalizado está vacío. ¡Empieza a comprar!');
@@ -88,7 +92,11 @@ describe('AC-07: Custom playbook messages flow end-to-end (PR-GAP-1)', () => {
       cartService.createOrGetActiveCart.mockResolvedValue({ id: 'cart-1' } as any);
       cartService.getCartSummary.mockResolvedValue({ items: [], total: 0, itemCount: 0 });
 
-      const response = await viewCartFlow.execute(genericMerchant, 'customer-1', 'merchant-generic');
+      const response = await viewCartFlow.execute(
+        genericMerchant,
+        'customer-1',
+        'merchant-generic',
+      );
 
       // Should contain default cartEmpty text
       expect(response).toContain('carrito');
@@ -111,7 +119,11 @@ describe('AC-07: Custom playbook messages flow end-to-end (PR-GAP-1)', () => {
 
       catalogService.searchProducts.mockResolvedValue([]);
 
-      const response = await searchCatalogFlow.handle(merchantWithCustom, 'merchant-custom-search', 'zapatillas');
+      const response = await searchCatalogFlow.handle(
+        merchantWithCustom,
+        'merchant-custom-search',
+        'zapatillas',
+      );
 
       // AC-07: Custom searchNoResults is used with placeholder interpolation
       expect(response).toBe('No encontramos zapatillas en nuestro catálogo personalizado.');

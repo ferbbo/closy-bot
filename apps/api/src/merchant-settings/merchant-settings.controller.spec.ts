@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MerchantSettingsController } from './merchant-settings.controller';
 import { MerchantSettingsService } from './merchant-settings.service';
+import { MerchantConfigService } from './merchant-config.service';
 import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { Industry } from '@prisma/client';
@@ -31,6 +32,13 @@ describe('MerchantSettingsController', () => {
             updateProfile: jest.fn(),
             replacePlaybookConfig: jest.fn(),
             mergePlaybookConfig: jest.fn(),
+          },
+        },
+        {
+          provide: MerchantConfigService,
+          useValue: {
+            getOrCreateConfig: jest.fn(),
+            updateConfig: jest.fn(),
           },
         },
       ],
