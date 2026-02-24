@@ -233,4 +233,37 @@ describe('IntentRouterService V2 (PR-03.5.1)', () => {
       expect(typeof decision.reason).toBe('string');
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // AC-12 (PR-05): CHECKOUT intent classification
+  // REQ-11: Intent CHECKOUT detectado con keywords
+  // ---------------------------------------------------------------------------
+
+  describe('AC-12 (PR-05): CHECKOUT intent', () => {
+    it("AC-12: should classify 'quiero pagar' as CHECKOUT with HIGH confidence", () => {
+      const decision = service.classify('quiero pagar');
+
+      expect(decision.intent).toBe('CHECKOUT');
+      expect(decision.confidence).toBe('HIGH');
+    });
+
+    it("AC-12: should classify 'checkout' as CHECKOUT", () => {
+      const decision = service.classify('checkout');
+
+      expect(decision.intent).toBe('CHECKOUT');
+    });
+
+    it("should classify 'finalizar pedido' as CHECKOUT", () => {
+      const decision = service.classify('quiero finalizar pedido');
+
+      expect(decision.intent).toBe('CHECKOUT');
+    });
+
+    it("should classify 'proceder al pago' as CHECKOUT with HIGH confidence", () => {
+      const decision = service.classify('proceder al pago');
+
+      expect(decision.intent).toBe('CHECKOUT');
+      expect(decision.confidence).toBe('HIGH');
+    });
+  });
 });

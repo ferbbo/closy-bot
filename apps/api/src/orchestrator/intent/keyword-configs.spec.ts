@@ -37,3 +37,33 @@ describe('AC-02 (PR-GAP-2): INTENT_KEYWORDS.QUERY_FAQ completeness', () => {
     expect(unique.size).toBe(phrases.length);
   });
 });
+
+// ---------------------------------------------------------------------------
+// AC-12 (PR-05): INTENT_KEYWORDS.CHECKOUT — checkout trigger keywords
+// ---------------------------------------------------------------------------
+
+describe('AC-12 (PR-05): INTENT_KEYWORDS.CHECKOUT completeness', () => {
+  it('AC-12: CHECKOUT has at least 5 keywords', () => {
+    expect(INTENT_KEYWORDS.CHECKOUT.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('AC-12: all CHECKOUT keywords have valid weight (1-5)', () => {
+    for (const kw of INTENT_KEYWORDS.CHECKOUT) {
+      expect(kw.weight).toBeGreaterThanOrEqual(1);
+      expect(kw.weight).toBeLessThanOrEqual(5);
+      expect(typeof kw.phrase).toBe('string');
+    }
+  });
+
+  it('AC-12: CHECKOUT includes "quiero pagar" with highest weight', () => {
+    const kwConfig = INTENT_KEYWORDS.CHECKOUT.find((k) => k.phrase === 'quiero pagar');
+    expect(kwConfig).toBeDefined();
+    expect(kwConfig!.weight).toBe(5);
+  });
+
+  it('AC-12: CHECKOUT includes "checkout" and "finalizar" keywords', () => {
+    const phrases = INTENT_KEYWORDS.CHECKOUT.map((k) => k.phrase);
+    expect(phrases).toContain('checkout');
+    expect(phrases.some((p) => p.includes('finalizar'))).toBe(true);
+  });
+});

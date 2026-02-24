@@ -85,7 +85,18 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
     { phrase: 'comprar', weight: 2 },
   ],
 
-  CHECKOUT: [],
+  CHECKOUT: [
+    { phrase: 'quiero pagar', weight: 5 }, // REQ-11, AC-12: Primary checkout trigger
+    { phrase: 'checkout', weight: 5 },
+    { phrase: 'finalizar', weight: 4 },
+    { phrase: 'finalizar pedido', weight: 5 },
+    { phrase: 'pagar', weight: 4 },
+    { phrase: 'confirmar pedido', weight: 5 },
+    { phrase: 'realizar pedido', weight: 4 },
+    { phrase: 'hacer pedido', weight: 4 },
+    { phrase: 'proceder al pago', weight: 5 },
+    { phrase: 'completar compra', weight: 5 },
+  ],
   QUERY_FAQ: [
     // Envío
     { phrase: 'envio', weight: 4 },

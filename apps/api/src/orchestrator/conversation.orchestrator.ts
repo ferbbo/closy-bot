@@ -14,7 +14,8 @@ import { AddToCartFlow } from './flows/add-to-cart.flow'; // PR-04 AC-07
 import { ViewCartFlow } from './flows/view-cart.flow'; // PR-04 AC-08
 import { UpdateCartItemFlow } from './flows/update-cart-item.flow'; // PR-04 AC-09
 import { RemoveFromCartFlow } from './flows/remove-from-cart.flow'; // PR-04 AC-10
-import { FaqFlow } from './flows/faq.flow'; // PR-GAP-2 AC-05
+import { FaqFlow } from './flows/faq.flow'; // PR-GAP-2
+import { CheckoutFlow } from './flows/checkout.flow'; // PR-05 AC-05
 import { LlmService } from '../llm/llm.service';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10 AC-06
@@ -69,6 +70,7 @@ export class ConversationOrchestrator {
     private readonly updateCartItemFlow: UpdateCartItemFlow, // PR-04 AC-09
     private readonly removeFromCartFlow: RemoveFromCartFlow, // PR-04 AC-10
     private readonly faqFlow: FaqFlow, // PR-GAP-2 AC-05
+    private readonly checkoutFlow: CheckoutFlow, // PR-05
     private readonly llmService: LlmService,
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
     private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
@@ -140,7 +142,39 @@ export class ConversationOrchestrator {
       this.logger.warn(`Failed to log inbound message for conversation ${conversation.id}`, error);
     }
 
-    // 5. PR-03.5.1: Classify and route (REQ-07, AC-07)
+    // 5. PR-05: Check for active checkout state BEFORE intent routing
+    // If user is mid-checkout, all messages go to CheckoutFlow regardless of intent
+    const activeCheckoutState = await this.checkoutFlow.getActiveState(conversation.id);
+    if (activeCheckoutState) {
+      this.logger.log(
+        `Active checkout state detected (step=${activeCheckoutState.step}), routing to CheckoutFlow`,
+      );
+
+      const merchantPlaybookData: MerchantPlaybookData = {
+        id: merchant.id,
+        name: merchant.name,
+        industry: merchant.industry ?? undefined,
+        playbookConfig: merchant.playbookConfig,
+      };
+
+      const response = await this.checkoutFlow.handle(
+        merchantPlaybookData,
+        conversation.id,
+        customer.id,
+        merchant.id,
+        input.text,
+      );
+
+      return {
+        response,
+        shouldSend: true,
+        conversationId: conversation.id,
+        merchantId: merchant.id,
+        intent: 'CHECKOUT',
+      };
+    }
+
+    // 6. PR-03.5.1: Classify and route (REQ-07, AC-07)
     const classifyStartTime = Date.now();
     const routeDecision = await this.routeDecisionService.classifyAndRoute(input.text, {
       conversationId: conversation.id,
@@ -182,6 +216,7 @@ export class ConversationOrchestrator {
           merchant.id,
           customer.name ?? undefined,
           merchantPlaybookData,
+          conversation.id, // PR-05: conversationId for checkout state
         );
         break;
 
@@ -234,6 +269,7 @@ export class ConversationOrchestrator {
     merchantId: string,
     customerName: string | undefined,
     merchantPlaybook: MerchantPlaybookData,
+    conversationId?: string, // PR-05: needed for checkout state
   ): Promise<string> {
     switch (intent) {
       case 'GREETING':
@@ -284,6 +320,18 @@ export class ConversationOrchestrator {
         );
 
       case 'CHECKOUT':
+        // PR-05: Delegate to CheckoutFlow (template-first, no LLM)
+        if (conversationId) {
+          return await this.checkoutFlow.handle(
+            merchantPlaybook,
+            conversationId,
+            customerId,
+            merchantId,
+            originalText,
+          );
+        }
+        return this.getGenericFallbackMessage();
+
       case 'HANDOFF':
       case 'AMBIGUOUS':
         // These are not yet implemented but have templates routes

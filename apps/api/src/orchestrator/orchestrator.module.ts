@@ -10,6 +10,7 @@ import { ViewCartFlow } from './flows/view-cart.flow'; // PR-04
 import { UpdateCartItemFlow } from './flows/update-cart-item.flow'; // PR-04
 import { RemoveFromCartFlow } from './flows/remove-from-cart.flow'; // PR-04
 import { FaqFlow } from './flows/faq.flow'; // PR-GAP-2
+import { CheckoutFlow } from './flows/checkout.flow'; // PR-05
 import { ServicesModule } from '../services/services.module';
 import { LlmModule } from '../llm/llm.module';
 import { PersistenceModule } from '../persistence/persistence.module'; // PR-03.10
@@ -20,18 +21,7 @@ import { CommonModule } from '../common/common.module'; // PR-03.10 AC-06
  *
  * Handles conversation flow orchestration and intent classification.
  *
- * Responsibilities:
- * - Intent classification (IntentRouter V2 - PR-03.5.1)
- * - Route decision (RouteDecisionService - PR-03.5.1)
- * - Flow execution (greeting, help, search, cart - PR-04)
- * - Merchant and customer resolution
- * - Conversation orchestration
- * - LLM-powered responses (when enabled)
- *
- * PR-11: Removed PlaybookService (now imported via ServicesModule in P2 fix)
- * PR-03.10: Imports PersistenceModule and CommonModule for conversation memory
- * PR-04: Added 4 separate cart flows (AC-07, AC-08, AC-09, AC-10)
- * PR-03.5.1: Added RouteDecisionService for template-first routing
+ * PR-05: Added CheckoutFlow for conversational checkout
  */
 @Module({
   imports: [ServicesModule, LlmModule, PersistenceModule, CommonModule],
@@ -47,6 +37,7 @@ import { CommonModule } from '../common/common.module'; // PR-03.10 AC-06
     UpdateCartItemFlow, // PR-04 AC-09
     RemoveFromCartFlow, // PR-04 AC-10
     FaqFlow, // PR-GAP-2 AC-05
+    CheckoutFlow, // PR-05
   ],
   exports: [ConversationOrchestrator],
 })
