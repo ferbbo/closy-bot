@@ -160,6 +160,12 @@ export class RouteDecisionService {
         timeout: 2000, // Short timeout (2s)
       });
 
+      // LLM disabled or unavailable
+      if (!response) {
+        this.logger.debug('LLM intent assist: LLM returned null (disabled or unavailable)');
+        return null;
+      }
+
       // Parse LLM response (expected format: "intent: ADD_TO_CART")
       const intentMatch = response.match(/intent:\s*(\w+)/i);
       if (!intentMatch) {

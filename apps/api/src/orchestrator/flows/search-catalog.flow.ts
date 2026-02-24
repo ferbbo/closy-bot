@@ -20,7 +20,7 @@ export class SearchCatalogFlow {
    * @returns Formatted product list message
    */
   async handle(merchantId: string, query: string): Promise<string> {
-    this.logger.log(`Searching catalog for merchant ${merchantId}: "${query}"`);
+    this.logger.log(`Searching catalog for merchant ${merchantId} (query length: ${query.length})`);
 
     // Search products (max 5 for WhatsApp readability)
     const products = await this.catalogService.searchProducts(merchantId, query, 5);

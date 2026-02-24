@@ -199,7 +199,7 @@ export class IntentRouterService {
 
     // REQ-01, AC-01: Normalize text
     const normalized = this.normalizeText(text);
-    this.logger.debug(`Normalized: "${text}" → "${normalized}"`);
+    this.logger.debug(`Text normalized (length: ${text.length} → ${normalized.length})`);
 
     // REQ-02, AC-02: Score all intents
     const scores = new Map<IntentKey, number>();

@@ -155,9 +155,10 @@ export class LlmService {
       temperature?: number;
       timeout?: number;
     },
-  ): Promise<string> {
+  ): Promise<string | null> {
     if (!this.llmEnabled || !this.provider) {
-      throw new Error('LLM is disabled');
+      this.logger.debug('LLM disabled, returning null from generateSimple');
+      return null;
     }
 
     try {
