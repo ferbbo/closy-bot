@@ -175,5 +175,69 @@ describe('MerchantCommandParserService', () => {
     it('should return null for "pagado" alone (no orderCode)', () => {
       expect(parser.parse('pagado')).toBeNull();
     });
+
+    it('PR-05.2 AC-02: should return null for "msg" alone (no orderCode or text)', () => {
+      expect(parser.parse('msg')).toBeNull();
+    });
+
+    it('PR-05.2 AC-02: should return null for "msg ORD-001" without text', () => {
+      expect(parser.parse('msg ORD-001')).toBeNull();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // PR-05.2 AC-02: Relay command parsing
+  // ---------------------------------------------------------------------------
+  describe('AC-02 (PR-05.2): parse() — msg / handoff / cerrar handoff', () => {
+    it('should parse "msg ORD-001 Hola cliente"', () => {
+      expect(parser.parse('msg ORD-001 Hola cliente')).toEqual({
+        command: 'msg',
+        args: { orderCode: 'ORD-001', text: 'Hola cliente' },
+      });
+    });
+
+    it('should parse "msg ORD-002 Tu pedido sale mañana por la mañana" (long text)', () => {
+      const result = parser.parse('msg ORD-002 Tu pedido sale mañana por la mañana');
+      expect(result).not.toBeNull();
+      expect(result!.command).toBe('msg');
+      expect(result!.args['orderCode']).toBe('ORD-002');
+      // Original text preserved (diacritics intact)
+      expect(result!.args['text']).toContain('mañana');
+    });
+
+    it('should uppercase orderCode in msg command', () => {
+      const result = parser.parse('msg ord-001 hola');
+      expect(result?.args['orderCode']).toBe('ORD-001');
+    });
+
+    it('should parse "handoff ORD-001"', () => {
+      expect(parser.parse('handoff ORD-001')).toEqual({
+        command: 'handoff',
+        args: { orderCode: 'ORD-001' },
+      });
+    });
+
+    it('should uppercase orderCode in handoff command', () => {
+      const result = parser.parse('handoff ord-abc');
+      expect(result?.args['orderCode']).toBe('ORD-ABC');
+    });
+
+    it('should parse "cerrar handoff"', () => {
+      expect(parser.parse('cerrar handoff')).toEqual({
+        command: 'cerrar_handoff',
+        args: {},
+      });
+    });
+
+    it('should parse "Cerrar Handoff" (mixed case)', () => {
+      expect(parser.parse('Cerrar Handoff')).toEqual({
+        command: 'cerrar_handoff',
+        args: {},
+      });
+    });
+
+    it('should return null for "handoff" alone (no orderCode)', () => {
+      expect(parser.parse('handoff')).toBeNull();
+    });
   });
 });

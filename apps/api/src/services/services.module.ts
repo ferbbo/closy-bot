@@ -10,6 +10,7 @@ import { CheckoutService } from './checkout.service'; // PR-05
 import { MerchantNotificationService } from './merchant-notification.service'; // PR-05
 import { MerchantCommandParserService } from './merchant-command-parser.service'; // PR-05.1
 import { MerchantCommandService } from './merchant-command.service'; // PR-05.1
+import { MessageRelayService } from './message-relay.service'; // PR-05.2
 import { PaymentService } from './payment.service'; // PR-06
 import { PostSaleService } from './post-sale.service'; // PR-07
 import { PersistenceModule } from '../persistence/persistence.module';
@@ -30,6 +31,7 @@ import { PersistenceModule } from '../persistence/persistence.module';
  * - MerchantNotificationService: merchant WhatsApp notifications (PR-05)
  * - MerchantCommandParserService: parse merchant WhatsApp commands (PR-05.1)
  * - MerchantCommandService: execute merchant admin commands (PR-05.1)
+ * - MessageRelayService: relay bidireccional merchant ↔ cliente (PR-05.2)
  * - PaymentService: payment confirmation + webhook processing (PR-06)
  * - PostSaleService: order status + ticket creation (PR-07)
  */
@@ -47,6 +49,7 @@ import { PersistenceModule } from '../persistence/persistence.module';
     MerchantNotificationService, // PR-05
     MerchantCommandParserService, // PR-05.1
     MerchantCommandService, // PR-05.1
+    MessageRelayService, // PR-05.2
     PaymentService, // PR-06
     PostSaleService, // PR-07
   ],
@@ -62,6 +65,7 @@ import { PersistenceModule } from '../persistence/persistence.module';
     MerchantNotificationService, // PR-05
     MerchantCommandParserService, // PR-05.1
     MerchantCommandService, // PR-05.1
+    MessageRelayService, // PR-05.2
     PaymentService, // PR-06
     PostSaleService, // PR-07
   ],

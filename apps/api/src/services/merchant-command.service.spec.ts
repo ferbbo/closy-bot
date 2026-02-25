@@ -15,6 +15,7 @@
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { MerchantCommandService } from './merchant-command.service';
+import { MessageRelayService } from './message-relay.service'; // PR-05.2
 import { PrismaService } from '../persistence/prisma/prisma.service';
 import { OrderRepository } from '../persistence/repositories/order.repository';
 import { OutboxRepository } from '../persistence/repositories/outbox.repository';
@@ -102,6 +103,15 @@ describe('MerchantCommandService', () => {
           provide: OutboxRepository,
           useValue: {
             create: jest.fn(),
+          },
+        },
+        // PR-05.2: MessageRelayService mock
+        {
+          provide: MessageRelayService,
+          useValue: {
+            sendMessageToCustomer: jest.fn().mockResolvedValue('✅ Mensaje enviado'),
+            activateHandoff: jest.fn().mockResolvedValue('✅ Handoff activo'),
+            deactivateHandoff: jest.fn().mockResolvedValue('✅ Handoff cerrado'),
           },
         },
       ],

@@ -585,6 +585,8 @@ El endpoint JSON (`/api/catalog/import`) sigue funcional pero retorna headers de
 | Confirmar pago | PR-06 | ✅ Funcional (webhook HMAC + fallback `PAGADO`) |
 | Estado pedido | PR-07 | ✅ Funcional (Intent `ORDER_STATUS` + PostSaleFlow) |
 | Tickets soporte | PR-07 | ✅ Funcional (Intent `CREATE_TICKET` + modelo Ticket + notificación merchant) |
+| Comandos merchant (WhatsApp) | PR-05.1 | ✅ Funcional (confirmar, rechazar, pagado, enviado, pedido, pendientes, hoy, ayuda, pausar/activar bot) |
+| Message Relay (msg/handoff) | PR-05.2 | ✅ Funcional (`msg`, `handoff`, `cerrar handoff` + relay bidireccional) |
 
 ### ❌ Flujos Pendientes (ver PR-STACK)
 
@@ -2170,6 +2172,206 @@ curl -s -X POST http://localhost:3000/webhooks/whatsapp \
 - 22 tests `merchant-command.service.spec.ts`
 - 15 tests e2e `merchant-commands.e2e-spec.ts`
 - 3 tests adicionales en `conversation.orchestrator.spec.ts`
+
+---
+
+## Flujo 6.2: Message Relay — Merchant ↔ Cliente vía Bot (PR-05.2)
+
+Relay bidireccional: el merchant puede enviar mensajes ad-hoc a un cliente (`msg`) o activar un modo handoff donde los mensajes del cliente se relayean al merchant directamente (sin pasar por flows/LLM).
+
+**Prerrequisitos:**
+- Merchant con `whatsappNumber` configurado
+- Canal WHATSAPP activo con `externalId` (phone_number_id)
+- Pedido creado en DB con `orderCode` conocido
+
+**Auth:** Webhook signature (mismo patrón PR-03.8) — no requiere API Key
+
+---
+
+### Flujo 6.2.1 — Comando `msg`: Mensaje ad-hoc al cliente
+
+```bash
+# Merchant envía mensaje directo al cliente del pedido ORD-001
+curl -X POST http://localhost:3000/webhooks/whatsapp \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "entry": [{
+      "changes": [{
+        "value": {
+          "metadata": { "phone_number_id": "<CHANNEL_PHONE_ID>" },
+          "messages": [{
+            "from": "<MERCHANT_WHATSAPP_NUMBER>",
+            "id": "wamid.relay-test-001",
+            "timestamp": "1708560000",
+            "type": "text",
+            "text": { "body": "msg ORD-001 Tu pedido sale mañana entre 2-4pm" }
+          }]
+        }
+      }]
+    }]
+  }'
+```
+
+**Resultado esperado:**
+- El merchant recibe confirmación: `"✅ Mensaje enviado a cliente de ORD-001"`
+- El cliente recibe: `"Mensaje de Tienda Maria: Tu pedido sale mañana entre 2-4pm"`
+- OutboxMessage creado con `to = customer.phone`
+- MessageLog creado con `source = 'relay'`, `direction = OUT`
+
+---
+
+### Flujo 6.2.2 — Comando `handoff`: Activar relay bidireccional
+
+```bash
+# Merchant activa handoff para el pedido ORD-001
+curl -X POST http://localhost:3000/webhooks/whatsapp \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "entry": [{
+      "changes": [{
+        "value": {
+          "metadata": { "phone_number_id": "<CHANNEL_PHONE_ID>" },
+          "messages": [{
+            "from": "<MERCHANT_WHATSAPP_NUMBER>",
+            "id": "wamid.relay-test-002",
+            "timestamp": "1708560100",
+            "type": "text",
+            "text": { "body": "handoff ORD-001" }
+          }]
+        }
+      }]
+    }]
+  }'
+```
+
+**Resultado esperado:**
+- Merchant recibe: `"✅ Handoff activo para ORD-001. Mensajes del cliente te llegarán directamente."`
+- `Conversation.handoffActive = true` en DB (verificable SQL: `SELECT handoff_active FROM conversations WHERE ...`)
+
+---
+
+### Flujo 6.2.3 — Cliente responde con handoff activo (relay automático)
+
+```bash
+# Cliente responde (con handoffActive = true en su conversación)
+curl -X POST http://localhost:3000/webhooks/whatsapp \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "entry": [{
+      "changes": [{
+        "value": {
+          "metadata": { "phone_number_id": "<CHANNEL_PHONE_ID>" },
+          "messages": [{
+            "from": "<CUSTOMER_PHONE>",
+            "id": "wamid.relay-test-003",
+            "timestamp": "1708560200",
+            "type": "text",
+            "text": { "body": "Perfecto, estaré en casa después de las 2pm" }
+          }]
+        }
+      }]
+    }]
+  }'
+```
+
+**Resultado esperado:**
+- El bot NO responde al cliente (shouldSend = false)
+- El merchant recibe: `"Cliente ORD-001 dice: Perfecto, estaré en casa después de las 2pm"`
+- Flujos/LLM NO ejecutados (relay puro)
+- MessageLog creado con `source = 'relay'`, `direction = IN`
+
+---
+
+### Flujo 6.2.4 — Comando `cerrar handoff`
+
+```bash
+# Merchant desactiva el handoff
+curl -X POST http://localhost:3000/webhooks/whatsapp \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "entry": [{
+      "changes": [{
+        "value": {
+          "metadata": { "phone_number_id": "<CHANNEL_PHONE_ID>" },
+          "messages": [{
+            "from": "<MERCHANT_WHATSAPP_NUMBER>",
+            "id": "wamid.relay-test-004",
+            "timestamp": "1708560300",
+            "type": "text",
+            "text": { "body": "cerrar handoff" }
+          }]
+        }
+      }]
+    }]
+  }'
+```
+
+**Resultado esperado:**
+- Merchant recibe: `"✅ Handoff cerrado. El bot retomará conversación con el cliente."`
+- `Conversation.handoffActive = false` en DB
+
+---
+
+### Flujo 6.2.5 — Error: pedido no encontrado
+
+```bash
+# msg con orderCode inexistente
+curl -X POST http://localhost:3000/webhooks/whatsapp \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "entry": [{
+      "changes": [{
+        "value": {
+          "metadata": { "phone_number_id": "<CHANNEL_PHONE_ID>" },
+          "messages": [{
+            "from": "<MERCHANT_WHATSAPP_NUMBER>",
+            "id": "wamid.relay-test-005",
+            "timestamp": "1708560400",
+            "type": "text",
+            "text": { "body": "msg ORD-NOEXISTE hola" }
+          }]
+        }
+      }]
+    }]
+  }'
+```
+
+**Resultado esperado:**
+- Merchant recibe: `"❌ Pedido ORD-NOEXISTE no encontrado"`
+
+---
+
+### Verificar MessageLog relay en DB
+
+```bash
+# Verificar que mensajes relay tienen source = 'relay'
+psql $DATABASE_URL -c "SELECT id, direction, source, text FROM message_logs WHERE source = 'relay' ORDER BY created_at DESC LIMIT 5;"
+```
+
+### Verificar handoffActive en DB
+
+```bash
+# Verificar estado handoffActive por merchant
+psql $DATABASE_URL -c "SELECT id, type, status, handoff_active FROM conversations WHERE merchant_id = '<MERCHANT_ID>' ORDER BY updated_at DESC LIMIT 5;"
+```
+
+### Acceptance Criteria (PR-05.2)
+
+| AC | Criterio | Evidencia |
+|----|----------|-----------|
+| AC-01 | Migración `pr_05_2_message_relay` crea campos `Conversation.handoffActive` y `MessageLog.source` | `prisma/migrations/20260225145748_pr_05_2_message_relay/migration.sql` |
+| AC-02 | Parser reconoce `msg`, `handoff`, `cerrar handoff` | `merchant-command-parser.service.spec.ts` — suite `AC-02 (PR-05.2)` — 8 tests |
+| AC-03 | `MessageRelayService` implementa todos los métodos | `message-relay.service.spec.ts` — 17 tests |
+| AC-04 | Comando `msg` envía al cliente formateado | e2e `message-relay.e2e-spec.ts` — `'AC-04: merchant sends msg...'` |
+| AC-05 | Comando `handoff` activa `handoffActive = true` | e2e `message-relay.e2e-spec.ts` — `'AC-05: merchant sends handoff...'` |
+| AC-06 | Comando `cerrar handoff` desactiva `handoffActive = false` | e2e `message-relay.e2e-spec.ts` — `'AC-06: cerrar handoff...'` |
+| AC-07 | Orchestrator con `handoffActive = true` → relay, NO flows/LLM | `conversation.orchestrator.spec.ts` — suite `PR-05.2 AC-07` — 2 tests |
+| AC-08 | Cliente recibe `"Mensaje de {merchant}: {texto}"` | e2e — OutboxMessage payload verificado |
+| AC-09 | Merchant recibe `"Cliente {orderCode} dice: {texto}"` | e2e — OutboxMessage payload verificado |
+| AC-10 | Mensajes relay con `source = 'relay'` en MessageLog | e2e — `'AC-10: relay message logged...'` |
+| AC-11 | Unit tests pasan: parser + relay service | 725 unit tests totales pasan |
+| AC-12 | E2E tests pasan (9 scenarios ≥ 8) | `pnpm test:e2e message-relay.e2e-spec` — 9 passed |
+| AC-13 | Flujo 6.2 en BACKEND-EXECUTION-GUIDE.md con 5+ cURL | Sección "Flujo 6.2" con 5 ejemplos cURL |
 
 ---
 
