@@ -378,7 +378,7 @@ describe('IntentRouterService V2 (PR-03.5.1)', () => {
       expect(decision.confidence).toBe('HIGH');
     });
 
-    it("should NOT classify a normal product search as HANDOFF", () => {
+    it('should NOT classify a normal product search as HANDOFF', () => {
       const decision = service.classify('busco camisetas talla M');
 
       expect(decision.intent).not.toBe('HANDOFF');

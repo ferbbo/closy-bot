@@ -125,7 +125,13 @@ describe('HandoffFlow (e2e) — PR-08', () => {
     }
 
     await prisma.conversation.deleteMany({ where: { merchantId: testMerchant.id } });
-    await prisma.customer.deleteMany({ where: { phone: { in: [CUSTOMER_PHONE_EXPLICIT, CUSTOMER_PHONE_ESCALATION, CUSTOMER_PHONE_IDEMPOTENT] } } });
+    await prisma.customer.deleteMany({
+      where: {
+        phone: {
+          in: [CUSTOMER_PHONE_EXPLICIT, CUSTOMER_PHONE_ESCALATION, CUSTOMER_PHONE_IDEMPOTENT],
+        },
+      },
+    });
     await prisma.outboxMessage.deleteMany({
       where: { recipientPhone: testMerchant.whatsappPhone },
     });

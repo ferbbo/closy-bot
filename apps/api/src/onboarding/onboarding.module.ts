@@ -4,10 +4,15 @@ import { MetaOAuthService } from './meta-oauth.service';
 import { MetaEmbeddedSignupProvider } from './providers/meta-embedded-signup.provider';
 import { PersistenceModule } from '../persistence/persistence.module';
 import { AuthModule } from '../auth/auth.module'; // For SessionAuthGuard
+import { ServicesModule } from '../services/services.module'; // PR-OB-01: PlaybookService
+import { MerchantSettingsModule } from '../merchant-settings/merchant-settings.module'; // PR-OB-01: MerchantConfigService
+import { OnboardingController } from './onboarding.controller'; // PR-OB-01
+import { OnboardingService } from './onboarding.service'; // PR-OB-01
 
 /**
  * Onboarding module for merchant channel setup
  * Handles Meta Embedded Signup OAuth flow for WhatsApp
+ * PR-OB-01: Onboarding Wizard API (progress, preset, activate)
  *
  * PR-13: Meta Embedded Signup
  */
@@ -15,10 +20,13 @@ import { AuthModule } from '../auth/auth.module'; // For SessionAuthGuard
   imports: [
     PersistenceModule, // For Prisma
     AuthModule, // For SessionAuthGuard
+    ServicesModule, // PR-OB-01: PlaybookService
+    MerchantSettingsModule, // PR-OB-01: MerchantConfigService
   ],
-  controllers: [MetaOAuthController],
+  controllers: [MetaOAuthController, OnboardingController], // PR-OB-01: add OnboardingController
   providers: [
     MetaOAuthService,
+    OnboardingService, // PR-OB-01
     {
       provide: MetaEmbeddedSignupProvider,
       useFactory: () => {
@@ -36,6 +44,6 @@ import { AuthModule } from '../auth/auth.module'; // For SessionAuthGuard
       },
     },
   ],
-  exports: [MetaOAuthService, MetaEmbeddedSignupProvider], // PR-14: Export provider for ChannelHealthService
+  exports: [MetaOAuthService, MetaEmbeddedSignupProvider, OnboardingService], // PR-OB-01: Export OnboardingService
 })
 export class OnboardingModule {}

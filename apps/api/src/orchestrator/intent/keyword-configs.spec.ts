@@ -100,7 +100,9 @@ describe('AC-05 (PR-08): INTENT_KEYWORDS.HANDOFF completeness', () => {
 
   it('AC-05: HANDOFF includes "atencion humana" keyword', () => {
     const phrases = INTENT_KEYWORDS.HANDOFF.map((k) => k.phrase);
-    expect(phrases.some((p) => p.includes('atencion humana') || p.includes('atención humana'))).toBe(true);
+    expect(
+      phrases.some((p) => p.includes('atencion humana') || p.includes('atención humana')),
+    ).toBe(true);
   });
 
   it('AC-05: HANDOFF keywords have distinct phrases (no duplicates)', () => {
@@ -109,4 +111,3 @@ describe('AC-05 (PR-08): INTENT_KEYWORDS.HANDOFF completeness', () => {
     expect(unique.size).toBe(phrases.length);
   });
 });
-

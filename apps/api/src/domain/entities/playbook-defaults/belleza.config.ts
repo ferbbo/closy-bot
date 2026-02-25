@@ -130,7 +130,6 @@ export const BellezaPlaybookDefaults: PlaybookConfig = {
       '¡Claro! ✨ Te conecto con nuestro equipo de {merchant_name}. Un momento por favor...',
     escalationDetected:
       'Veo que necesitas orientación personalizada ✨ Te conecto con nuestro equipo. Un momento...',
-    merchantNotification:
-      '🔔 *Atención requerida*\n\n👤 Cliente: {customerName}\n\n{summary}',
+    merchantNotification: '🔔 *Atención requerida*\n\n👤 Cliente: {customerName}\n\n{summary}',
   },
 };
