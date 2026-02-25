@@ -581,13 +581,13 @@ El endpoint JSON (`/api/catalog/import`) sigue funcional pero retorna headers de
 | Catálogo CRUD/Import | PR-03.7 | ✅ Funcional |
 | Catalog Import File Upload | PR-17 | ✅ Funcional (multipart/form-data) |
 | Carrito CRUD conversacional | PR-04 | ✅ Funcional (ADD_TO_CART, VIEW_CART, UPDATE_CART, REMOVE_FROM_CART) |
+| Checkout conversacional | PR-05 | ✅ Funcional (name → address → payment → confirm → Order) |
+| Confirmar pago | PR-06 | ✅ Funcional (webhook HMAC + fallback `PAGADO`) |
 
 ### ❌ Flujos Pendientes (ver PR-STACK)
 
 | Flujo | PR Requerido | Descripción |
 |-------|--------------|-------------|
-| Checkout | PR-05 | Captura datos + crear Order |
-| Confirmar pago | PR-06 | Webhook + fallback `PAGADO` |
 | Estado pedido | PR-07 | Intent `ORDER_STATUS` + flow |
 | Tickets | PR-07 | Intent `CREATE_TICKET` + modelo Ticket |
 | Handoff | PR-08 | Intent `HANDOFF` + resumen estructurado |
