@@ -52,12 +52,10 @@ export class HandoffFlow {
     const handoffMessages = playbook.handoffMessages;
 
     if (reason === 'user_request') {
-      const template =
-        handoffMessages?.requestReceived ?? DEFAULT_REQUEST_RECEIVED;
+      const template = handoffMessages?.requestReceived ?? DEFAULT_REQUEST_RECEIVED;
       return template.replace('{merchant_name}', merchant.name);
     } else {
-      const template =
-        handoffMessages?.escalationDetected ?? DEFAULT_ESCALATION_DETECTED;
+      const template = handoffMessages?.escalationDetected ?? DEFAULT_ESCALATION_DETECTED;
       return template.replace('{merchant_name}', merchant.name);
     }
   }

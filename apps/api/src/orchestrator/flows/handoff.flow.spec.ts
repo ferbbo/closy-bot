@@ -130,12 +130,16 @@ describe('HandoffFlow', () => {
     it('returns different message than user_request', async () => {
       const userRequestResponse = await flow.handle(
         mockMerchantPlaybook,
-        'conv-1', 'customer-1', 'merchant-1',
+        'conv-1',
+        'customer-1',
+        'merchant-1',
         'user_request',
       );
       const escalationResponse = await flow.handle(
         mockMerchantPlaybook,
-        'conv-1', 'customer-1', 'merchant-1',
+        'conv-1',
+        'customer-1',
+        'merchant-1',
         'auto_escalation',
       );
 
@@ -157,7 +161,9 @@ describe('HandoffFlow', () => {
     it('uses default requestReceived fallback message', async () => {
       const response = await flow.handle(
         mockMerchantPlaybook,
-        'conv-1', 'customer-1', 'merchant-1',
+        'conv-1',
+        'customer-1',
+        'merchant-1',
         'user_request',
       );
       expect(response).toContain('equipo');
@@ -166,7 +172,9 @@ describe('HandoffFlow', () => {
     it('uses default escalationDetected fallback message', async () => {
       const response = await flow.handle(
         mockMerchantPlaybook,
-        'conv-1', 'customer-1', 'merchant-1',
+        'conv-1',
+        'customer-1',
+        'merchant-1',
         'auto_escalation',
       );
       expect(response).toContain('equipo');
