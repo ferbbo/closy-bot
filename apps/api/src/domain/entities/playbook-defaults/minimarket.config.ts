@@ -62,6 +62,20 @@ export const MinimarketPlaybookDefaults: PlaybookConfig = {
     cartEmptyNoAction: '🛒 Tu carrito está vacío, no hay nada que {action}.',
     genericError: '❌ Error al {action}. Intenta de nuevo.',
     unknownIntent: 'No entendí tu mensaje. Escribe "ayuda" para ver opciones.',
+    // ── PR-07: Post-sale templates ──────────────────────────────────────────
+    orderStatusTemplate: 'Tu pedido {orderCode}: {statusMessage}',
+    orderStatusPendingPayment: 'está pendiente de pago 💳',
+    orderStatusConfirmed: 'está confirmado y en preparación 🛒',
+    orderStatusPaid: 'está pagado y en preparación 📦',
+    orderStatusShipped: 'fue enviado. {trackingInfo} 🚚',
+    orderStatusDelivered: '¡ya fue entregado! 🎉',
+    orderStatusCancelled: 'fue cancelado.',
+    noOrderFound: 'No encontré pedidos tuyos. ¿Cuál es el código de tu pedido? 🛒',
+    ticketTypePrompt:
+      '¿Qué tipo de problema tienes?\n1) Falta algo\n2) Llegó dañado\n3) Se demoró\n4) Otro',
+    ticketCreatedConfirm:
+      '✅ Tu reclamo fue registrado. El merchant fue notificado y responderá pronto.',
+    ticketDescriptionPrompt: 'Describe brevemente el problema:',
   },
   rules: {
     askSizeBeforeCart: false,

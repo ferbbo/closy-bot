@@ -12,6 +12,7 @@ import { RemoveFromCartFlow } from './flows/remove-from-cart.flow'; // PR-04
 import { FaqFlow } from './flows/faq.flow'; // PR-GAP-2
 import { CheckoutFlow } from './flows/checkout.flow'; // PR-05
 import { PaymentFallbackFlow } from './flows/payment-fallback.flow'; // PR-06
+import { PostSaleFlow } from './flows/post-sale.flow'; // PR-07
 import { ServicesModule } from '../services/services.module';
 import { LlmModule } from '../llm/llm.module';
 import { PersistenceModule } from '../persistence/persistence.module'; // PR-03.10
@@ -42,6 +43,7 @@ import { CommonModule } from '../common/common.module'; // PR-03.10 AC-06
     FaqFlow, // PR-GAP-2 AC-05
     CheckoutFlow, // PR-05
     PaymentFallbackFlow, // PR-06
+    PostSaleFlow, // PR-07
   ],
   exports: [ConversationOrchestrator],
 })

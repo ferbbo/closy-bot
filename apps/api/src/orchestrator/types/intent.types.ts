@@ -15,6 +15,8 @@ export type IntentKey =
   | 'CHECKOUT'
   | 'QUERY_FAQ'
   | 'CONFIRM_PAYMENT' // PR-06 REQ-07: manual payment confirmation
+  | 'ORDER_STATUS' // PR-07 REQ-07: post-sale order status query
+  | 'CREATE_TICKET' // PR-07 REQ-08: post-sale ticket creation
   | 'HANDOFF'
   | 'UNKNOWN'
   | 'AMBIGUOUS'; // REQ-05: New intent for collision detection

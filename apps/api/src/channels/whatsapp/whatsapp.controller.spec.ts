@@ -5,6 +5,7 @@ import { WhatsAppController } from './whatsapp.controller';
 import { WhatsAppService } from './whatsapp.service';
 import { WhatsAppOutboundService } from './whatsapp-outbound.service';
 import { ConversationOrchestrator } from '../../orchestrator/conversation.orchestrator';
+import { MerchantResolverService } from '../../services/merchant-resolver.service';
 import { InboundMessageDto } from './dto/inbound-message.dto';
 import { MetaSignatureGuard } from './guards/meta-signature.guard';
 import { OutboxService } from '../../persistence/outbox/outbox.service';
@@ -21,6 +22,7 @@ describe('WhatsAppController', () => {
     from: '1234567890',
     timestamp: '2026-02-11T10:00:00Z',
     text: 'Hello',
+    receiver_phone_id: 'phone-id-test',
   };
 
   beforeEach(async () => {
@@ -73,6 +75,12 @@ describe('WhatsAppController', () => {
         {
           provide: ConversationOrchestrator,
           useValue: mockOrchestrator,
+        },
+        {
+          provide: MerchantResolverService,
+          useValue: {
+            resolveFromPhone: jest.fn(),
+          },
         },
         {
           provide: ConfigService,

@@ -16,8 +16,10 @@ import { PrismaService } from '../src/persistence/prisma/prisma.service';
 import { OrderStatus } from '@prisma/client';
 
 const WEBHOOK_SECRET = 'test-secret-pr06';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const WEBHOOK_HEADER = 'x-payment-signature';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function makeSignature(body: string, secret: string): string {
   return 'sha256=' + crypto.createHmac('sha256', secret).update(body).digest('hex');
 }
@@ -52,7 +54,9 @@ describe('PaymentWebhook (e2e) - PR-06', () => {
     // Clean up
     await prisma.payment.deleteMany({ where: { paymentIntentId: { startsWith: 'pi_e2e_pr06_' } } });
     await prisma.order.deleteMany({ where: { orderCode: { startsWith: 'E2E-PR06-' } } });
-    await prisma.cart.deleteMany({ where: { merchant: { whatsappNumber: { startsWith: 'test-pr06-' } } } });
+    await prisma.cart.deleteMany({
+      where: { merchant: { whatsappNumber: { startsWith: 'test-pr06-' } } },
+    });
     await prisma.customer.deleteMany({ where: { phone: { startsWith: 'test-pr06-' } } });
     await prisma.merchant.deleteMany({ where: { whatsappNumber: { startsWith: 'test-pr06-' } } });
 
@@ -65,7 +69,7 @@ describe('PaymentWebhook (e2e) - PR-06', () => {
       },
     });
 
-    // Create test customer  
+    // Create test customer
     const customer = await prisma.customer.create({
       data: { phone: `test-pr06-cust-${Date.now()}` },
     });

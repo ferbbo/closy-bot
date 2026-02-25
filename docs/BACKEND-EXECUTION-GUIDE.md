@@ -583,13 +583,13 @@ El endpoint JSON (`/api/catalog/import`) sigue funcional pero retorna headers de
 | Carrito CRUD conversacional | PR-04 | ✅ Funcional (ADD_TO_CART, VIEW_CART, UPDATE_CART, REMOVE_FROM_CART) |
 | Checkout conversacional | PR-05 | ✅ Funcional (name → address → payment → confirm → Order) |
 | Confirmar pago | PR-06 | ✅ Funcional (webhook HMAC + fallback `PAGADO`) |
+| Estado pedido | PR-07 | ✅ Funcional (Intent `ORDER_STATUS` + PostSaleFlow) |
+| Tickets soporte | PR-07 | ✅ Funcional (Intent `CREATE_TICKET` + modelo Ticket + notificación merchant) |
 
 ### ❌ Flujos Pendientes (ver PR-STACK)
 
 | Flujo | PR Requerido | Descripción |
 |-------|--------------|-------------|
-| Estado pedido | PR-07 | Intent `ORDER_STATUS` + flow |
-| Tickets | PR-07 | Intent `CREATE_TICKET` + modelo Ticket |
 | Handoff | PR-08 | Intent `HANDOFF` + resumen estructurado |
 
 ---
@@ -2657,14 +2657,129 @@ Falta el header de autenticación del merchant.
 
 ---
 
+## Flujo 8: Post-venta (PR-07)
+
+Estado de pedido y tickets simples via WhatsApp conversacional.
+
+### Flujo 8.1 — Consulta de estado de pedido
+
+El cliente pregunta por el estado de su pedido. El bot pide el código de orden (o lo detecta en el mensaje) y responde con el estado actual.
+
+**Conversación de ejemplo:**
+
+```
+Cliente:  "estado de mi pedido"
+Bot:      "¡Hola! Ingresa el código de tu pedido (ej: ORD-1234) 📦"
+Cliente:  "ORD-1234"
+Bot:      "Tu pedido #ORD-1234 está: ✅ Confirmado y siendo preparado. ¡Te avisamos cuando despache! 🚚"
+```
+
+**Flujo de estados disponibles:**
+
+| Estado DB | Mensaje al cliente |
+|---|---|
+| `PENDING_PAYMENT` | Pago pendiente de confirmación |
+| `CONFIRMED` | Confirmado, siendo preparado |
+| `PAID` | Pago confirmado, siendo preparado |
+| `SHIPPED` | En camino (incluye tracking si disponible) |
+| `DELIVERED` | Entregado 🎉 |
+| `CANCELLED` | Cancelado |
+
+**Simular via WhatsApp webhook (cURL):**
+
+```bash
+# Configurar variables
+WEBHOOK_URL="http://localhost:3000/webhooks/whatsapp"
+BUSINESS_PHONE_ID="your-phone-number-id"
+APP_SECRET="your-app-secret"
+CUSTOMER_PHONE="5491112345678"
+MERCHANT_PHONE_ID="18094197225"
+TIMESTAMP=$(date +%s)
+
+# Generar firma HMAC
+BODY='{"object":"whatsapp_business_account","entry":[{"id":"WA_BUSINESS_ACCOUNT_ID","changes":[{"value":{"messaging_product":"whatsapp","metadata":{"display_phone_number":"15550000001","phone_number_id":"'"$MERCHANT_PHONE_ID"'"},"contacts":[{"profile":{"name":"Test Customer"},"wa_id":"'"$CUSTOMER_PHONE"'"}],"messages":[{"from":"'"$CUSTOMER_PHONE"'","id":"wamid.status001","type":"text","timestamp":"'"$TIMESTAMP"'","text":{"body":"estado de mi pedido"}}]},"field":"messages"}]}]}'
+SIGNATURE=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$APP_SECRET" -hex | sed 's/^.* //')
+
+curl -s -X POST "$WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -H "X-Hub-Signature-256: sha256=$SIGNATURE" \
+  -d "$BODY"
+# Respuesta: {"status":"ok"}
+# El bot enviará: "¡Hola! Ingresa el código de tu pedido..."
+```
+
+### Flujo 8.2 — Creación de ticket de soporte
+
+El cliente reporta un problema. El bot detecta el intent y crea un ticket, con notificación al merchant vía OutboxMessage.
+
+**Tipos de ticket soportados:**
+
+| Tipo | Keywords de detección | Label |
+|---|---|---|
+| `missing` | falta, no llegó, incompleto, faltante | Producto faltante |
+| `damaged` | dañado, roto, defectuoso, no funciona | Producto dañado |
+| `delay` | demora, tardanza, tarde, lento | Demora en entrega |
+| `other` | problema, reclamo (default) | Otro |
+
+**Conversación de ejemplo:**
+
+```
+Cliente:  "tengo un problema con mi pedido"
+Bot:      "Lamentamos los inconvenientes 😔 Ingresa el código de tu pedido para abrir un ticket"
+Cliente:  "ORD-5678"
+Bot:      "¿Qué tipo de problema tienes?\n1️⃣ Producto faltante\n2️⃣ Producto dañado\n3️⃣ Demora en entrega\n4️⃣ Otro"
+Cliente:  "2"
+Bot:      "Descríbenos el problema brevemente:"
+Cliente:  "El producto llegó roto"
+Bot:      "✅ Ticket creado para tu pedido ORD-5678. Nuestro equipo te contactará pronto."
+```
+
+**Simular apertura de ticket:**
+
+```bash
+BODY='{"object":"whatsapp_business_account","entry":[{"id":"WA_BUSINESS_ACCOUNT_ID","changes":[{"value":{"messaging_product":"whatsapp","metadata":{"display_phone_number":"15550000001","phone_number_id":"'"$MERCHANT_PHONE_ID"'"},"contacts":[{"profile":{"name":"Test Customer"},"wa_id":"'"$CUSTOMER_PHONE"'"}],"messages":[{"from":"'"$CUSTOMER_PHONE"'","id":"wamid.ticket001","type":"text","timestamp":"'"$TIMESTAMP"'","text":{"body":"tengo un problema con mi pedido"}}]},"field":"messages"}]}]}'
+SIGNATURE=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$APP_SECRET" -hex | sed 's/^.* //')
+
+curl -s -X POST "$WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -H "X-Hub-Signature-256: sha256=$SIGNATURE" \
+  -d "$BODY"
+```
+
+### Flujo 8.3 — Verificar ticket creado (DB)
+
+```bash
+# En psql (o via prisma studio)
+docker exec -it closy-bot-postgres-1 psql -U closy -d closy_dev \
+  -c "SELECT id, order_id, type, status, description, created_at FROM tickets ORDER BY created_at DESC LIMIT 5;"
+```
+
+### Acceptance Criteria (PR-07)
+
+- ✅ **AC-01**: Migración crea tabla `tickets` con enums `TicketType` y `TicketStatus`
+- ✅ **AC-02**: `PostSaleService.getOrderStatus()` retorna último pedido del cliente con status
+- ✅ **AC-03**: `PostSaleService.getOrderStatus(orderCode)` busca por orderCode específico
+- ✅ **AC-04**: `PostSaleService.createTicket()` crea Ticket con status `open`
+- ✅ **AC-05**: `PostSaleFlow.handleOrderStatus()` responde con template según `order.status`
+- ✅ **AC-06**: Cliente sin pedidos recibe mensaje "No encontré pedidos tuyos"
+- ✅ **AC-07**: Cliente con pedido `shipped` recibe template con tracking info
+- ✅ **AC-08**: `PostSaleFlow.handleCreateTicket()` clasifica tipo por keywords
+- ✅ **AC-09**: Ticket creado notifica al merchant vía `MerchantNotificationService`
+- ✅ **AC-10**: IntentRouter clasifica `ORDER_STATUS` con high confidence | `intent-router.service.spec.ts`
+- ✅ **AC-11**: IntentRouter clasifica `CREATE_TICKET` con high confidence | `intent-router.service.spec.ts`
+- ✅ **AC-12**: `PlaybookMessages` tiene todos los campos de post-venta
+- ✅ **AC-13**: Industry presets (ropa/belleza/minimarket) con templates específicos
+- ✅ **AC-14**: Merchant recibe notificación WhatsApp al crear ticket | `post-sale-flow.e2e-spec.ts`
+- ✅ **AC-15**: E2E: consulta estado → respuesta template-first sin LLM | `post-sale-flow.e2e-spec.ts`
+- ✅ **AC-16**: E2E: cliente reporta problema → ticket creado + merchant notificado | `post-sale-flow.e2e-spec.ts`
+
+---
+
 ## Próximos Pasos
 
 Para completar el flujo de ventas transaccional:
 
-1. **PR-07 — Post-sale: Order status + tickets** (🔴 siguiente)
-   - Query de estado de pedido por conversación
-   - Tickets simples (faltante/dañado/demora)
-
-2. **PR-08 — Human handoff con resumen estructurado**
+1. **PR-08 — Human handoff con resumen estructurado** (🔴 siguiente)
    - Triggers de handoff
    - Resumen: intent + cart snapshot + step + info de usuario
+

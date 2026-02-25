@@ -157,7 +157,9 @@ describe('PaymentFallbackFlow (e2e) — PR-06', () => {
     await prisma.payment.deleteMany({ where: { orderId: testOrder.id } });
     await prisma.payment.deleteMany({ where: { orderId: paidOrder.id } });
     await prisma.outboxMessage.deleteMany({ where: { merchantId: testMerchant.id } });
-    await prisma.messageLog.deleteMany({ where: { conversation: { merchantId: testMerchant.id } } });
+    await prisma.messageLog.deleteMany({
+      where: { conversation: { merchantId: testMerchant.id } },
+    });
     await prisma.conversationMemory.deleteMany({
       where: { conversation: { merchantId: testMerchant.id } },
     });

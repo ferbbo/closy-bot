@@ -173,4 +173,63 @@ export class MerchantNotificationService {
       `Payment notification enqueued for merchant ${merchantId}: order ${payload.orderCode}`,
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // PR-07: notifyTicketCreated — AC-09, AC-14
+  // ---------------------------------------------------------------------------
+
+  /**
+   * AC-14: Enqueue WhatsApp notification to merchant when a ticket is created.
+   * Idempotent via dedupeKey = `ticket-${orderCode}-${type}-${merchantId}-${Date.now()}`.
+   * Note: timestamp in key to allow >1 ticket per order.
+   */
+  async notifyTicketCreated(
+    merchantId: string,
+    payload: { orderCode: string; type: string; customerName: string },
+  ): Promise<void> {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: merchantId },
+      select: { id: true, whatsappNumber: true },
+    });
+
+    if (!merchant) {
+      this.logger.warn(`TicketNotification: merchant ${merchantId} not found — skipping`);
+      return;
+    }
+
+    if (!merchant.whatsappNumber) {
+      this.logger.warn(
+        `TicketNotification: merchant ${merchantId} has no whatsappNumber — skipping`,
+      );
+      return;
+    }
+
+    const typeLabels: Record<string, string> = {
+      missing: 'Faltante',
+      damaged: 'Dañado',
+      delay: 'Retraso',
+      other: 'Otro',
+    };
+    const typeLabel = typeLabels[payload.type] ?? payload.type;
+
+    const message =
+      `🔔 Ticket abierto para ${payload.orderCode}\n` +
+      `Tipo: ${typeLabel}\n` +
+      `Cliente: ${payload.customerName}`;
+
+    const dedupeKey = `ticket-${payload.orderCode}-${payload.type}-${merchantId}-${Date.now()}`;
+
+    await this.outboxRepository.create({
+      merchant: { connect: { id: merchantId } },
+      channel: OutboxChannel.WHATSAPP,
+      type: OutboxMessageType.SEND_TEXT,
+      to: merchant.whatsappNumber,
+      payloadJson: { text: message },
+      dedupeKey,
+    });
+
+    this.logger.log(
+      `Ticket notification enqueued for merchant ${merchantId}: order ${payload.orderCode}`,
+    );
+  }
 }

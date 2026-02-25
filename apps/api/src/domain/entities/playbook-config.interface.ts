@@ -121,6 +121,30 @@ export interface PlaybookMessages {
   genericError: string;
   /** Unknown intent fallback */
   unknownIntent: string;
+
+  // ── PR-07: Post-sale templates ─────────────────────────────────────────────
+  /** Order status template. Placeholders: {orderCode}, {statusMessage} */
+  orderStatusTemplate: string;
+  /** Status message: pending_payment */
+  orderStatusPendingPayment: string;
+  /** Status message: confirmed */
+  orderStatusConfirmed: string;
+  /** Status message: paid */
+  orderStatusPaid: string;
+  /** Status message: shipped. Placeholder: {trackingInfo} */
+  orderStatusShipped: string;
+  /** Status message: delivered */
+  orderStatusDelivered: string;
+  /** Status message: cancelled */
+  orderStatusCancelled: string;
+  /** No order found message */
+  noOrderFound: string;
+  /** Ticket type selection prompt */
+  ticketTypePrompt: string;
+  /** Ticket created confirmation. Placeholder: {ticketId} */
+  ticketCreatedConfirm: string;
+  /** Prompt asking for ticket description */
+  ticketDescriptionPrompt: string;
 }
 
 export interface PlaybookRules {

@@ -11,6 +11,7 @@ import { MerchantNotificationService } from './merchant-notification.service'; /
 import { MerchantCommandParserService } from './merchant-command-parser.service'; // PR-05.1
 import { MerchantCommandService } from './merchant-command.service'; // PR-05.1
 import { PaymentService } from './payment.service'; // PR-06
+import { PostSaleService } from './post-sale.service'; // PR-07
 import { PersistenceModule } from '../persistence/persistence.module';
 
 /**
@@ -30,6 +31,7 @@ import { PersistenceModule } from '../persistence/persistence.module';
  * - MerchantCommandParserService: parse merchant WhatsApp commands (PR-05.1)
  * - MerchantCommandService: execute merchant admin commands (PR-05.1)
  * - PaymentService: payment confirmation + webhook processing (PR-06)
+ * - PostSaleService: order status + ticket creation (PR-07)
  */
 @Module({
   imports: [PersistenceModule],
@@ -46,6 +48,7 @@ import { PersistenceModule } from '../persistence/persistence.module';
     MerchantCommandParserService, // PR-05.1
     MerchantCommandService, // PR-05.1
     PaymentService, // PR-06
+    PostSaleService, // PR-07
   ],
   exports: [
     CustomerService,
@@ -60,6 +63,7 @@ import { PersistenceModule } from '../persistence/persistence.module';
     MerchantCommandParserService, // PR-05.1
     MerchantCommandService, // PR-05.1
     PaymentService, // PR-06
+    PostSaleService, // PR-07
   ],
 })
 export class ServicesModule {}
