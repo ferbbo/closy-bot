@@ -162,6 +162,7 @@ model Conversation {
   merchant    Merchant     @relation(fields: [merchantId], references: [id])
   channelRef  Channel?     @relation(fields: [channelId], references: [id]) // PR-03.11
   messageLogs MessageLog[] // PR-03.10: Message history
+  handoffs    Handoff[]    // PR-08: Human handoff sessions
 
   @@index([customerId])
   @@index([merchantId])
@@ -566,6 +567,34 @@ model Ticket {
   @@index([customerId])
   @@index([merchantId, status])
   @@map("tickets")
+}
+
+// ============================================================================
+// PR-08: Handoff — Human handoff with structured summary
+// ============================================================================
+
+/// HandoffStatus enum — lifecycle of a human handoff
+enum HandoffStatus {
+  pending  // Handoff requested, waiting for merchant
+  active   // Merchant is actively attending
+  resolved // Resolved, bot can resume
+}
+
+/// Handoff — persists human handoff sessions with structured summary
+/// Idempotency: at most one pending/active handoff per conversation
+model Handoff {
+  id             String        @id @default(cuid())
+  conversationId String        @map("conversation_id")
+  reason         String        // "user_request" | "auto_escalation"
+  summaryJson    Json          @map("summary_json") // HandoffSummary structure
+  status         HandoffStatus @default(pending)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@index([conversationId, status])
+  @@map("handoffs")
 }
 
 /// OrderItem represents a line item in an order (snapshot of product at time of purchase)

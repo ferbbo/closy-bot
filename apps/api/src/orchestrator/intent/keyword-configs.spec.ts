@@ -67,3 +67,46 @@ describe('AC-12 (PR-05): INTENT_KEYWORDS.CHECKOUT completeness', () => {
     expect(phrases.some((p) => p.includes('finalizar'))).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// AC-05 (PR-08): INTENT_KEYWORDS.HANDOFF — human handoff trigger keywords
+// ---------------------------------------------------------------------------
+
+describe('AC-05 (PR-08): INTENT_KEYWORDS.HANDOFF completeness', () => {
+  it('AC-05: HANDOFF has at least 5 keywords', () => {
+    expect(INTENT_KEYWORDS.HANDOFF.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('AC-05: all HANDOFF keywords have valid weight (1-5)', () => {
+    for (const kw of INTENT_KEYWORDS.HANDOFF) {
+      expect(kw.weight).toBeGreaterThanOrEqual(1);
+      expect(kw.weight).toBeLessThanOrEqual(5);
+      expect(typeof kw.phrase).toBe('string');
+      expect(kw.phrase.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('AC-05: HANDOFF includes "hablar con alguien" with highest weight (5)', () => {
+    const kw = INTENT_KEYWORDS.HANDOFF.find((k) => k.phrase === 'hablar con alguien');
+    expect(kw).toBeDefined();
+    expect(kw!.weight).toBe(5);
+  });
+
+  it('AC-05: HANDOFF includes "quiero persona" with high weight', () => {
+    const kw = INTENT_KEYWORDS.HANDOFF.find((k) => k.phrase === 'quiero persona');
+    expect(kw).toBeDefined();
+    expect(kw!.weight).toBeGreaterThanOrEqual(4);
+  });
+
+  it('AC-05: HANDOFF includes "atencion humana" keyword', () => {
+    const phrases = INTENT_KEYWORDS.HANDOFF.map((k) => k.phrase);
+    expect(phrases.some((p) => p.includes('atencion humana') || p.includes('atención humana'))).toBe(true);
+  });
+
+  it('AC-05: HANDOFF keywords have distinct phrases (no duplicates)', () => {
+    const phrases = INTENT_KEYWORDS.HANDOFF.map((k) => k.phrase);
+    const unique = new Set(phrases);
+    expect(unique.size).toBe(phrases.length);
+  });
+});
+

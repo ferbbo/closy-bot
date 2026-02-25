@@ -19,6 +19,8 @@ import { FaqFlow } from './flows/faq.flow'; // PR-GAP-2
 import { CheckoutFlow } from './flows/checkout.flow'; // PR-05 AC-05
 import { PaymentFallbackFlow } from './flows/payment-fallback.flow'; // PR-06
 import { PostSaleFlow } from './flows/post-sale.flow'; // PR-07
+import { HandoffFlow } from './flows/handoff.flow'; // PR-08
+import { HandoffService } from '../services/handoff.service'; // PR-08
 import { MerchantCommandParserService } from '../services/merchant-command-parser.service'; // PR-05.1
 import { MerchantCommandService } from '../services/merchant-command.service'; // PR-05.1
 import { MessageRelayService } from '../services/message-relay.service'; // PR-05.2
@@ -62,6 +64,13 @@ export interface OrchestratorResult {
 export class ConversationOrchestrator {
   private readonly logger = new Logger(ConversationOrchestrator.name);
 
+  /**
+   * PR-08 REQ-04, AC-06: UNKNOWN loop counter per conversation (in-memory, resets on restart)
+   * Brief explicitly allows "en memoria o metadata" for this counter.
+   * Counter resets when any non-UNKNOWN intent is detected.
+   */
+  private readonly unknownLoopCounters = new Map<string, number>();
+
   constructor(
     private readonly configService: ConfigService,
     private readonly merchantResolver: MerchantResolverService,
@@ -79,6 +88,8 @@ export class ConversationOrchestrator {
     private readonly checkoutFlow: CheckoutFlow, // PR-05
     private readonly paymentFallbackFlow: PaymentFallbackFlow, // PR-06
     private readonly postSaleFlow: PostSaleFlow, // PR-07
+    private readonly handoffFlow: HandoffFlow, // PR-08
+    private readonly handoffService: HandoffService, // PR-08
     private readonly merchantCommandParser: MerchantCommandParserService, // PR-05.1
     private readonly merchantCommandService: MerchantCommandService, // PR-05.1
     private readonly messageRelayService: MessageRelayService, // PR-05.2
@@ -313,9 +324,6 @@ export class ConversationOrchestrator {
       }),
     );
 
-    // 6. Execute flow handler based on route type
-    let response: string;
-
     // PR-11: Build merchant playbook data for downstream components
     const merchantPlaybookData: MerchantPlaybookData = {
       id: merchant.id,
@@ -323,6 +331,48 @@ export class ConversationOrchestrator {
       industry: merchant.industry ?? undefined,
       playbookConfig: merchant.playbookConfig as unknown as Record<string, unknown> | null,
     };
+
+    // PR-08 REQ-04, AC-06: UNKNOWN loop tracking + auto-escalation
+    // Counter increments on UNKNOWN, resets on any other intent
+    let unknownLoopCount = this.unknownLoopCounters.get(conversation.id) ?? 0;
+    if (routeDecision.intent === 'UNKNOWN') {
+      unknownLoopCount += 1;
+      this.unknownLoopCounters.set(conversation.id, unknownLoopCount);
+      this.logger.debug(
+        `PR-08: UNKNOWN loop count=${unknownLoopCount} for conversation ${conversation.id}`,
+      );
+    } else {
+      // Reset counter on any resolved intent
+      this.unknownLoopCounters.delete(conversation.id);
+    }
+
+    // PR-08: Trigger auto-escalation if unknownLoopCount >= 3
+    if (
+      unknownLoopCount >= 3 &&
+      !conversation.handoffActive // Don't escalate if already in handoff
+    ) {
+      this.logger.log(
+        `PR-08: Auto-escalation triggered (${unknownLoopCount} consecutive UNKNOWN) for conversation ${conversation.id}`,
+      );
+      this.unknownLoopCounters.delete(conversation.id); // reset after escalation
+      const escalationResponse = await this.handoffFlow.handle(
+        merchantPlaybookData,
+        conversation.id,
+        customer.id,
+        merchant.id,
+        'auto_escalation',
+      );
+      return {
+        response: escalationResponse,
+        shouldSend: true,
+        conversationId: conversation.id,
+        merchantId: merchant.id,
+        intent: 'HANDOFF' as IntentKey,
+      };
+    }
+
+    // 6. Execute flow handler based on route type
+    let response: string;
 
     // PR-03.5.1, REQ-08, AC-08: Route-based execution (no binary toggle)
     switch (routeDecision.route) {
@@ -532,8 +582,19 @@ export class ConversationOrchestrator {
         return this.getGenericFallbackMessage();
 
       case 'HANDOFF':
+        // PR-08 REQ-09, AC-11: Delegate to HandoffFlow (explicit user request)
+        if (conversationId) {
+          return await this.handoffFlow.handle(
+            merchantPlaybook,
+            conversationId,
+            customerId,
+            merchantId,
+            'user_request',
+          );
+        }
+        return this.getGenericFallbackMessage();
+
       case 'AMBIGUOUS':
-        // These are not yet implemented but have templates routes
         return this.getGenericFallbackMessage();
 
       case 'UNKNOWN':

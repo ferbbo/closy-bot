@@ -115,4 +115,13 @@ export const MinimarketPlaybookDefaults: PlaybookConfig = {
       answer: 'No aceptamos devoluciones en alimentos. Solo productos defectuosos 🚫',
     },
   ],
+  // PR-08: Handoff messages for human handoff flow (AC-13)
+  handoffMessages: {
+    requestReceived:
+      '¡Entendido! 🛒 Te conecto con nuestro equipo de {merchant_name}. Un momento por favor...',
+    escalationDetected:
+      'Veo que necesitas asistencia. Te conecto con nuestro equipo. Un momento... 🛒',
+    merchantNotification:
+      '🔔 *Atención requerida*\n\n👤 Cliente: {customerName}\n\n{summary}',
+  },
 };

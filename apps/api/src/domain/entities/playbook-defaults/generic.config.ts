@@ -99,4 +99,13 @@ export const GenericPlaybookDefaults: PlaybookConfig = {
       answer: 'Escribe "ayuda" para ver el menú completo 📋',
     },
   ],
+  // PR-08: Handoff messages for human handoff flow (AC-13)
+  handoffMessages: {
+    requestReceived:
+      'Entendido. Te conecto con una persona de nuestro equipo. Un momento por favor...',
+    escalationDetected:
+      'Veo que necesitas ayuda específica. Te conecto con nuestro equipo. Un momento...',
+    merchantNotification:
+      '🔔 *Atención requerida*\n\n👤 Cliente: {customerName}\n\n{summary}',
+  },
 };
