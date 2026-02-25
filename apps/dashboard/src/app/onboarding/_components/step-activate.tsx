@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { Loader2, Rocket, CheckCircle2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -33,9 +34,12 @@ export function StepActivate({ completedSteps, percentage, onBack }: StepActivat
   const handleActivate = async () => {
     try {
       await activateMutation.mutateAsync();
+      toast.success('¡Tienda activada!', {
+        description: 'Tu tienda está lista para recibir pedidos por WhatsApp.',
+      });
       router.replace('/dashboard');
     } catch {
-      // error shown in alert
+      // error shown in alert below
     }
   };
 

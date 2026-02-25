@@ -84,7 +84,7 @@ export function StepCatalog({ completedSteps, onNext, onBack }: StepCatalogProps
           <AlertTitle>✅ Catálogo importado</AlertTitle>
           <AlertDescription>
             Tus productos ya están cargados. Puedes continuar o subir un nuevo archivo para
-            reemplezar el catálogo.
+            reemplazar el catálogo.
           </AlertDescription>
         </Alert>
       )}
