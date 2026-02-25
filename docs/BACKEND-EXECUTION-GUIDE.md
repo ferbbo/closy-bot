@@ -3132,9 +3132,8 @@ curl -s -X POST http://localhost:3000/onboarding/activate \
 **Respuesta con requisitos faltantes (400):**
 ```json
 {
-  "activated": false,
-  "status": "onboarding",
-  "missingRequirements": ["channel", "catalog"]
+  "error": "Missing requirements",
+  "details": ["channel", "catalog"]
 }
 ```
 
@@ -3149,7 +3148,7 @@ curl -s -X POST http://localhost:3000/onboarding/activate \
 |--------|-------------|----------|
 | `401` | Sin sesión o sesión expirada | Autenticar con `POST /auth/session` |
 | `400` | `industry` inválida en `apply-preset` | Usar: `ropa`, `belleza` o `minimarket` |
-| `400` | Requisitos faltantes en `activate` | Ver campo `missingRequirements` en respuesta |
+| `400` | Requisitos faltantes en `activate` | Ver campos `error` y `details` en la respuesta |
 
 ---
 
@@ -3167,7 +3166,7 @@ No requiere variables de entorno adicionales. Usa la misma configuración de DB 
 - ✅ **AC-04**: `POST /onboarding/apply-preset` con `industry` válida aplica defaults de industria | `onboarding.service.spec.ts`
 - ✅ **AC-05**: `apply-preset` con config existente preserva customizaciones (solo actualiza `industry`) | `onboarding.service.spec.ts`
 - ✅ **AC-06**: `POST /onboarding/activate` con requisitos completos → `status: active` + `activated: true` | `onboarding.service.spec.ts`
-- ✅ **AC-07**: `activate` con requisitos faltantes → 400 + `missingRequirements[]` | `onboarding.service.spec.ts`
+- ✅ **AC-07**: `activate` con requisitos faltantes → 400 + `{ error, details[] }` | `onboarding.service.spec.ts`
 - ✅ **AC-08**: `Merchant.status` enum (`onboarding|active|paused`) + migración `20260225210000_pr_ob_01_add_merchant_status` | `prisma migrate status`
 - ✅ **AC-09**: `ConversationOrchestrator` bloquea mensajes de clientes si `merchant.status !== 'active'` | `conversation.orchestrator.spec.ts`
 - ✅ **AC-10**: Unit tests para `OnboardingService` (25 tests) | `onboarding.service.spec.ts`
