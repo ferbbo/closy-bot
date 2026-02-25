@@ -3,6 +3,14 @@ import type { NextRequest } from 'next/server';
 
 const PUBLIC_PATHS = ['/login', '/api', '/_next', '/favicon.ico'];
 
+interface AuthMeBody {
+  authenticated: boolean;
+  merchant?: {
+    status?: string;
+  };
+}
+
+/** AC-10: Middleware redirect — onboarding → /onboarding, active → /dashboard */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -23,6 +31,19 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
 
+    const body = (await res.json()) as AuthMeBody;
+    const status = body.merchant?.status;
+
+    // Merchant is still onboarding → force /onboarding (except already there)
+    if (status === 'onboarding' && pathname !== '/onboarding') {
+      return NextResponse.redirect(new URL('/onboarding', request.url));
+    }
+
+    // Merchant is already active and tries to access /onboarding → send to dashboard
+    if (status === 'active' && pathname === '/onboarding') {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+
     return NextResponse.next();
   } catch {
     return NextResponse.redirect(new URL('/login', request.url));
@@ -32,3 +53,4 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
+

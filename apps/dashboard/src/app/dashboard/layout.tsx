@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/hooks/use-auth';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -12,7 +12,7 @@ import {
   Menu,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -28,7 +28,15 @@ const navigation = [
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { merchant } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // AC-10: If merchant is still onboarding, redirect to /onboarding
+  useEffect(() => {
+    if (merchant && merchant.status === 'onboarding') {
+      router.replace('/onboarding');
+    }
+  }, [merchant, router]);
 
   return (
     <div className="min-h-screen bg-gray-50">
