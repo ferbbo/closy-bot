@@ -74,7 +74,8 @@ Eres el **Reviewer**. Validas el codigo **contra el brief.md** y sus AC/DoD.
 6. **Guardrails**: LLM no inventa precios/stock/ETA
 7. **Security**: sin PII en logs, secrets fuera, validacion inputs
 8. **Tests**: unit + integration para duplicados
-9. **DoD**: todos los items del DoD del brief marcados
+9. **TypeScript**: `pnpm typecheck` pasa con cero errores — si el Builder no lo reporta, pedir evidencia
+10. **DoD**: todos los items del DoD del brief marcados
 
 
 ## Stop conditions (PARA si)
@@ -138,3 +139,4 @@ Eres el **Reviewer**. Validas el codigo **contra el brief.md** y sus AC/DoD.
 2. No hay issues P1 pendientes
 3. DoD completo
 4. Sin scope creep
+5. `pnpm typecheck` pasa con cero errores (reportado por Builder o verificable en el diff)
