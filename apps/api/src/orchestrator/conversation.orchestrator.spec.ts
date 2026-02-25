@@ -15,6 +15,7 @@ import { UpdateCartItemFlow } from './flows/update-cart-item.flow'; // PR-04
 import { RemoveFromCartFlow } from './flows/remove-from-cart.flow'; // PR-04
 import { FaqFlow } from './flows/faq.flow'; // PR-GAP-2
 import { CheckoutFlow } from './flows/checkout.flow'; // PR-05
+import { PaymentFallbackFlow } from './flows/payment-fallback.flow'; // PR-06
 import { MerchantCommandParserService } from '../services/merchant-command-parser.service'; // PR-05.1
 import { MerchantCommandService } from '../services/merchant-command.service'; // PR-05.1
 import { LlmService } from '../llm/llm.service';
@@ -168,6 +169,13 @@ describe('ConversationOrchestrator', () => {
           useValue: {
             getActiveState: jest.fn().mockResolvedValue(null), // no active checkout by default
             handle: jest.fn().mockResolvedValue('Checkout response'),
+          },
+        },
+        {
+          provide: PaymentFallbackFlow, // PR-06
+          useValue: {
+            getActiveState: jest.fn().mockResolvedValue(null), // no active payment fallback by default
+            handle: jest.fn().mockResolvedValue('Payment fallback response'),
           },
         },
         {

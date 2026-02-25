@@ -477,15 +477,49 @@ model Order {
   createdAt       DateTime    @default(now()) @map("created_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
 
-  merchant Merchant    @relation(fields: [merchantId], references: [id])
-  customer Customer    @relation(fields: [customerId], references: [id])
-  items    OrderItem[]
+  merchant  Merchant    @relation(fields: [merchantId], references: [id])
+  customer  Customer    @relation(fields: [customerId], references: [id])
+  items     OrderItem[]
+  payments  Payment[]   // PR-06: Payment confirmations
 
   @@unique([orderCode, merchantId])
   @@index([customerId])
   @@index([merchantId, status])
   @@index([createdAt(sort: Desc)])
   @@map("orders")
+}
+
+// ============================================================================
+// PR-06: Payments — Webhook idempotente + fallback comando PAGADO
+// ============================================================================
+
+/// PaymentStatus enum — lifecycle of a payment
+enum PaymentStatus {
+  pending   // Pago iniciado, esperando confirmación
+  confirmed // Pago confirmado (webhook o comando manual)
+  failed    // Pago fallido (webhook con status rejected)
+}
+
+/// Payment — tracks payment confirmations for orders
+/// Idempotency: unique constraint on paymentIntentId (AC-08)
+model Payment {
+  id              String        @id @default(cuid())
+  orderId         String        @map("order_id")
+  amount          Decimal       @db.Decimal(10, 2)
+  method          String        // 'cod' | 'transfer' | 'payment_link'
+  status          PaymentStatus @default(pending)
+  externalId      String?       @map("external_id") // ID del gateway externo
+  paymentIntentId String        @unique @map("payment_intent_id") // DB-level idempotency key
+  confirmedAt     DateTime?     @map("confirmed_at")
+  metadata        Json?
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+  @@index([status])
+  @@map("payments")
 }
 
 /// OrderItem represents a line item in an order (snapshot of product at time of purchase)

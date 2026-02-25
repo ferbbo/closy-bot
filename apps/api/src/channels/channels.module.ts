@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { WebhooksModule } from './webhooks/webhooks.module'; // PR-06
 import { ChannelHealthController } from './channel-health.controller';
 import { ChannelHealthService } from './channel-health.service';
 import { ChannelListService } from './channel-list.service';
@@ -24,7 +25,7 @@ import { AuthModule } from '../auth/auth.module'; // PR-14: For SessionAuthGuard
  * - Additional channels (Instagram, web chat)
  */
 @Module({
-  imports: [WhatsAppModule, PersistenceModule, OnboardingModule, AuthModule],
+  imports: [WhatsAppModule, WebhooksModule, PersistenceModule, OnboardingModule, AuthModule],
   controllers: [ChannelHealthController],
   providers: [ChannelHealthService, ChannelListService, ChannelOwnershipGuard],
   exports: [WhatsAppModule, ChannelHealthService],

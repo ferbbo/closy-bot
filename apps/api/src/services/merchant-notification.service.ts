@@ -17,6 +17,19 @@ export interface MerchantNotificationPayload {
   paymentMethod: string;
 }
 
+// ---------------------------------------------------------------------------
+// MerchantPaymentNotification — internal type for payment notifications
+// PR-06 REQ-09, AC-12
+// ---------------------------------------------------------------------------
+export interface MerchantPaymentNotificationPayload {
+  type: 'PAYMENT_CONFIRMED';
+  orderCode: string;
+  amount: string; // formatted e.g. "$120,000 COP"
+  method: string;
+  timestamp: string; // ISO
+  isManual?: boolean;
+}
+
 /**
  * MerchantNotificationService
  * PR-05: Checkout Order Creation — REQ-10, AC-11
@@ -97,5 +110,67 @@ export class MerchantNotificationService {
    */
   formatAmount(amount: number, currency = 'COP'): string {
     return `$${amount.toLocaleString('es-CO')} ${currency}`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // PR-06: notifyPaymentConfirmed — AC-12
+  // ---------------------------------------------------------------------------
+
+  /**
+   * AC-12: Enqueue WhatsApp notification to merchant when payment is confirmed.
+   * Works for both webhook (external gateway) and fallback manual command.
+   * Idempotent via dedupeKey = `payment-confirmed-${orderCode}-${merchantId}`.
+   */
+  async notifyPaymentConfirmed(
+    merchantId: string,
+    payload: MerchantPaymentNotificationPayload,
+  ): Promise<void> {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: merchantId },
+      select: { id: true, whatsappNumber: true },
+    });
+
+    if (!merchant) {
+      this.logger.warn(`PaymentNotification: merchant ${merchantId} not found — skipping`);
+      return;
+    }
+
+    if (!merchant.whatsappNumber) {
+      this.logger.warn(
+        `PaymentNotification: merchant ${merchantId} has no whatsappNumber — skipping`,
+      );
+      return;
+    }
+
+    const methodLabel =
+      payload.method === 'transfer'
+        ? 'Transferencia bancaria'
+        : payload.method === 'cod'
+          ? 'Contraentrega'
+          : payload.method === 'payment_link'
+            ? 'Pago en línea'
+            : payload.method;
+
+    const manualWarning = payload.isManual ? '\n⚠️ Pago manual — verifica la transferencia' : '';
+
+    const message =
+      `✅ Pago confirmado para ${payload.orderCode}\n` +
+      `💵 ${payload.amount}\n` +
+      `💳 ${methodLabel}${manualWarning}`;
+
+    const dedupeKey = `payment-confirmed-${payload.orderCode}-${merchantId}`;
+
+    await this.outboxRepository.create({
+      merchant: { connect: { id: merchantId } },
+      channel: OutboxChannel.WHATSAPP,
+      type: OutboxMessageType.SEND_TEXT,
+      to: merchant.whatsappNumber,
+      payloadJson: { text: message },
+      dedupeKey,
+    });
+
+    this.logger.log(
+      `Payment notification enqueued for merchant ${merchantId}: order ${payload.orderCode}`,
+    );
   }
 }

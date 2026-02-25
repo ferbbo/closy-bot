@@ -16,6 +16,7 @@ import { UpdateCartItemFlow } from './flows/update-cart-item.flow'; // PR-04 AC-
 import { RemoveFromCartFlow } from './flows/remove-from-cart.flow'; // PR-04 AC-10
 import { FaqFlow } from './flows/faq.flow'; // PR-GAP-2
 import { CheckoutFlow } from './flows/checkout.flow'; // PR-05 AC-05
+import { PaymentFallbackFlow } from './flows/payment-fallback.flow'; // PR-06
 import { MerchantCommandParserService } from '../services/merchant-command-parser.service'; // PR-05.1
 import { MerchantCommandService } from '../services/merchant-command.service'; // PR-05.1
 import { LlmService } from '../llm/llm.service';
@@ -73,6 +74,7 @@ export class ConversationOrchestrator {
     private readonly removeFromCartFlow: RemoveFromCartFlow, // PR-04 AC-10
     private readonly faqFlow: FaqFlow, // PR-GAP-2 AC-05
     private readonly checkoutFlow: CheckoutFlow, // PR-05
+    private readonly paymentFallbackFlow: PaymentFallbackFlow, // PR-06
     private readonly merchantCommandParser: MerchantCommandParserService, // PR-05.1
     private readonly merchantCommandService: MerchantCommandService, // PR-05.1
     private readonly llmService: LlmService,
@@ -195,6 +197,39 @@ export class ConversationOrchestrator {
         conversationId: conversation.id,
         merchantId: merchant.id,
         intent: 'CHECKOUT',
+      };
+    }
+
+    // PR-06: Check for active payment fallback state BEFORE intent routing
+    const activePaymentFallbackState = await this.paymentFallbackFlow.getActiveState(
+      conversation.id,
+    );
+    if (activePaymentFallbackState) {
+      this.logger.log(
+        `Active payment fallback state (step=${activePaymentFallbackState.step}), routing to PaymentFallbackFlow`,
+      );
+
+      const merchantPlaybookData: MerchantPlaybookData = {
+        id: merchant.id,
+        name: merchant.name,
+        industry: merchant.industry ?? undefined,
+        playbookConfig: merchant.playbookConfig,
+      };
+
+      const response = await this.paymentFallbackFlow.handle(
+        merchantPlaybookData,
+        conversation.id,
+        customer.id,
+        merchant.id,
+        input.text,
+      );
+
+      return {
+        response,
+        shouldSend: true,
+        conversationId: conversation.id,
+        merchantId: merchant.id,
+        intent: 'CONFIRM_PAYMENT',
       };
     }
 
@@ -388,6 +423,19 @@ export class ConversationOrchestrator {
         // PR-05: Delegate to CheckoutFlow (template-first, no LLM)
         if (conversationId) {
           return await this.checkoutFlow.handle(
+            merchantPlaybook,
+            conversationId,
+            customerId,
+            merchantId,
+            originalText,
+          );
+        }
+        return this.getGenericFallbackMessage();
+
+      case 'CONFIRM_PAYMENT':
+        // PR-06: Delegate to PaymentFallbackFlow (template-first, no LLM)
+        if (conversationId) {
+          return await this.paymentFallbackFlow.handle(
             merchantPlaybook,
             conversationId,
             customerId,

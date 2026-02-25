@@ -2504,16 +2504,167 @@ La firma `X-Hub-Signature-256` no coincide.
 
 ---
 
+## Flujo 7: Payments (PR-06)
+
+Confirmación de pagos via webhook idempotente o comando manual `PAGADO`.
+
+### Setup: Variables de entorno
+
+```bash
+# En .env
+PAYMENT_WEBHOOK_SECRET="your-payment-webhook-secret"
+PAYMENT_WEBHOOK_HEADER="X-Payment-Signature"
+```
+
+### 7.1 — Configurar HMAC signature (helper bash)
+
+```bash
+# Helper para generar signature HMAC SHA-256
+gen_sig() {
+  local BODY="$1"
+  local SECRET="$2"
+  echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print "sha256="$2}'
+}
+
+SECRET="your-payment-webhook-secret"
+MERCHANT_API_KEY="<your-merchant-api-key>"   # Obtén con GET /merchants/me
+```
+
+### 7.2 — Confirmar pago aprobado (webhook gateway)
+
+```bash
+BODY='{"payment_intent_id":"pi_abc123","order_code":"ORD-001","amount":120000,"status":"approved","method":"transfer","timestamp":"2026-02-24T10:30:00Z"}'
+SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "your-payment-webhook-secret" | awk '{print "sha256="$2}')
+
+curl -X POST http://localhost:3000/webhooks/payments \
+  -H "Content-Type: application/json" \
+  -H "X-Merchant-Api-Key: $MERCHANT_API_KEY" \
+  -H "X-Payment-Signature: $SIG" \
+  -d "$BODY"
+```
+
+**Respuesta exitosa (200 OK):**
+```json
+{
+  "success": true,
+  "payment_id": "clxxxxx",
+  "order_code": "ORD-001",
+  "status": "confirmed"
+}
+```
+
+### 7.3 — Webhook duplicado (idempotente — AC-08)
+
+```bash
+# Mismo payload, misma signature → 200 OK sin duplicar
+curl -X POST http://localhost:3000/webhooks/payments \
+  -H "Content-Type: application/json" \
+  -H "X-Merchant-Api-Key: $MERCHANT_API_KEY" \
+  -H "X-Payment-Signature: $SIG" \
+  -d "$BODY"
+```
+
+**Respuesta (200 OK — ya procesado):**
+```json
+{
+  "success": true,
+  "payment_id": "clxxxxx",
+  "order_code": "ORD-001",
+  "status": "confirmed",
+  "message": "Payment already processed"
+}
+```
+
+### 7.4 — Pago rechazado (status: rejected — AC-07)
+
+```bash
+BODY_REJ='{"payment_intent_id":"pi_rejected_001","order_code":"ORD-001","amount":120000,"status":"rejected","method":"transfer","timestamp":"2026-02-24T10:30:00Z"}'
+SIG_REJ=$(echo -n "$BODY_REJ" | openssl dgst -sha256 -hmac "your-payment-webhook-secret" | awk '{print "sha256="$2}')
+
+curl -X POST http://localhost:3000/webhooks/payments \
+  -H "Content-Type: application/json" \
+  -H "X-Merchant-Api-Key: $MERCHANT_API_KEY" \
+  -H "X-Payment-Signature: $SIG_REJ" \
+  -d "$BODY_REJ"
+```
+
+**Respuesta (200 OK — registrado como fallido):**
+```json
+{
+  "success": true,
+  "payment_id": "clyyyyy",
+  "order_code": "ORD-001",
+  "status": "failed"
+}
+```
+
+### 7.5 — Signature inválida (AC-05)
+
+```bash
+curl -X POST http://localhost:3000/webhooks/payments \
+  -H "Content-Type: application/json" \
+  -H "X-Merchant-Api-Key: $MERCHANT_API_KEY" \
+  -H "X-Payment-Signature: sha256=invalidsignature" \
+  -d "$BODY"
+```
+
+**Respuesta (401 Unauthorized):**
+```json
+{
+  "statusCode": 401,
+  "message": "Invalid signature"
+}
+```
+
+### 7.6 — Sin API key (401)
+
+```bash
+curl -X POST http://localhost:3000/webhooks/payments \
+  -H "Content-Type: application/json" \
+  -d "$BODY"
+# → 401 Unauthorized: Missing X-Merchant-Api-Key header
+```
+
+### 7.7 — Fallback conversacional PAGADO (WhatsApp)
+
+El cliente puede confirmar un pago manual enviando mensajes:
+
+```
+Cliente: "Ya pagué"
+Bot: "¿Para qué pedido realizaste el pago? Responde con el código (ej: ORD-001)."
+Cliente: "ORD-001"
+Bot: "Confirma que realizaste el pago de $120,000 COP para el pedido ORD-001.
+      Responde *confirmar* para registrar el pago o *cancelar* para cancelar."
+Cliente: "confirmar"
+Bot: "✅ Pago registrado para el pedido ORD-001. El vendedor verificará tu transferencia pronto."
+```
+
+**Auth:** Este flujo va por el webhook WhatsApp normal (integridad via `X-Hub-Signature-256`).
+
+### 7.8 — Errores comunes
+
+#### Error: "Order not found" (404)
+El `order_code` en el payload no existe para ese merchant.
+**Solución:** Verificar `order_code` correcto. Se genera en checkout (`ORD-XXX`).
+
+#### Error: "Invalid signature" (401)
+HMAC no coincide.
+**Solución:** Verificar `PAYMENT_WEBHOOK_SECRET` y que el body sea idéntico al firmado (sin reformateo).
+
+#### Error: "Missing X-Merchant-Api-Key" (401)
+Falta el header de autenticación del merchant.
+**Solución:** Obtener API key del merchant via dashboard y enviarlo en `X-Merchant-Api-Key`.
+
+---
+
 ## Próximos Pasos
 
-Para completar el flujo de ventas transaccional, implementar:
+Para completar el flujo de ventas transaccional:
 
-1. **PR-05 — Checkout** (🔴 CRÍTICO)
-   - Modelo `Order`, `OrderItem`
-   - Captura de datos (nombre, dirección)
-      - Métodos de pago
+1. **PR-07 — Post-sale: Order status + tickets** (🔴 siguiente)
+   - Query de estado de pedido por conversación
+   - Tickets simples (faltante/dañado/demora)
 
-2. **PR-06 — Pagos**
-   - Modelo `Payment`
-   - Webhook idempotente
-   - Fallback `PAGADO`
+2. **PR-08 — Human handoff con resumen estructurado**
+   - Triggers de handoff
+   - Resumen: intent + cart snapshot + step + info de usuario

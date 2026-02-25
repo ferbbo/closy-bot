@@ -266,4 +266,37 @@ describe('IntentRouterService V2 (PR-03.5.1)', () => {
       expect(decision.confidence).toBe('HIGH');
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // AC-09 (PR-06): CONFIRM_PAYMENT intent
+  // ---------------------------------------------------------------------------
+  describe('AC-09 (PR-06): CONFIRM_PAYMENT intent', () => {
+    it("AC-09: should classify 'ya pague' as CONFIRM_PAYMENT with HIGH confidence", () => {
+      const decision = service.classify('ya pague');
+
+      expect(decision.intent).toBe('CONFIRM_PAYMENT');
+      expect(decision.confidence).toBe('HIGH');
+    });
+
+    it("AC-09: should classify 'transferí' as CONFIRM_PAYMENT with HIGH confidence", () => {
+      const decision = service.classify('transferí');
+
+      expect(decision.intent).toBe('CONFIRM_PAYMENT');
+      expect(decision.confidence).toBe('HIGH');
+    });
+
+    it("AC-09: should classify 'pagado' as CONFIRM_PAYMENT with HIGH confidence", () => {
+      const decision = service.classify('pagado');
+
+      expect(decision.intent).toBe('CONFIRM_PAYMENT');
+      expect(decision.confidence).toBe('HIGH');
+    });
+
+    it("AC-09: should classify 'hice el pago' as CONFIRM_PAYMENT with HIGH confidence", () => {
+      const decision = service.classify('hice el pago');
+
+      expect(decision.intent).toBe('CONFIRM_PAYMENT');
+      expect(decision.confidence).toBe('HIGH');
+    });
+  });
 });

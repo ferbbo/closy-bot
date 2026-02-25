@@ -14,6 +14,7 @@ export type IntentKey =
   | 'HELP'
   | 'CHECKOUT'
   | 'QUERY_FAQ'
+  | 'CONFIRM_PAYMENT' // PR-06 REQ-07: manual payment confirmation
   | 'HANDOFF'
   | 'UNKNOWN'
   | 'AMBIGUOUS'; // REQ-05: New intent for collision detection
