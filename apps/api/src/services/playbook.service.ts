@@ -187,6 +187,28 @@ export class PlaybookService {
       if (partial.genericError !== undefined) result.messages.genericError = partial.genericError;
       if (partial.unknownIntent !== undefined)
         result.messages.unknownIntent = partial.unknownIntent;
+      // ── PR-07: Post-sale messages ──────────────────────────────────────────
+      if (partial.orderStatusTemplate !== undefined)
+        result.messages.orderStatusTemplate = partial.orderStatusTemplate;
+      if (partial.orderStatusPendingPayment !== undefined)
+        result.messages.orderStatusPendingPayment = partial.orderStatusPendingPayment;
+      if (partial.orderStatusConfirmed !== undefined)
+        result.messages.orderStatusConfirmed = partial.orderStatusConfirmed;
+      if (partial.orderStatusPaid !== undefined)
+        result.messages.orderStatusPaid = partial.orderStatusPaid;
+      if (partial.orderStatusShipped !== undefined)
+        result.messages.orderStatusShipped = partial.orderStatusShipped;
+      if (partial.orderStatusDelivered !== undefined)
+        result.messages.orderStatusDelivered = partial.orderStatusDelivered;
+      if (partial.orderStatusCancelled !== undefined)
+        result.messages.orderStatusCancelled = partial.orderStatusCancelled;
+      if (partial.noOrderFound !== undefined) result.messages.noOrderFound = partial.noOrderFound;
+      if (partial.ticketTypePrompt !== undefined)
+        result.messages.ticketTypePrompt = partial.ticketTypePrompt;
+      if (partial.ticketCreatedConfirm !== undefined)
+        result.messages.ticketCreatedConfirm = partial.ticketCreatedConfirm;
+      if (partial.ticketDescriptionPrompt !== undefined)
+        result.messages.ticketDescriptionPrompt = partial.ticketDescriptionPrompt;
     }
 
     // PR-GAP-1: merge botPersonality

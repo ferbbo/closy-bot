@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ChannelHealthController } from './channel-health.controller';
 import { ChannelHealthService } from './channel-health.service';
+import { ChannelListService } from './channel-list.service';
 import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
 import { ChannelOwnershipGuard } from './guards/channel-ownership.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
@@ -25,6 +26,12 @@ describe('ChannelHealthController', () => {
             getHealth: jest.fn(),
             retryWebhookSubscription: jest.fn(),
             refreshChannelStatus: jest.fn(),
+          },
+        },
+        {
+          provide: ChannelListService,
+          useValue: {
+            listChannels: jest.fn(),
           },
         },
         {

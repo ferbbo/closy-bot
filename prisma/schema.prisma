@@ -70,6 +70,7 @@ model Merchant {
   carts          Cart[] // PR-04: Shopping carts
   merchantConfig MerchantConfig? // PR-04.5: Merchant operational config
   orders         Order[] // PR-05: Orders
+  tickets        Ticket[] // PR-07: Support tickets
 
   @@map("merchants")
 }
@@ -131,6 +132,7 @@ model Customer {
   conversations Conversation[]
   carts         Cart[] // PR-04: Shopping carts
   orders        Order[] // PR-05: Orders
+  tickets       Ticket[] // PR-07: Support tickets
 
   @@index([phone])
   @@map("customers")
@@ -481,6 +483,7 @@ model Order {
   customer  Customer    @relation(fields: [customerId], references: [id])
   items     OrderItem[]
   payments  Payment[]   // PR-06: Payment confirmations
+  tickets   Ticket[]    // PR-07: Support tickets
 
   @@unique([orderCode, merchantId])
   @@index([customerId])
@@ -520,6 +523,47 @@ model Payment {
   @@index([orderId])
   @@index([status])
   @@map("payments")
+}
+
+// ============================================================================
+// PR-07: Tickets — Post-sale support tickets
+// ============================================================================
+
+/// TicketType enum — type of post-sale issue
+enum TicketType {
+  missing  // Producto faltante
+  damaged  // Producto dañado
+  delay    // Retraso en entrega
+  other    // Otro problema
+}
+
+/// TicketStatus enum — lifecycle of a support ticket
+enum TicketStatus {
+  open     // Ticket abierto (pendiente)
+  resolved // Resuelto por merchant
+  closed   // Cerrado
+}
+
+/// Ticket — customer opens a post-sale issue for an order
+model Ticket {
+  id          String       @id @default(cuid())
+  orderId     String       @map("order_id")
+  customerId  String       @map("customer_id")
+  merchantId  String       @map("merchant_id")
+  type        TicketType
+  status      TicketStatus @default(open)
+  description String       @db.Text
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  order    Order    @relation(fields: [orderId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+  merchant Merchant @relation(fields: [merchantId], references: [id])
+
+  @@index([orderId])
+  @@index([customerId])
+  @@index([merchantId, status])
+  @@map("tickets")
 }
 
 /// OrderItem represents a line item in an order (snapshot of product at time of purchase)

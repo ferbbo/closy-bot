@@ -17,6 +17,7 @@ import { RemoveFromCartFlow } from './flows/remove-from-cart.flow'; // PR-04 AC-
 import { FaqFlow } from './flows/faq.flow'; // PR-GAP-2
 import { CheckoutFlow } from './flows/checkout.flow'; // PR-05 AC-05
 import { PaymentFallbackFlow } from './flows/payment-fallback.flow'; // PR-06
+import { PostSaleFlow } from './flows/post-sale.flow'; // PR-07
 import { MerchantCommandParserService } from '../services/merchant-command-parser.service'; // PR-05.1
 import { MerchantCommandService } from '../services/merchant-command.service'; // PR-05.1
 import { LlmService } from '../llm/llm.service';
@@ -75,6 +76,7 @@ export class ConversationOrchestrator {
     private readonly faqFlow: FaqFlow, // PR-GAP-2 AC-05
     private readonly checkoutFlow: CheckoutFlow, // PR-05
     private readonly paymentFallbackFlow: PaymentFallbackFlow, // PR-06
+    private readonly postSaleFlow: PostSaleFlow, // PR-07
     private readonly merchantCommandParser: MerchantCommandParserService, // PR-05.1
     private readonly merchantCommandService: MerchantCommandService, // PR-05.1
     private readonly llmService: LlmService,
@@ -230,6 +232,40 @@ export class ConversationOrchestrator {
         conversationId: conversation.id,
         merchantId: merchant.id,
         intent: 'CONFIRM_PAYMENT',
+      };
+    }
+
+    // PR-07: Check for active post-sale state BEFORE intent routing
+    const activePostSaleState = await this.postSaleFlow.getActiveState(conversation.id);
+    if (activePostSaleState) {
+      this.logger.log(
+        `Active post-sale state (step=${activePostSaleState.step}), routing to PostSaleFlow`,
+      );
+
+      const merchantPlaybookData: MerchantPlaybookData = {
+        id: merchant.id,
+        name: merchant.name,
+        industry: merchant.industry ?? undefined,
+        playbookConfig: merchant.playbookConfig,
+      };
+
+      const response = await this.postSaleFlow.handle(
+        merchantPlaybookData,
+        conversation.id,
+        customer.id,
+        merchant.id,
+        input.text,
+      );
+
+      const intent =
+        activePostSaleState.intent === 'ORDER_STATUS' ? 'ORDER_STATUS' : 'CREATE_TICKET';
+
+      return {
+        response,
+        shouldSend: true,
+        conversationId: conversation.id,
+        merchantId: merchant.id,
+        intent,
       };
     }
 
@@ -436,6 +472,32 @@ export class ConversationOrchestrator {
         // PR-06: Delegate to PaymentFallbackFlow (template-first, no LLM)
         if (conversationId) {
           return await this.paymentFallbackFlow.handle(
+            merchantPlaybook,
+            conversationId,
+            customerId,
+            merchantId,
+            originalText,
+          );
+        }
+        return this.getGenericFallbackMessage();
+
+      case 'ORDER_STATUS':
+        // PR-07: Delegate to PostSaleFlow.handleOrderStatus (template-first, no LLM)
+        if (conversationId) {
+          return await this.postSaleFlow.handleOrderStatus(
+            merchantPlaybook,
+            conversationId,
+            customerId,
+            merchantId,
+            originalText,
+          );
+        }
+        return this.getGenericFallbackMessage();
+
+      case 'CREATE_TICKET':
+        // PR-07: Delegate to PostSaleFlow.handleCreateTicket (template-first, no LLM)
+        if (conversationId) {
+          return await this.postSaleFlow.handleCreateTicket(
             merchantPlaybook,
             conversationId,
             customerId,

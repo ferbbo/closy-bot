@@ -299,4 +299,52 @@ describe('IntentRouterService V2 (PR-03.5.1)', () => {
       expect(decision.confidence).toBe('HIGH');
     });
   });
+
+  // AC-10 (PR-07): ORDER_STATUS intent
+  describe('AC-10 (PR-07): ORDER_STATUS intent', () => {
+    it("AC-10: should classify '¿cómo va mi pedido?' as ORDER_STATUS with HIGH confidence", () => {
+      const decision = service.classify('¿cómo va mi pedido?');
+
+      expect(decision.intent).toBe('ORDER_STATUS');
+      expect(decision.confidence).toBe('HIGH');
+    });
+
+    it("AC-10: should classify 'estado de mi orden' as ORDER_STATUS with HIGH confidence", () => {
+      const decision = service.classify('estado de mi orden');
+
+      expect(decision.intent).toBe('ORDER_STATUS');
+      expect(decision.confidence).toBe('HIGH');
+    });
+
+    it("AC-10: should classify 'dónde está mi pedido' as ORDER_STATUS with HIGH confidence", () => {
+      const decision = service.classify('dónde está mi pedido');
+
+      expect(decision.intent).toBe('ORDER_STATUS');
+      expect(decision.confidence).toBe('HIGH');
+    });
+  });
+
+  // AC-11 (PR-07): CREATE_TICKET intent
+  describe('AC-11 (PR-07): CREATE_TICKET intent', () => {
+    it("AC-11: should classify 'mi pedido llegó dañado' as CREATE_TICKET with HIGH confidence", () => {
+      const decision = service.classify('mi pedido llegó dañado');
+
+      expect(decision.intent).toBe('CREATE_TICKET');
+      expect(decision.confidence).toBe('HIGH');
+    });
+
+    it("AC-11: should classify 'tengo un problema con mi compra' as CREATE_TICKET with HIGH confidence", () => {
+      const decision = service.classify('tengo un problema con mi compra');
+
+      expect(decision.intent).toBe('CREATE_TICKET');
+      expect(decision.confidence).toBe('HIGH');
+    });
+
+    it("AC-11: should classify 'el producto no llegó' as CREATE_TICKET with HIGH confidence", () => {
+      const decision = service.classify('el producto no llegó');
+
+      expect(decision.intent).toBe('CREATE_TICKET');
+      expect(decision.confidence).toBe('HIGH');
+    });
+  });
 });

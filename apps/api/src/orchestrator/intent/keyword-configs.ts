@@ -98,6 +98,35 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
     { phrase: 'completar compra', weight: 5 },
   ],
 
+  // PR-07 REQ-07: ORDER_STATUS — post-sale order status query (AC-10)
+  ORDER_STATUS: [
+    { phrase: 'estado', weight: 5 },
+    { phrase: 'como va mi pedido', weight: 5 },
+    { phrase: 'donde esta mi pedido', weight: 5 },
+    { phrase: 'mi pedido', weight: 3 },
+    { phrase: 'mi orden', weight: 3 },
+    { phrase: 'tracking', weight: 4 },
+    { phrase: 'seguimiento', weight: 4 },
+    { phrase: 'como va', weight: 3 },
+    { phrase: 'mi compra', weight: 3 },
+  ],
+
+  // PR-07 REQ-08: CREATE_TICKET — post-sale ticket creation (AC-11)
+  CREATE_TICKET: [
+    { phrase: 'problema', weight: 5 },
+    { phrase: 'reclamo', weight: 5 },
+    { phrase: 'falta', weight: 4 },
+    { phrase: 'no llego', weight: 5 },
+    { phrase: 'dañado', weight: 5 },
+    { phrase: 'danado', weight: 5 },
+    { phrase: 'daño', weight: 5 },
+    { phrase: 'demora', weight: 4 },
+    { phrase: 'tardanza', weight: 4 },
+    { phrase: 'incompleto', weight: 4 },
+    { phrase: 'no funciona', weight: 5 },
+    { phrase: 'roto', weight: 5 },
+  ],
+
   // PR-06 REQ-07: CONFIRM_PAYMENT — fallback manual "PAGADO" command (AC-09)
   CONFIRM_PAYMENT: [
     { phrase: 'pagado', weight: 5 },
