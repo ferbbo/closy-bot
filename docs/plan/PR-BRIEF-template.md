@@ -3,6 +3,7 @@
 > **Status**: `DRAFT` | `APPROVED` | `AMENDED`
 > **Archivo**: `docs/plan/pr-briefs/PR-XX-<slug>.md`
 > **Issue**: [#NN](link) (1 issue con todos los REQs)
+> **Parallel Mode**: `false` (default) | `true` (worktree)
 > **Regla**: Max 2 páginas. Spec-locked. Sin scope extra.
 
 ## Objetivo
