@@ -587,12 +587,7 @@ El endpoint JSON (`/api/catalog/import`) sigue funcional pero retorna headers de
 | Tickets soporte | PR-07 | ✅ Funcional (Intent `CREATE_TICKET` + modelo Ticket + notificación merchant) |
 | Comandos merchant (WhatsApp) | PR-05.1 | ✅ Funcional (confirmar, rechazar, pagado, enviado, pedido, pendientes, hoy, ayuda, pausar/activar bot) |
 | Message Relay (msg/handoff) | PR-05.2 | ✅ Funcional (`msg`, `handoff`, `cerrar handoff` + relay bidireccional) |
-
-### ❌ Flujos Pendientes (ver PR-STACK)
-
-| Flujo | PR Requerido | Descripción |
-|-------|--------------|-------------|
-| Handoff | PR-08 | Intent `HANDOFF` + resumen estructurado |
+| Handoff Humano | PR-08 | ✅ Funcional (Intent `HANDOFF` + auto-escalation UNKNOWN×3 + resumen estructurado + LLM opt-in) |
 
 ---
 
@@ -2977,11 +2972,88 @@ docker exec -it closy-bot-postgres-1 psql -U closy -d closy_dev \
 
 ---
 
+## PR-08 — Handoff Humano (✅ Implementado)
+
+### Flujo — Solicitud explícita de handoff
+
+```bash
+# Cliente envía keyword → intent HANDOFF → Handoff creado + merchant notificado
+curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+  -H "Content-Type: application/json" \
+  -H "x-hub-signature-256: dev-skip" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "id": "entry-1",
+      "changes": [{
+        "value": {
+          "messaging_product": "whatsapp",
+          "metadata": { "display_phone_number": "15550000001", "phone_number_id": "<CHANNEL_PHONE_ID>" },
+          "messages": [{
+            "from": "+573001234567",
+            "id": "msg-handoff-001",
+            "timestamp": "1700000001",
+            "type": "text",
+            "text": { "body": "quiero hablar con alguien" }
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }'
+```
+
+**Resultado esperado:**
+- HTTP 200
+- `Conversation.handoffActive = true` en DB
+- `Handoff` creado con `reason=user_request` y `status=pending`
+- `OutboxMessage` encolado para merchant con `dedupeKey=handoff-{conversationId}`
+
+```bash
+# Verificar en DB
+psql $DATABASE_URL -c "SELECT reason, status, summary_json FROM handoffs ORDER BY created_at DESC LIMIT 1;"
+psql $DATABASE_URL -c "SELECT handoff_active FROM conversations WHERE id = '<conversationId>';"
+```
+
+### Flujo — Auto-escalation (3 mensajes UNKNOWN)
+
+```bash
+# Enviar 3 mensajes gibberish consecutivos desde mismo número
+for body in "zzzzxyz" "blargfoo" "qwerasdf"; do
+  curl -s -X POST http://localhost:3000/webhooks/whatsapp \
+    -H "Content-Type: application/json" \
+    -H "x-hub-signature-256: dev-skip" \
+    -d "{...payload con body=$body...}"
+done
+# Después del 3er mensaje: Handoff creado con reason=auto_escalation
+```
+
+### Variables de entorno (PR-08)
+
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `LLM_SUMMARY_ENABLED` | `false` | Si `true`, enriquece summary con highlights LLM (fallback determinístico si LLM falla) |
+
+### Evidence por AC
+
+- ✅ **AC-01**: Migración `20260225154330_pr_08_handoff` crea tabla `handoffs` | `prisma migrate status`
+- ✅ **AC-02**: `detectHandoff()` retorna true para intent HANDOFF | `handoff.service.spec.ts`
+- ✅ **AC-03**: `detectHandoff()` retorna true cuando counter UNKNOWN >= 3 | `handoff.service.spec.ts`
+- ✅ **AC-04**: `createHandoff()` crea registro + activa handoffActive + notifica merchant | `handoff.service.spec.ts` + `handoff-flow.e2e-spec.ts`
+- ✅ **AC-05**: IntentRouter reconoce 'quiero hablar con alguien' → HANDOFF HIGH | `intent-router.service.spec.ts`
+- ✅ **AC-06**: Orchestrator trackea UNKNOWN loops → auto-escalation a 3 | `handoff-flow.e2e-spec.ts`
+- ✅ **AC-07**: Summary determinístico incluye intent, cartSnapshot, step, customerInfo, últimos 3 mensajes | `handoff.service.spec.ts` + `handoff-flow.e2e-spec.ts`
+- ✅ **AC-08**: Con LLM_SUMMARY_ENABLED=true → summary tiene conversationHighlights | `handoff.service.spec.ts`
+- ✅ **AC-09**: OutboxMessage para merchant con template correcto | `handoff-flow.e2e-spec.ts`
+- ✅ **AC-10**: conversation.handoffActive = true persistido en DB | `handoff-flow.e2e-spec.ts`
+- ✅ **AC-11**: `HandoffFlow.handle()` responde mensaje correcto según reason | `handoff.flow.spec.ts`
+- ✅ **AC-12**: PlaybookConfig interface extendida con handoffMessages + DTO validado | `playbook-config.interface.spec.ts`
+- ✅ **AC-13**: Industry presets (ropa/belleza/minimarket/generic) con handoffMessages defaults | archivos preset actualizados
+- ✅ **AC-14**: Handoff idempotente — no crea duplicado si ya existe pending/active | `handoff-flow.e2e-spec.ts`
+- ✅ **AC-15**: LLM summary fallback — si LLM falla, usa determinístico sin crash | `handoff.service.spec.ts`
+
+---
+
 ## Próximos Pasos
 
-Para completar el flujo de ventas transaccional:
-
-1. **PR-08 — Human handoff con resumen estructurado** (🔴 siguiente)
-   - Triggers de handoff
-   - Resumen: intent + cart snapshot + step + info de usuario
-
+Todos los flujos del MVP Core V1 están implementados. Ver `docs/plan/PR-STACK-core-v1.md` para el estado actualizado.

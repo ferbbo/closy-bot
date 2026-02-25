@@ -171,7 +171,21 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
     { phrase: 'direccion', weight: 2 },
     { phrase: 'ubicacion', weight: 2 },
   ],
-  HANDOFF: [],
+  // PR-08 REQ-03, AC-05: HANDOFF — human handoff request keywords
+  HANDOFF: [
+    { phrase: 'hablar con alguien', weight: 5 },
+    { phrase: 'quiero persona', weight: 5 },
+    { phrase: 'atencion humana', weight: 5 },
+    { phrase: 'hablar persona', weight: 5 },
+    { phrase: 'quiero hablar con alguien', weight: 5 },
+    { phrase: 'comunicarme con alguien', weight: 5 },
+    { phrase: 'agente', weight: 3 },
+    { phrase: 'representante', weight: 3 },
+    { phrase: 'hablar con agente', weight: 5 },
+    { phrase: 'ayuda humana', weight: 5 },
+    { phrase: 'necesito hablar', weight: 4 },
+    { phrase: 'con una persona', weight: 4 },
+  ],
   UNKNOWN: [],
   AMBIGUOUS: [], // REQ-05: No keywords, assigned when collision detected
 };

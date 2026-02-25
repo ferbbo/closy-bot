@@ -30,6 +30,8 @@ export interface PlaybookConfig {
   botPersonality?: BotPersonality;
   /** PR-GAP-2: FAQ array for keyword-based matching (no LLM, no embeddings) */
   faqs?: Faq[];
+  /** PR-08: Handoff messages for human handoff flow */
+  handoffMessages?: HandoffMessages;
 }
 
 /**
@@ -167,4 +169,17 @@ export interface PlaybookRules {
 export interface CartConfig {
   /** Cart TTL in hours (default 24) */
   ttlHours: number;
+}
+
+/**
+ * HandoffMessages (PR-08)
+ * Messages used by HandoffFlow for human handoff notifications
+ */
+export interface HandoffMessages {
+  /** Message sent to customer when they explicitly request handoff. Placeholder: {merchant_name} */
+  requestReceived: string;
+  /** Message sent to customer when auto-escalation is detected (3+ UNKNOWN loops) */
+  escalationDetected: string;
+  /** Template for merchant WhatsApp notification. Placeholders: {customerName}, {summary} */
+  merchantNotification: string;
 }

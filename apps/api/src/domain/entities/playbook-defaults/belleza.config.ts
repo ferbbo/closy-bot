@@ -124,4 +124,13 @@ export const BellezaPlaybookDefaults: PlaybookConfig = {
       answer: 'Tenemos muestras de algunos productos. ¿Cuál te interesa? ✨',
     },
   ],
+  // PR-08: Handoff messages for human handoff flow (AC-13)
+  handoffMessages: {
+    requestReceived:
+      '¡Claro! ✨ Te conecto con nuestro equipo de {merchant_name}. Un momento por favor...',
+    escalationDetected:
+      'Veo que necesitas orientación personalizada ✨ Te conecto con nuestro equipo. Un momento...',
+    merchantNotification:
+      '🔔 *Atención requerida*\n\n👤 Cliente: {customerName}\n\n{summary}',
+  },
 };

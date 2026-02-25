@@ -4,7 +4,7 @@
  * Evidence for AC-01: playbook-config interface has botPersonality + all 23 PlaybookMessages fields.
  */
 
-import { PlaybookConfig, PlaybookMessages, BotPersonality, Faq } from './playbook-config.interface';
+import { PlaybookConfig, PlaybookMessages, BotPersonality, Faq, HandoffMessages } from './playbook-config.interface';
 import { GenericPlaybookDefaults } from './playbook-defaults/generic.config';
 
 describe('AC-01: PlaybookConfig interface — botPersonality + PlaybookMessages completeness (PR-GAP-1)', () => {
@@ -116,5 +116,52 @@ describe('AC-01: PlaybookConfig interface — botPersonality + PlaybookMessages 
     delete (config as Partial<PlaybookConfig>).faqs;
     // Should compile and be valid without faqs
     expect(config.faqs).toBeUndefined();
+  });
+
+  // AC-12 (PR-08): HandoffMessages DTO validation
+  describe('AC-12 (PR-08): PlaybookConfig interface extendida con handoffMessages', () => {
+    it('AC-12: HandoffMessages interface has required string fields', () => {
+      // Compile-time guard: TypeScript fails to compile if fields are missing/wrong type
+      const hm: HandoffMessages = {
+        requestReceived: 'Conectando con un agente...',
+        escalationDetected: 'Te conecto con soporte...',
+        merchantNotification: '\uD83D\uDD14 Cliente: {customerName}\n{summary}',
+      };
+      expect(typeof hm.requestReceived).toBe('string');
+      expect(typeof hm.escalationDetected).toBe('string');
+      expect(typeof hm.merchantNotification).toBe('string');
+    });
+
+    it('AC-12: PlaybookConfig.handoffMessages is optional', () => {
+      // GenericPlaybookDefaults has handoffMessages defined
+      const config: PlaybookConfig = GenericPlaybookDefaults;
+      // The field should be present in generic preset
+      expect(config.handoffMessages).toBeDefined();
+    });
+
+    it('AC-12: PlaybookConfig.handoffMessages can be omitted (undefined is valid)', () => {
+      const config: PlaybookConfig = { ...GenericPlaybookDefaults };
+      delete (config as Partial<PlaybookConfig>).handoffMessages;
+      expect(config.handoffMessages).toBeUndefined();
+    });
+
+    it('AC-12: GenericPlaybookDefaults.handoffMessages has all required fields', () => {
+      const hm = GenericPlaybookDefaults.handoffMessages!;
+      expect(typeof hm.requestReceived).toBe('string');
+      expect(hm.requestReceived.length).toBeGreaterThan(0);
+      expect(typeof hm.escalationDetected).toBe('string');
+      expect(hm.escalationDetected.length).toBeGreaterThan(0);
+      expect(typeof hm.merchantNotification).toBe('string');
+      expect(hm.merchantNotification.length).toBeGreaterThan(0);
+    });
+
+    it('AC-12: HandoffMessages.merchantNotification supports {customerName} placeholder', () => {
+      const hm = GenericPlaybookDefaults.handoffMessages!;
+      // The template should include at least one placeholder
+      const hasPlaceholder =
+        hm.merchantNotification.includes('{customerName}') ||
+        hm.merchantNotification.includes('{summary}');
+      expect(hasPlaceholder).toBe(true);
+    });
   });
 });
