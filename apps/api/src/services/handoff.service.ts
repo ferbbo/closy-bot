@@ -349,7 +349,8 @@ Resumen natural:`;
 
     const playbookData = ctx.merchant;
     const playbook = this.playbookService.getPlaybookForMerchant(playbookData);
-    const template = playbook.handoffMessages?.merchantNotification ?? DEFAULT_MERCHANT_NOTIFICATION;
+    const template =
+      playbook.handoffMessages?.merchantNotification ?? DEFAULT_MERCHANT_NOTIFICATION;
 
     const cartText =
       summary.cartSnapshot.length > 0

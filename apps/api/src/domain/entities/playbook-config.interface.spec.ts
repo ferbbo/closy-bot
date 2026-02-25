@@ -4,7 +4,13 @@
  * Evidence for AC-01: playbook-config interface has botPersonality + all 23 PlaybookMessages fields.
  */
 
-import { PlaybookConfig, PlaybookMessages, BotPersonality, Faq, HandoffMessages } from './playbook-config.interface';
+import {
+  PlaybookConfig,
+  PlaybookMessages,
+  BotPersonality,
+  Faq,
+  HandoffMessages,
+} from './playbook-config.interface';
 import { GenericPlaybookDefaults } from './playbook-defaults/generic.config';
 
 describe('AC-01: PlaybookConfig interface — botPersonality + PlaybookMessages completeness (PR-GAP-1)', () => {
