@@ -92,6 +92,7 @@ Reglas obligatorias en modo paralelo:
 - [ ] brief.md tiene status APPROVED o AMENDED
 - [ ] Solo implementa REQs del brief (nada fuera del scope fence)
 - [ ] Cada AC tiene evidencia (test con `AC-XX` en el nombre o describe)
+- [ ] `pnpm typecheck` pasa (sin errores de tipado TypeScript)
 - [ ] `pnpm lint` pasa
 - [ ] `pnpm test` pasa
 - [ ] `.env.example` actualizado si hay nueva config
@@ -175,7 +176,8 @@ cd apps/api && \
    e. Tests → commit
    f. Docs (BACKEND-EXECUTION-GUIDE.md) → commit
 5. Si detectas gap -> abre SCR issue y **PARA**.
-6. Ejecuta `pnpm lint && pnpm test`.
+6. Ejecuta `pnpm typecheck && pnpm lint && pnpm test`.
+   - `typecheck` debe pasar con **cero errores** — corrige cualquier error de tipado antes de continuar.
 7. Si pasan -> llamar inmediatamente a agent/runSubagent con agent="Reviewer" y el prompt de Auto-Review.
 Si el Reviewer devuelve fixes, aplícalos y repite el ciclo hasta LGTM o SCR.
 
@@ -211,6 +213,7 @@ Nunca hagas un commit único gigante. Divide siempre por unidad de cambio cohere
 |------|-----------------|------------------|
 | `feat` | dominio, módulo | Al terminar una entidad/servicio funcional |
 | `refactor` | base, extracción | Al reestructurar sin cambiar comportamiento |
+| `fix(types)` | módulo | Al corregir errores de tipado TypeScript (`pnpm typecheck`) |
 | `test` | módulo, AC-ID | Al agregar/pasar tests de un AC |
 | `fix` | módulo | Al resolver un bug o fix del Reviewer |
 | `docs` | guide, env | Al actualizar BACKEND-EXECUTION-GUIDE.md / .env.example |
@@ -237,6 +240,7 @@ test(checkout): AC-05 checkout state transition tests
 docs(api): add cURL examples for checkout endpoints
 chore(db): migration for cart and order tables
 fix(auth): validate missing state param in OAuth callback
+fix(types): resolve TS2345 in onboarding.service.ts
 fix(review): address reviewer iter 2 - security P1 fixes
 fix(review): address reviewer iter 2 - test coverage P2 fixes
 ```
@@ -254,9 +258,11 @@ Iterar y pasar el hand-off AUTOMATICAMENTE hasta LGTM
 ### Flujo automatico:
 ```
 1. Implementar segun brief → commits atómicos por unidad
-2. Ejecutar pnpm lint && pnpm test
-3. tests pass? -> SI -> handoff "Auto-Review" (automatico)
-                -> NO -> fix tests, commit fix(tests): ..., volver a paso 2
+2. Ejecutar pnpm typecheck && pnpm lint && pnpm test
+3. ¿Todo pasa?
+   - typecheck falla → fix errores TS, commit fix(types): ..., volver a paso 2
+   - tests fallan   → fix tests, commit fix(tests): ..., volver a paso 2
+   - TODO OK        → handoff "Auto-Review" (automatico)
 4. Recibir verdict de Reviewer
 5. Si hay fixes P1/P2:
    a. Agrupar fixes por naturaleza (seguridad, tests, lógica, docs)
