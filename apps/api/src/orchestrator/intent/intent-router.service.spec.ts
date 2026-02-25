@@ -347,4 +347,41 @@ describe('IntentRouterService V2 (PR-03.5.1)', () => {
       expect(decision.confidence).toBe('HIGH');
     });
   });
+
+  // REQ-03 (PR-08), AC-05: IntentRouter recognizes HANDOFF keywords
+  describe('AC-05 (PR-08): HANDOFF intent recognized by IntentRouter', () => {
+    it("should classify 'quiero hablar con alguien' as HANDOFF with HIGH confidence", () => {
+      const decision = service.classify('quiero hablar con alguien');
+
+      expect(decision.intent).toBe('HANDOFF');
+      expect(decision.confidence).toBe('HIGH');
+    });
+
+    it("should classify 'quiero persona' as HANDOFF with HIGH confidence", () => {
+      const decision = service.classify('quiero persona');
+
+      expect(decision.intent).toBe('HANDOFF');
+      expect(decision.confidence).toBe('HIGH');
+    });
+
+    it("should classify 'hablar con agente' as HANDOFF with HIGH confidence", () => {
+      const decision = service.classify('hablar con agente');
+
+      expect(decision.intent).toBe('HANDOFF');
+      expect(decision.confidence).toBe('HIGH');
+    });
+
+    it("should classify 'atencion humana' as HANDOFF with HIGH confidence", () => {
+      const decision = service.classify('atencion humana');
+
+      expect(decision.intent).toBe('HANDOFF');
+      expect(decision.confidence).toBe('HIGH');
+    });
+
+    it("should NOT classify a normal product search as HANDOFF", () => {
+      const decision = service.classify('busco camisetas talla M');
+
+      expect(decision.intent).not.toBe('HANDOFF');
+    });
+  });
 });

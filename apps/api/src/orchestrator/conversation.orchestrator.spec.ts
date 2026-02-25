@@ -17,6 +17,8 @@ import { FaqFlow } from './flows/faq.flow'; // PR-GAP-2
 import { CheckoutFlow } from './flows/checkout.flow'; // PR-05
 import { PaymentFallbackFlow } from './flows/payment-fallback.flow'; // PR-06
 import { PostSaleFlow } from './flows/post-sale.flow'; // PR-07
+import { HandoffFlow } from './flows/handoff.flow'; // PR-08
+import { HandoffService } from '../services/handoff.service'; // PR-08
 import { MerchantCommandParserService } from '../services/merchant-command-parser.service'; // PR-05.1
 import { MerchantCommandService } from '../services/merchant-command.service'; // PR-05.1
 import { MessageRelayService } from '../services/message-relay.service'; // PR-05.2
@@ -188,6 +190,21 @@ describe('ConversationOrchestrator', () => {
             handle: jest.fn().mockResolvedValue('Post-sale response'),
             handleOrderStatus: jest.fn().mockResolvedValue('Order status response'),
             handleCreateTicket: jest.fn().mockResolvedValue('Ticket created response'),
+          },
+        },
+        // PR-08: HandoffFlow + HandoffService mocks
+        {
+          provide: HandoffFlow,
+          useValue: {
+            handle: jest.fn().mockResolvedValue('Te conecto con nuestro equipo. Un momento...'),
+          },
+        },
+        {
+          provide: HandoffService,
+          useValue: {
+            detectHandoff: jest.fn().mockReturnValue(false),
+            createHandoff: jest.fn().mockResolvedValue({ id: 'handoff-1', status: 'pending' }),
+            generateSummary: jest.fn().mockResolvedValue({}),
           },
         },
         {

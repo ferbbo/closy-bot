@@ -13,6 +13,8 @@ import { FaqFlow } from './flows/faq.flow'; // PR-GAP-2
 import { CheckoutFlow } from './flows/checkout.flow'; // PR-05
 import { PaymentFallbackFlow } from './flows/payment-fallback.flow'; // PR-06
 import { PostSaleFlow } from './flows/post-sale.flow'; // PR-07
+import { HandoffFlow } from './flows/handoff.flow'; // PR-08
+import { HandoffService } from '../services/handoff.service'; // PR-08
 import { ServicesModule } from '../services/services.module';
 import { LlmModule } from '../llm/llm.module';
 import { PersistenceModule } from '../persistence/persistence.module'; // PR-03.10
@@ -44,6 +46,8 @@ import { CommonModule } from '../common/common.module'; // PR-03.10 AC-06
     CheckoutFlow, // PR-05
     PaymentFallbackFlow, // PR-06
     PostSaleFlow, // PR-07
+    HandoffFlow, // PR-08
+    HandoffService, // PR-08 (here instead of ServicesModule to avoid circular deps with LlmModule)
   ],
   exports: [ConversationOrchestrator],
 })
