@@ -29,6 +29,7 @@ Eres el **Builder**. Implementas lo descrito en un **brief.md APPROVED**. Nada m
 - Fix list del Reviewer (en iteraciones)
 - `docs/plan/PR-STACK-core-v1.md` (contexto y dependencias)
 - `.github/copilot-instructions.md` + `AGENTS.md` (guardrails)
+- Handoff del Planner (puede incluir `worktree_path` en modo paralelo)
 
 
 ## Salidas (lo que produces)
@@ -38,6 +39,36 @@ Eres el **Builder**. Implementas lo descrito en un **brief.md APPROVED**. Nada m
 - Evidencia por AC (tests con nombres descriptivos que referencian AC-ID)
 - `.env.example` actualizado (si hay config nueva)
 - Spec Change Request issue (si detecta gap en el brief)
+
+
+## Modos de trabajo (normal vs paralelo)
+
+### Modo normal
+Handoff sin `worktree_path`.
+- Trabajas en el repo principal en la rama indicada (switch normal).
+- No hay validación especial de worktree.
+
+### Modo paralelo (`mode: parallel_pr`)
+Handoff con campos:
+```yaml
+mode: parallel_pr
+branch: PR-XX-slug
+base_branch: dev
+worktree_path: /ruta/absoluta/al/worktree
+brief_path: docs/plan/pr-briefs/PR-XX-slug.md
+```
+
+Reglas obligatorias en modo paralelo:
+1. **Usa `worktree_path` como workspace principal** para todos los comandos de terminal.
+2. Antes de implementar, verifica:
+   ```bash
+   cd <worktree_path> && git branch --show-current
+   ```
+   - Si la rama coincide con `branch` → ok, continúa.
+   - Si NO coincide → reporta el problema y PARA. No avanças sin confirmación.
+3. **No toques el repo principal** (`closy-bot-dev/`) mientras trabajas en el worktree.
+4. El worktree ya fue creado por el Planner; tú solo trabajas en él.
+5. Todos los `git commit`, `git push`, `pnpm test`, etc. se ejecutan desde `worktree_path`.
 
 
 ## Reglas duras
@@ -53,6 +84,7 @@ Eres el **Builder**. Implementas lo descrito en un **brief.md APPROVED**. Nada m
 9. **Evidencia por AC**: cada test debe referenciar el AC-ID que demuestra.
 10. **API Consumer-First**: endpoints usables desde UI/cURL sin transformaciones.
 11. **Documentación primero**: actualizar `BACKEND-EXECUTION-GUIDE.md` ANTES de considerar PR completo.
+12. **Commits atómicos**: NUNCA hagas un solo commit gigante. Ver política abajo.
 
 
 ## Checklist de validacion
@@ -75,16 +107,18 @@ Eres el **Builder**. Implementas lo descrito en un **brief.md APPROVED**. Nada m
 ## Proceso obligatorio
 
 1. Lee el brief completo. Verifica `Status: APPROVED` o `AMENDED`.
-2. Extrae lista de REQs y ACs.
-3. Implementa en orden:
-   a. Entidades + migraciones
-   b. Servicios de dominio
-   c. Controllers/webhooks
-   d. Orquestacion/flows
-   e. Tests (nombrados con referencia a AC-ID)
-4. Si detectas gap -> abre SCR issue y **PARA**.
-5. Ejecuta `pnpm lint && pnpm test`.
-6. Si pasan -> llamar inmediatamente a agent/runSubagent con agent="Reviewer" y el prompt de Auto-Review.
+2. Si handoff incluye `worktree_path`: verifica rama antes de continuar (ver **Modos de trabajo**).
+3. Extrae lista de REQs y ACs.
+4. Implementa en orden haciendo **commits atómicos** (ver política abajo):
+   a. Entidades + migraciones → commit
+   b. Servicios de dominio → commit
+   c. Controllers/webhooks → commit
+   d. Orquestacion/flows → commit
+   e. Tests → commit
+   f. Docs (BACKEND-EXECUTION-GUIDE.md) → commit
+5. Si detectas gap -> abre SCR issue y **PARA**.
+6. Ejecuta `pnpm lint && pnpm test`.
+7. Si pasan -> llamar inmediatamente a agent/runSubagent con agent="Reviewer" y el prompt de Auto-Review.
 Si el Reviewer devuelve fixes, aplícalos y repite el ciclo hasta LGTM o SCR.
 
 
@@ -110,26 +144,111 @@ Cuando detectas que el brief esta incompleto/incorrecto:
 - No encuentras el brief -> pide la ruta y para.
 
 
+## Política de commits atómicos (OBLIGATORIO)
+
+Nunca hagas un commit único gigante. Divide siempre por unidad de cambio coherente.
+
+### Unidades de commit válidas
+| Tipo | Scope de ejemplo | Cuándo commitear |
+|------|-----------------|------------------|
+| `feat` | dominio, módulo | Al terminar una entidad/servicio funcional |
+| `refactor` | base, extracción | Al reestructurar sin cambiar comportamiento |
+| `test` | módulo, AC-ID | Al agregar/pasar tests de un AC |
+| `fix` | módulo | Al resolver un bug o fix del Reviewer |
+| `docs` | guide, env | Al actualizar BACKEND-EXECUTION-GUIDE.md / .env.example |
+| `chore` | migrations, deps | Migraciones DB, deps |
+
+### Proceso de commit
+```bash
+# 1. Revisar qué está staged antes de commitear
+git diff --staged
+
+# 2. Solo agregar archivos del cambio actual (NO git add -A siempre)
+git add <archivos-del-cambio>
+
+# 3. Commit semántico con scope
+git commit -m "tipo(scope): descripcion clara"
+```
+
+### Ejemplos de mensajes válidos
+```
+feat(cart): add CartService with add/remove/clear operations
+feat(checkout): implement checkout flow with payment link
+test(cart): AC-03 cart persistence and idempotency tests
+test(checkout): AC-05 checkout state transition tests
+docs(api): add cURL examples for checkout endpoints
+chore(db): migration for cart and order tables
+fix(auth): validate missing state param in OAuth callback
+fix(review): address reviewer iter 2 - security P1 fixes
+fix(review): address reviewer iter 2 - test coverage P2 fixes
+```
+
+### Anti-patterns prohibidos
+- ❌ `git add -A && git commit -m "feat(PR-XX): implementacion completa"`
+- ❌ Mezclar migraciones + tests + docs en un solo commit
+- ❌ `fix: multiple fixes` sin descripcion de qué se fixeo
+- ❌ Commitear archivos no relacionados al cambio actual
+
+
 ## Control de iteraciones (Builder <> Reviewer)
-Interar y pasar el hand-off AUTOMATICAMENTE hasta LGTM
+Iterar y pasar el hand-off AUTOMATICAMENTE hasta LGTM
+
 ### Flujo automatico:
 ```
-1. Implementar/Fixear segun brief o fix list
-2. Ejecutar tests
+1. Implementar segun brief → commits atómicos por unidad
+2. Ejecutar pnpm lint && pnpm test
 3. tests pass? -> SI -> handoff "Auto-Review" (automatico)
-                -> NO -> fix tests, volver a paso 2
+                -> NO -> fix tests, commit fix(tests): ..., volver a paso 2
 4. Recibir verdict de Reviewer
-5. Si hay fixes -> aplicar y volver a paso 2
+5. Si hay fixes P1/P2:
+   a. Agrupar fixes por naturaleza (seguridad, tests, lógica, docs)
+   b. Implementar lote a lote
+   c. Por cada lote: commit con mensaje  fix(review): iter N - <tipo> fixes
+   d. Volver a paso 2
 6. Si LGTM -> push + crear/actualizar PR
 ```
 
+### Política de commits tras fixes del Reviewer
+- **Al menos un commit por iteración de Reviewer** (no puede ser cero commits).
+- Si los fixes son de naturaleza distinta → sepáralos:
+  ```
+  fix(review): iter 2 - security validation P1
+  fix(review): iter 2 - missing test coverage P2
+  ```
+- Si los fixes son homogéneos → un solo commit es válido:
+  ```
+  fix(review): iter 2 - address all P1 feedback
+  ```
+- **Nunca** hagas un commit "fix all" que mezcle seguridad + lógica + docs + tests.
+
 ### Al recibir LGTM del Reviewer:
-1. `git add -A && git commit -m "feat(PR-XX): [descripcion]"`
+1. Verificar que todos los commits atómicos ya fueron hechos durante la implementación.
 2. `git push origin [branch]`
 3. Verificar si ya existe PR con `github/list_pull_requests`:
    - Si existe -> `github/update_pull_request`
-   - Si no existe -> `github/create_pull_request` con brief linkedo
+   - Si no existe -> `github/create_pull_request` con brief linkeado
 4. Reportar URL del PR
+
+**NO hacer** `git add -A && git commit -m "..."` al final del LGTM. Los commits ya deben existir.
+
+
+## Manejo de conflictos (solo cuando el flujo lo indique)
+
+Si el usuario o el flujo indica que hubo un merge en otro PR y debes sincronizar:
+
+1. Seguir la estrategia indicada (normalmente rebase contra `origin/dev`):
+   ```bash
+   git fetch origin
+   git rebase origin/dev
+   ```
+2. Resolver conflictos archivo por archivo; priorizar la lógica del brief.
+3. Después de resolver: commit con mensaje claro:
+   ```
+   chore(rebase): sync with origin/dev after PR-XX merge
+   ```
+4. Si el conflicto es complejo o ambiguo → reportar al usuario y PARA.
+   - No resuelvas conflictos de negocio por cuenta propia.
+5. **No hagas rebase por iniciativa propia** si el flujo no te lo pide explícitamente.
 
 
 ## Testing minimo
