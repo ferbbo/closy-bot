@@ -56,9 +56,10 @@ model Merchant {
   apiKey         String    @unique @map("api_key")
   industry       Industry? // PR-11: Playbook industry
   playbookConfig Json?     @map("playbook_config") // PR-11: Custom playbook overrides
-  botPaused      Boolean   @default(false) @map("bot_paused") // PR-05.1: Pause bot processing for customers
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  botPaused      Boolean        @default(false) @map("bot_paused") // PR-05.1: Pause bot processing for customers
+  status         MerchantStatus @default(onboarding) @map("status") // PR-OB-01: Onboarding lifecycle
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
 
   conversations  Conversation[]
   categories     Category[]
@@ -99,6 +100,13 @@ enum Industry {
   ropa
   belleza
   minimarket
+}
+
+/// MerchantStatus enum for onboarding lifecycle (PR-OB-01)
+enum MerchantStatus {
+  onboarding
+  active
+  paused
 }
 
 /// ConversationType distinguishes customer conversations from merchant admin sessions (PR-05.1)
