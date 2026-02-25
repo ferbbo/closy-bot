@@ -97,6 +97,22 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
     { phrase: 'proceder al pago', weight: 5 },
     { phrase: 'completar compra', weight: 5 },
   ],
+
+  // PR-06 REQ-07: CONFIRM_PAYMENT — fallback manual "PAGADO" command (AC-09)
+  CONFIRM_PAYMENT: [
+    { phrase: 'pagado', weight: 5 },
+    { phrase: 'ya pague', weight: 5 },
+    { phrase: 'ya pagüé', weight: 5 },
+    { phrase: 'pague', weight: 4 },
+    { phrase: 'transferí', weight: 5 },
+    { phrase: 'transferi', weight: 5 },
+    { phrase: 'ya transferí', weight: 5 },
+    { phrase: 'hice el pago', weight: 5 },
+    { phrase: 'hice la transferencia', weight: 5 },
+    { phrase: 'realice el pago', weight: 4 },
+    { phrase: 'ya pague mi pedido', weight: 5 },
+    { phrase: 'confirmar pago', weight: 5 },
+  ],
   QUERY_FAQ: [
     // Envío
     { phrase: 'envio', weight: 4 },

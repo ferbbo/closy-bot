@@ -1,8 +1,8 @@
 # Brief — PR-06 — Pagos: webhook idempotente + fallback comando `PAGADO`
 
-> **Status**: `DRAFT`
+> **Status**: `APPROVED`
 > **Archivo**: `docs/plan/pr-briefs/PR-06-payment-confirmation.md`
-> **Issue**: TBD (se creará post-BRIEF GATE)
+> **Issue**: #90
 > **Regla**: Max 2 páginas. Spec-locked. Sin scope extra.
 
 ## Objetivo
