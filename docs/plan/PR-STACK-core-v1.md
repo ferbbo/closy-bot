@@ -270,6 +270,28 @@
   - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
 - **Known Limitations:** Rate limit es por IP (no per-merchant). Ver PR-14.1 para mejora.
 
+### PR-FE-00 — Backend CORS: Habilitar cross-origin para dashboard ✅ MERGED
+- **Issue:** [#65](https://github.com/ferbbo/closy-bot/issues/65)
+- **PR:** [#66](https://github.com/ferbbo/closy-bot/pull/66)
+- **Brief:** [`docs/plan/pr-briefs/PR-FE-00-backend-cors.md`](docs/plan/pr-briefs/PR-FE-00-backend-cors.md)
+- **Objetivo:** configurar CORS en NestJS para permitir requests desde frontend dashboard.
+- **Depende de:** Ninguno.
+- **Incluye:**
+  - Configuración CORS en `main.ts` con `app.enableCors()`
+  - Env vars: `CORS_ORIGINS` (comma-separated)
+  - Defaults: `http://localhost:3001` para dev
+  - Credentials: `true` (para cookies de sesión)
+  - Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS
+  - Allowed headers: Content-Type, Cookie, x-api-key, Authorization
+  - Exposed headers: Set-Cookie
+  - Actualización de `.env.example`
+  - Tests E2E (`cors.e2e-spec.ts`)
+- **Excluye:** rate limiting por origen, CORS dinámico.
+- **DoD específico:**
+  - Requests desde `localhost:3001` con cookies funcionan
+  - Origen no permitido → bloqueado
+  - `pnpm lint`, `pnpm test` pasan
+
 ---
 
 ## Roadmap de Ejecución — Bloques Ordenados
@@ -654,7 +676,7 @@ graph TD
 
 #### Fase 1.3 (paralelizable)
 
-##### PR-05.1 — Merchant Commands: pipeline de operaciones WhatsApp 🔴 NUEVO P0
+##### PR-05.1 — Merchant Commands: pipeline de operaciones WhatsApp ✅ MERGED
 - **Objetivo:** permitir que el merchant administre pedidos desde WhatsApp (confirmar, rechazar, marcar pagado, marcar enviado, ver pendientes).
 - **Depende de:** PR-05.
 - **Incluye:**
@@ -695,7 +717,7 @@ graph TD
   - `botPaused` solo afecta mensajes de clientes, no respuestas a merchant commands
   - State transitions validadas (no puede enviar si no está confirmado)
 
-##### PR-06 — Pagos: webhook idempotente + fallback comando `PAGADO` 🔴 CRÍTICO
+##### PR-06 — Pagos: webhook idempotente + fallback comando `PAGADO` ✅ MERGED
 - **Objetivo:** confirmar pagos por webhook idempotente (`payment_intent_id`) y fallback textual `PAGADO`.
 - **Depende de:** PR-05.
 - **Incluye:**
@@ -728,7 +750,7 @@ graph TD
 
 #### Fase 2.1 (paralelizable)
 
-##### PR-07 — Postventa: estado de pedido + tickets simples 🟡
+##### PR-07 — Postventa: estado de pedido + tickets simples ✅ MERGED
 - **Objetivo:** cliente consulta estado de pedido y crea tickets (faltante/dañado/retraso). **Template-first** — flows determinísticos con templates para cada situación.
 - **Depende de:** PR-06.
 - **Incluye:**
@@ -749,7 +771,7 @@ graph TD
   - Sin pedido activo → mensaje claro
   - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
 
-##### PR-05.2 — Message Relay: merchant ↔ cliente vía bot 🟡
+##### PR-05.2 — Message Relay: merchant ↔ cliente vía bot ✅ MERGED
 - **Issue:** [#94](https://github.com/ferbbo/closy-bot/issues/94)
 - **Brief:** [`docs/plan/pr-briefs/PR-05.2-message-relay.md`](../blob/main/docs/plan/pr-briefs/PR-05.2-message-relay.md)
 - **Objetivo:** permitir que merchant envíe mensajes directos a un cliente (y viceversa en handoff) vía el bot como intermediario.
@@ -809,25 +831,6 @@ graph TD
 > Torre de control para el merchant. APIs backend pueden empezar en paralelo con Bloques 1-2.
 
 #### Fase 3.1 (paralelizable — APIs backend sin dependencias de Bloque 1-2)
-
-##### PR-FE-00 — Backend CORS: Habilitar cross-origin para dashboard 🔵 INFRASTRUCTURE
-- **Objetivo:** configurar CORS en NestJS para permitir requests desde frontend dashboard.
-- **Depende de:** Ninguno.
-- **Incluye:**
-  - Configuración CORS en `main.ts` con `app.enableCors()`
-  - Env vars: `CORS_ORIGINS` (comma-separated)
-  - Defaults: `http://localhost:3001` para dev
-  - Credentials: `true` (para cookies de sesión)
-  - Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS
-  - Allowed headers: Content-Type, Cookie, x-api-key, Authorization
-  - Exposed headers: Set-Cookie
-  - Actualizar `.env.example`
-  - Tests E2E
-- **Excluye:** rate limiting por origen, CORS dinámico.
-- **DoD específico:**
-  - Requests desde `localhost:3001` con cookies funcionan
-  - Origen no permitido → bloqueado
-  - `pnpm lint`, `pnpm test` pasan
 
 ##### PR-15 — Merchant Settings API: Playbook Config + Profile Update 🟡
 - **Issue:** [#55](https://github.com/ferbbo/closy-bot/issues/55)
