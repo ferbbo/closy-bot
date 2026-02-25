@@ -31,6 +31,12 @@ export const envValidationSchema = Joi.object({
   LLM_CONTEXT_LAST_K: Joi.number().min(1).max(50).default(10),
   SUMMARIZATION_BATCH_SIZE: Joi.number().min(1).max(100).default(20),
 
+  // Outbox dispatcher configuration
+  OUTBOX_DISPATCHER_ENABLED: Joi.string().valid('true', 'false').default('true'),
+  OUTBOX_BATCH_SIZE: Joi.number().integer().min(1).default(10),
+  OUTBOX_LOCK_TTL_SECONDS: Joi.number().integer().min(1).default(300),
+  OUTBOX_MAX_ATTEMPTS: Joi.number().integer().min(1).default(5),
+
   // PR-03.5.2: Catalog Full-Text Search configuration
   CATALOG_FTS_ENABLED: Joi.boolean().default(true),
 

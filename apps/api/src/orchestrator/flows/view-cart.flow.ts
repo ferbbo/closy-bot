@@ -46,7 +46,7 @@ export class ViewCartFlow {
 
       return this.formatCartSummary(merchant, summary);
     } catch (error) {
-      this.logger.error(`Failed to show cart: ${error.message}`, error.stack);
+      this.logger.error(`Failed to show cart: ${(error as Error).message}`, (error as Error).stack);
       return this.playbookService.getMessage(merchant, 'genericError', {
         action: 'mostrar el carrito',
       });

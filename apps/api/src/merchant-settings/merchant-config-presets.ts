@@ -2,7 +2,7 @@
  * PR-04.5: MerchantConfig industry presets
  * Default configuration per industry (ropa, belleza, minimarket)
  */
-import { MerchantConfigData } from '../../domain/entities/merchant-config.interface';
+import { MerchantConfigData } from '../domain/entities/merchant-config.interface';
 
 export const MERCHANT_CONFIG_PRESETS: Record<string, MerchantConfigData> = {
   ropa: {

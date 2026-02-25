@@ -63,7 +63,19 @@ Eres el **Reviewer**. Validas el codigo **contra el brief.md** y sus AC/DoD.
 
 1. **Brief compliance**: cada REQ implementado, nada fuera del scope fence
 2. **AC verification**: cada AC cumplido + tiene evidencia
-3. **API Consumer-First**:
+3. **TypeScript correctness** (P1 si falla cualquiera):
+   - `npx tsc --noEmit` retorna 0 errores
+   - Props de DTOs/Entities NestJS tienen `!` (TS2564)
+   - Catch blocks usan `(error as Error).message` (TS18046)
+   - Asignaciones a campos Prisma Json usan `as unknown as Prisma.InputJsonValue`
+   - Imports default correctos (no `import * as X` con esModuleInterop)
+   - Enums de dominio/Prisma usados en vez de string literals equivalentes
+4. **Env vars** (P1 si falla):
+   - Toda nueva var env está en `env.validation.ts` con tipo Joi correcto
+   - Vars numéricas declaradas `Joi.number()`, no `Joi.string()`
+   - `Number()` wrapping aplicado donde se usan en `$queryRaw` o comparaciones SQL
+   - `.env.example` sincronizado con `env.validation.ts`
+5. **API Consumer-First**:
    - Endpoints usables desde UI sin transformaciones (ej: file upload con multipart)
    - cURL examples funcionan copy-paste (testear mentalmente)
    - Auth method consistente con endpoints similares

@@ -76,10 +76,10 @@ export class UpdateCartItemFlow {
         quantity: String(quantity),
       });
     } catch (error) {
-      this.logger.error(`Failed to update quantity: ${error.message}`, error.stack);
+      this.logger.error(`Failed to update quantity: ${(error as Error).message}`, (error as Error).stack);
 
       // Handle stock validation errors gracefully
-      if (error.message.includes('Stock insuficiente')) {
+      if ((error as Error).message.includes('Stock insuficiente')) {
         return this.playbookService.getMessage(merchant, 'noStock', { product_name: '' });
       }
 

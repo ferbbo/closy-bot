@@ -31,9 +31,9 @@ export class OutboxDispatcherService implements OnModuleInit {
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
   ) {
     this.lockId = `dispatcher-${process.pid}-${Date.now()}`;
-    this.batchSize = this.configService.get<number>('OUTBOX_BATCH_SIZE', 10);
-    this.lockTtlSeconds = this.configService.get<number>('OUTBOX_LOCK_TTL_SECONDS', 300);
-    this.maxAttempts = this.configService.get<number>('OUTBOX_MAX_ATTEMPTS', 5);
+    this.batchSize = Number(this.configService.get<number>('OUTBOX_BATCH_SIZE', 10));
+    this.lockTtlSeconds = Number(this.configService.get<number>('OUTBOX_LOCK_TTL_SECONDS', 300));
+    this.maxAttempts = Number(this.configService.get<number>('OUTBOX_MAX_ATTEMPTS', 5));
     this.enabled = this.configService.get<string>('OUTBOX_DISPATCHER_ENABLED', 'true') === 'true';
   }
 

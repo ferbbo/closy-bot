@@ -158,7 +158,7 @@ export class CheckoutFlow {
 
   /** REQ-07 Step 3: Show payment methods and capture selection (AC-08) */
   private async handleSelectPayment(
-    _merchant: MerchantPlaybookData,
+    merchant: MerchantPlaybookData,
     conversationId: string,
     merchantId: string,
     text: string,

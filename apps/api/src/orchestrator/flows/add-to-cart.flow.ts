@@ -120,10 +120,10 @@ export class AddToCartFlow {
         summary,
       );
     } catch (error) {
-      this.logger.error(`Failed to add to cart: ${error.message}`, error.stack);
+      this.logger.error(`Failed to add to cart: ${(error as Error).message}`, (error as Error).stack);
 
       // Handle stock validation errors gracefully
-      if (error.message.includes('Stock insuficiente')) {
+      if ((error as Error).message.includes('Stock insuficiente')) {
         return this.playbookService.getMessage(merchant, 'noStock', { product_name: '' });
       }
 

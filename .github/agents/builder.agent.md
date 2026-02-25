@@ -104,6 +104,64 @@ Reglas obligatorias en modo paralelo:
   - [ ] Auth method es consistente con endpoints similares
 - [ ] **BACKEND-EXECUTION-GUIDE.md actualizado** con cURL examples para cada endpoint nuevo
 
+## Pre-handoff TypeScript Gate (OBLIGATORIO antes de pasar al Reviewer)
+
+> Fallar alguno de estos bloquea el handoff — NO enviar al Reviewer hasta que todos pasen.
+
+### 1. TypeScript compile — 0 errores
+```bash
+npx tsc --noEmit 2>&1 | grep "error TS"
+# Debe retornar vacío
+```
+
+### 2. Checklist anti-patrones NestJS/TypeScript
+
+**DTOs y Entities:**
+- [ ] Toda propiedad en clases DTO/Entity/Response con decoradores NestJS tiene `!` (ej: `name!: string`)
+- [ ] No hay `constructor()` vacío en clases que usan inyección de dependencias
+
+**Errores en catch blocks:**
+- [ ] Todo `catch (error)` usa `(error as Error).message` o guard `instanceof Error`
+- [ ] Nunca `error.message` directo sin casting
+
+**Prisma JSON:**
+- [ ] Toda asignación a campo `Json`/`JsonValue` de Prisma usa `as unknown as Prisma.InputJsonValue`
+- [ ] `import { Prisma }` está en cada archivo que use `Prisma.InputJsonValue`
+
+**Imports:**
+- [ ] Módulos con default export usan `import X from 'pkg'` (no `import * as X`)
+- [ ] Paths relativos `../` verificados según profundidad del archivo
+- [ ] Enums de Prisma/dominio usados en vez de string literals equivalentes
+
+### 3. Variables de entorno — nueva config
+
+Si el PR agrega variables de entorno:
+- [ ] Variable declarada en `.env.example` con valor ejemplo
+- [ ] Variable declarada en `apps/api/src/common/config/env.validation.ts` con tipo Joi correcto:
+  - Números: `Joi.number().integer().min(1).default(N)` — **nunca** `Joi.string()` para vars numéricas
+  - Booleanos: `Joi.boolean().default(false)` o `Joi.string().valid('true','false').default('true')`
+  - Strings opcionales que pueden ser vacíos: `Joi.string().optional().allow('')`
+- [ ] Donde se consume: se wrappea con `Number()` si la var es numérica (ConfigService puede retornar string)
+
+### 4. Prisma $queryRaw / $executeRaw
+
+Si el PR usa raw SQL:
+- [ ] Parámetros `LIMIT`, `OFFSET` o comparaciones numéricas están wrapeados: `Number(this.configService.get(...))`
+- [ ] Parámetros vienen de `Prisma.sql` tagged template, no concatenación de strings
+
+### 5. Build check
+
+- [ ] `nest-cli.json` tiene `"deleteOutDir": false` si `tsconfig` usa `"incremental": true`
+- [ ] Si es primera compilación local: borrar `tsconfig.build.tsbuildinfo` antes del build
+
+### Comando de verificación completa (copiar-pegar):
+```bash
+cd apps/api && \
+  npx tsc --noEmit 2>&1 | grep "error TS" && \
+  pnpm lint && \
+  pnpm test
+```
+
 
 ## Proceso obligatorio
 

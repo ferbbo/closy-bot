@@ -56,8 +56,8 @@ export class MerchantConfigService {
     const created = await this.prisma.merchantConfig.create({
       data: {
         merchantId,
-        paymentMethods: preset.paymentMethods as Prisma.InputJsonValue,
-        shippingConfig: preset.shippingConfig as Prisma.InputJsonValue,
+        paymentMethods: preset.paymentMethods as unknown as Prisma.InputJsonValue,
+        shippingConfig: preset.shippingConfig as unknown as Prisma.InputJsonValue,
         returnPolicy: preset.returnPolicy ?? null,
         currency: preset.currency,
         orderCodePrefix: preset.orderCodePrefix,
@@ -88,7 +88,7 @@ export class MerchantConfigService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: Record<string, any> = {};
     if (dto.paymentMethods !== undefined) {
-      updateData['paymentMethods'] = dto.paymentMethods as Prisma.InputJsonValue;
+      updateData['paymentMethods'] = dto.paymentMethods as unknown as Prisma.InputJsonValue;
     }
     if (dto.shippingConfig !== undefined) {
       updateData['shippingConfig'] = dto.shippingConfig as Prisma.InputJsonValue;

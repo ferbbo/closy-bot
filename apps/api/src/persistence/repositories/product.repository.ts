@@ -175,7 +175,7 @@ export class ProductRepository {
         return rankB - rankA;
       });
     } catch (error) {
-      this.logger.error(`FTS query failed: ${error.message}`, error.stack);
+      this.logger.error(`FTS query failed: ${(error as Error).message}`, (error as Error).stack);
       // Fallback to ILIKE on error
       return this.search(merchantId, query, limit, true);
     }

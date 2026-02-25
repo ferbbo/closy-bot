@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma, OutboxChannel, OutboxMessageType } from '@prisma/client';
 import { OutboxRepository } from '../repositories/outbox.repository';
-import { OutboxChannel, OutboxMessageType } from '@prisma/client';
 import { maskPhone } from '../../common/utils/pii.util';
 
 export interface EnqueueWhatsAppTextParams {
@@ -69,7 +69,7 @@ export class OutboxService {
       channel: OutboxChannel;
       type: OutboxMessageType;
       to: string;
-      payloadJson: Record<string, unknown>;
+      payloadJson: Prisma.InputJsonValue;
       dedupeKey: string;
       channelRef?: { connect: { id: string } };
     } = {
@@ -78,7 +78,7 @@ export class OutboxService {
       channel: OutboxChannel.WHATSAPP,
       type: OutboxMessageType.SEND_TEXT,
       to,
-      payloadJson,
+      payloadJson: payloadJson as unknown as Prisma.InputJsonValue,
       dedupeKey: finalDedupeKey,
     };
 

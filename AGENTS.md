@@ -64,6 +64,49 @@ Principios:
 - Diffs pequenos, incrementales.
 - Tests para paths criticos (idempotencia, transiciones de estado).
 
+### 3.5 TypeScript & Build correctness (ANTI-PATRONES CONOCIDOS)
+
+> Errores reales que ocurrieron en este repo. El Builder los verifica ANTES de pasar al Reviewer.
+
+#### TypeScript — errores de compilación
+
+| Anti-patrón | Fix obligatorio |
+|---|---|
+| Propiedad de clase NestJS sin inicializador (TS2564) | Agregar `!` a TODAS las props de DTOs, Entities y Response classes con decoradores NestJS |
+| `error` en catch block con tipo `unknown` (TS18046) | Usar `(error as Error).message` o `instanceof Error` guard. Nunca `error.message` directo |
+| Objeto/Record asignado a `JsonValue` de Prisma (TS2322) | Siempre usar patrón `as unknown as Prisma.InputJsonValue` (doble cast obligatorio) |
+| `import * as pkg` con esModuleInterop activo (TS2349) | Usar `import pkg from 'pkg'` para módulos con export default (ej: cookie-parser) |
+| Path relativo incorrecto en `import` (TS2307) | Verificar profundidad `../` al crear archivos en subdirectorios nuevos |
+| Paquete npm sin tipos (TS7016) | Instalar `@types/pkg` o crear `src/types/pkg.d.ts` con `declare module 'pkg' { ... }` |
+| Enum vs string literal (TS2345) | Usar el enum importado (`Channel.WHATSAPP`) en vez de string crudo (`'whatsapp'`) |
+| `Prisma.X` sin importar namespace `Prisma` (TS2503) | Agregar `Prisma` al import de `@prisma/client` explícitamente |
+
+#### Runtime — errores en ejecución
+
+| Anti-patrón | Fix obligatorio |
+|---|---|
+| `configService.get<number>('VAR')` devuelve `string` | Wrappear con `Number()` explícito; **Y** declarar la var como `Joi.number()` en `env.validation.ts` |
+| Variable de entorno nueva usada pero no declarada en Joi | SIEMPRE agregar cada nueva var a `env.validation.ts` **antes** de usarla |
+| Parámetros `LIMIT`/`attempts <` en `$queryRaw` como string | Los valores numéricos de ConfigService deben pasarse como `Number(value)` al raw SQL |
+| `Joi.string().optional()` con valor `""` falla validación | Usar `.allow('')` o `Joi.string().optional().allow('')` para strings opcionales que pueden ser vacíos |
+
+#### Build — errores de compilación/arranque
+
+| Anti-patrón | Fix obligatorio |
+|---|---|
+| `deleteOutDir: true` + `incremental: true` = sin `dist/` en `start:dev` | Usar `deleteOutDir: false` en `nest-cli.json` cuando `incremental` está activo |
+| `.tsbuildinfo` stale bloquea emisión | Borrar `tsconfig.build.tsbuildinfo` antes del build inicial o tras cambios de config |
+| Nueva variable en `.env.example` pero no en `env.validation.ts` | Ambos archivos deben actualizarse juntos en el mismo commit |
+
+#### Regla de oro del Builder
+
+Antes de hacer handoff al Reviewer, ejecutar:
+```bash
+npx tsc --noEmit  # 0 errores obligatorio
+pnpm lint         # 0 errores obligatorio  
+pnpm test         # todos los tests passing
+```
+
 ## 4. Roles (SDD)
 
 | Rol | Responsabilidad | NO puede |

@@ -81,7 +81,7 @@ export class GroqLlmProvider implements LlmProvider {
     const startTime = Date.now();
 
     // Build messages array
-    const messages: Array<{ role: string; content: string }> = [
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       { role: 'system', content: params.systemPrompt },
     ];
 

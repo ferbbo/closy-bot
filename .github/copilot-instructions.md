@@ -93,6 +93,12 @@ A PR is done when:
 - **API endpoints have working cURL examples in `BACKEND-EXECUTION-GUIDE.md`.**
 - **Endpoints are testable without UI** (consumer can use cURL/Postman).
 - **Auth method is documented and consistent** with similar endpoints.
+- **`npx tsc --noEmit` returns 0 errors** (mandatory, no exceptions).
+- **All new env vars are in `env.validation.ts`** with correct Joi type (`Joi.number()` for numbers, `Joi.boolean()` for flags).
+- **All catch blocks use `(error as Error).message`** — never raw `error.message`.
+- **All NestJS DTO/Entity class properties have `!`** (definite assignment assertion).
+- **All Prisma JSON assignments use `as unknown as Prisma.InputJsonValue`** double-cast.
+- **`Number()` wrapping applied** when passing `configService.get<number>()` values to `$queryRaw` parameters.
 
 ## 6) Commands
 Provide scripts in package.json and use them consistently:
