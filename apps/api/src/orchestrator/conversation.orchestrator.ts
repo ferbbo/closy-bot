@@ -149,6 +149,20 @@ export class ConversationOrchestrator {
       };
     }
 
+    // PR-OB-01 AC-09: if merchant is not active (onboarding/paused), reject customer messages
+    if (merchant.status !== 'active') {
+      this.logger.log(
+        `Merchant ${merchant.id} is in '${merchant.status}' status — rejecting message from ${this.maskPhone(input.from)}`,
+      );
+      return {
+        response: 'Tienda en configuración. Por favor intenta más tarde.',
+        shouldSend: true,
+        conversationId: '',
+        merchantId: merchant.id,
+        intent: 'UNKNOWN' as IntentKey,
+      };
+    }
+
     // 2. Resolve or create customer
     const customer = await this.customerService.resolveByPhone(input.from);
     this.logger.debug(`Customer resolved: ${customer.id}`);
