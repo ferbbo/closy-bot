@@ -86,7 +86,7 @@ export class MetaEmbeddedSignupProvider {
       this.logger.log(`Token exchange successful`);
       return data as MetaTokenResponse;
     } catch (error) {
-      this.logger.error(`Token exchange error: ${error.message}`);
+      this.logger.error(`Token exchange error: ${(error as Error).message}`);
       throw error;
     }
   }
@@ -114,7 +114,7 @@ export class MetaEmbeddedSignupProvider {
           throw new Error(`Debug token failed: ${debugResponse.status}`);
         }
 
-        const debugData: MetaDebugTokenData = await debugResponse.json();
+        const debugData = await debugResponse.json() as MetaDebugTokenData;
         targetWabaId = debugData.data?.granular_scopes?.find(
           (scope) => scope.scope === 'whatsapp_business_management',
         )?.target_ids?.[0];
@@ -138,7 +138,7 @@ export class MetaEmbeddedSignupProvider {
         throw new Error(`WABA fetch failed: ${wabaResponse.status}`);
       }
 
-      const wabaData = await wabaResponse.json();
+      const wabaData = await wabaResponse.json() as { id: string; name: string; phone_numbers?: { data: Array<{ id: string; display_phone_number: string; verified_name: string }> } };
       this.logger.log(`WABA info fetched successfully: ${wabaData.id}`);
 
       return {
@@ -147,7 +147,7 @@ export class MetaEmbeddedSignupProvider {
         phone_numbers: wabaData.phone_numbers?.data || [],
       } as MetaWabaInfo;
     } catch (error) {
-      this.logger.error(`WABA fetch error: ${error.message}`);
+      this.logger.error(`WABA fetch error: ${(error as Error).message}`);
       throw error;
     }
   }
@@ -188,14 +188,14 @@ export class MetaEmbeddedSignupProvider {
         };
       }
 
-      const data = await response.json();
+      const data = await response.json() as { success?: boolean };
       this.logger.log(`Webhook subscription successful for WABA: ${wabaId}`);
       return { success: data.success === true };
     } catch (error) {
-      this.logger.error(`Webhook subscription error: ${error.message}`);
+      this.logger.error(`Webhook subscription error: ${(error as Error).message}`);
       return {
         success: false,
-        error: error.message,
+        error: (error as Error).message,
       };
     }
   }

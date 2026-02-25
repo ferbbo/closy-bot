@@ -66,9 +66,7 @@ export class CartService {
 
     // AC-13: Get TTL from playbook config, fallback to env var or default 24h
     const merchant = await this.merchantResolverService.getById(merchantId);
-    const ttlHours = merchant.playbookConfig?.cartConfig?.ttlHours ?? this.defaultTtlHours;
-
-    // Create new cart with TTL (AC-13: TTL configured at cart creation)
+    const ttlHours = (merchant.playbookConfig as Record<string, { ttlHours?: number }> | null)?.cartConfig?.ttlHours ?? this.defaultTtlHours;
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + ttlHours);
 
@@ -290,7 +288,7 @@ export class CartService {
     }
 
     const merchant = await this.merchantResolverService.getById(cart.merchantId);
-    const ttlHours = merchant.playbookConfig?.cartConfig?.ttlHours ?? this.defaultTtlHours;
+    const ttlHours = (merchant.playbookConfig as Record<string, { ttlHours?: number }> | null)?.cartConfig?.ttlHours ?? this.defaultTtlHours;
 
     const newExpiresAt = new Date();
     newExpiresAt.setHours(newExpiresAt.getHours() + ttlHours);

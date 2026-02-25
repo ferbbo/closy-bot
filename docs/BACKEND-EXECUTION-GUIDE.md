@@ -30,10 +30,10 @@ META_APP_SECRET="tu-app-secret"
 META_CONFIG_ID="tu-config-id"
 
 # WhatsApp Cloud API
-WHATSAPP_ACCESS_TOKEN="tu-access-token"
-WHATSAPP_PHONE_NUMBER_ID="tu-phone-number-id"
-WHATSAPP_WEBHOOK_VERIFY_TOKEN="tu-verify-token"
-WHATSAPP_APP_SECRET="tu-app-secret"
+# WHATSAPP_ACCESS_TOKEN="tu-access-token"
+# WHATSAPP_PHONE_NUMBER_ID="tu-phone-number-id"
+# WHATSAPP_WEBHOOK_VERIFY_TOKEN="tu-verify-token"
+# WHATSAPP_APP_SECRET="tu-app-secret"
 
 # LLM (opcional) - PR-03.5.1: Granular flags
 # Deprecated: LLM_ENABLED=true activa todos los flags granulares (backward compat)

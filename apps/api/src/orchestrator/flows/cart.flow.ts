@@ -100,8 +100,8 @@ export class CartFlow {
         summary,
       );
     } catch (error) {
-      this.logger.error(`Failed to add to cart: ${error.message}`, error.stack);
-      if (error.message.includes('Stock insuficiente')) {
+      this.logger.error(`Failed to add to cart: ${(error as Error).message}`, (error as Error).stack);
+      if ((error as Error).message.includes('Stock insuficiente')) {
         return this.playbookService.getMessage(merchant, 'noStock', { product_name: '' });
       }
       return this.playbookService.getMessage(merchant, 'genericError', {
@@ -132,7 +132,7 @@ export class CartFlow {
 
       return this.formatCartSummary(merchant, summary);
     } catch (error) {
-      this.logger.error(`Failed to show cart: ${error.message}`, error.stack);
+      this.logger.error(`Failed to show cart: ${(error as Error).message}`, (error as Error).stack);
       return this.playbookService.getMessage(merchant, 'genericError', {
         action: 'mostrar el carrito',
       });
@@ -193,7 +193,7 @@ export class CartFlow {
 
       return `${confirmation}\n\n${postRemove}`;
     } catch (error) {
-      this.logger.error(`Failed to remove item: ${error.message}`, error.stack);
+      this.logger.error(`Failed to remove item: ${(error as Error).message}`, (error as Error).stack);
       return this.playbookService.getMessage(merchant, 'genericError', { action: 'remover item' });
     }
   }
@@ -251,8 +251,8 @@ export class CartFlow {
         quantity: String(quantity),
       });
     } catch (error) {
-      this.logger.error(`Failed to update quantity: ${error.message}`, error.stack);
-      if (error.message.includes('Stock insuficiente')) {
+      this.logger.error(`Failed to update quantity: ${(error as Error).message}`, (error as Error).stack);
+      if ((error as Error).message.includes('Stock insuficiente')) {
         return this.playbookService.getMessage(merchant, 'noStock', { product_name: '' });
       }
       return this.playbookService.getMessage(merchant, 'genericError', {

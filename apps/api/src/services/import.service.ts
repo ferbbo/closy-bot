@@ -142,7 +142,7 @@ export class ImportService {
         row[header[j]] = values[j] || '';
       }
 
-      rows.push(row as ProductCsvRow);
+      rows.push(row as unknown as ProductCsvRow);
     }
 
     return rows;

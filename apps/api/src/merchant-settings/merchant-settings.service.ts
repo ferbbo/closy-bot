@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../persistence/prisma/prisma.service';
-import { PlaybookService } from '../services/playbook.service';
+import { PlaybookService, type MerchantPlaybookData } from '../services/playbook.service';
 import { UpdateMerchantDto } from './dto/update-merchant.dto';
 import { UpdatePlaybookConfigDto } from './dto/update-playbook-config.dto';
 import { MerchantProfileResponseDto } from './dto/merchant-profile-response.dto';
@@ -91,7 +92,7 @@ export class MerchantSettingsService {
     const merchant = await this.prisma.merchant.update({
       where: { id: merchantId },
       data: {
-        playbookConfig: config as unknown as Record<string, unknown>,
+        playbookConfig: config as unknown as Prisma.InputJsonValue,
       },
       select: {
         id: true,
@@ -128,10 +129,15 @@ export class MerchantSettingsService {
     }
 
     // Get current playbook (with industry defaults if no custom config)
-    const currentPlaybook = this.playbookService.getPlaybookForMerchant(merchant);
+    const currentPlaybook = this.playbookService.getPlaybookForMerchant(
+      merchant as unknown as MerchantPlaybookData,
+    );
 
     // Merge with partial config
-    const merged = this.playbookService.mergePlaybookConfig(currentPlaybook, partialConfig);
+    const merged = this.playbookService.mergePlaybookConfig(
+      currentPlaybook,
+      partialConfig as unknown as Partial<PlaybookConfig>,
+    );
 
     // Validate merged result (requireComplete=false allows partial structures)
     this.playbookService.validatePlaybookConfig(merged, false);
@@ -140,7 +146,7 @@ export class MerchantSettingsService {
     const updated = await this.prisma.merchant.update({
       where: { id: merchantId },
       data: {
-        playbookConfig: merged as unknown as Record<string, unknown>,
+        playbookConfig: merged as unknown as Prisma.InputJsonValue,
       },
       select: {
         id: true,

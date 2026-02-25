@@ -13,7 +13,7 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import { TicketType } from '@prisma/client';
+import { Prisma, TicketType } from '@prisma/client';
 import { PrismaService } from '../../persistence/prisma/prisma.service';
 import { PostSaleService } from '../../services/post-sale.service';
 import { MerchantNotificationService } from '../../services/merchant-notification.service';
@@ -404,7 +404,7 @@ export class PostSaleFlow {
     await this.prisma.conversation.update({
       where: { id: conversationId },
       data: {
-        metadata: { ...existing, post_sale: state },
+        metadata: { ...existing, post_sale: state } as unknown as Prisma.InputJsonValue,
       },
     });
   }
@@ -419,7 +419,7 @@ export class PostSaleFlow {
     const { post_sale: _removed, ...rest } = existing;
     await this.prisma.conversation.update({
       where: { id: conversationId },
-      data: { metadata: rest },
+      data: { metadata: rest as unknown as Prisma.InputJsonValue },
     });
   }
 }

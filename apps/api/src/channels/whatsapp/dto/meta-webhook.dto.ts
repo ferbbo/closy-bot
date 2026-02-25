@@ -8,12 +8,12 @@ import { IsString, IsArray, IsOptional, ValidateNested, IsIn, IsNotEmpty } from 
 
 export class MetaMessageText {
   @IsString()
-  body: string;
+  body!: string;
 }
 
 export class MetaMessageMedia {
   @IsString()
-  id: string;
+  id!: string;
 
   @IsString()
   @IsOptional()
@@ -26,13 +26,13 @@ export class MetaMessageMedia {
 
 export class MetaMessage {
   @IsString()
-  from: string;
+  from!: string;
 
   @IsString()
-  id: string;
+  id!: string;
 
   @IsString()
-  timestamp: string; // Unix epoch string
+  timestamp!: string; // Unix epoch string
 
   @IsString()
   @IsIn([
@@ -47,7 +47,7 @@ export class MetaMessage {
     'button',
     'interactive',
   ])
-  type: string;
+  type!: string;
 
   @ValidateNested()
   @Type(() => MetaMessageText)
@@ -77,22 +77,22 @@ export class MetaMessage {
 
 export class MetaStatus {
   @IsString()
-  id: string;
+  id!: string;
 
   @IsString()
   @IsIn(['sent', 'delivered', 'read', 'failed'])
-  status: string;
+  status!: string;
 
   @IsString()
-  timestamp: string;
+  timestamp!: string;
 
   @IsString()
-  recipient_id: string;
+  recipient_id!: string;
 }
 
 export class MetaContact {
   @IsString()
-  wa_id: string;
+  wa_id!: string;
 
   @ValidateNested()
   @IsOptional()
@@ -103,19 +103,19 @@ export class MetaContact {
 
 export class MetaMetadata {
   @IsString()
-  display_phone_number: string;
+  display_phone_number!: string;
 
   @IsString()
-  phone_number_id: string;
+  phone_number_id!: string;
 }
 
 export class MetaValue {
   @IsString()
-  messaging_product: string;
+  messaging_product!: string;
 
   @ValidateNested()
   @Type(() => MetaMetadata)
-  metadata: MetaMetadata;
+  metadata!: MetaMetadata;
 
   @ValidateNested()
   @Type(() => MetaContact)
@@ -139,30 +139,30 @@ export class MetaValue {
 export class MetaChange {
   @ValidateNested()
   @Type(() => MetaValue)
-  value: MetaValue;
+  value!: MetaValue;
 
   @IsString()
-  field: string;
+  field!: string;
 }
 
 export class MetaEntry {
   @IsString()
-  id: string;
+  id!: string;
 
   @ValidateNested()
   @Type(() => MetaChange)
   @IsArray()
-  changes: MetaChange[];
+  changes!: MetaChange[];
 }
 
 export class MetaWebhookPayload {
   @IsString()
-  object: string;
+  object!: string;
 
   @ValidateNested()
   @Type(() => MetaEntry)
   @IsArray()
-  entry: MetaEntry[];
+  entry!: MetaEntry[];
 }
 
 /**
@@ -171,13 +171,13 @@ export class MetaWebhookPayload {
 export class MetaWebhookVerifyQuery {
   @IsString()
   @IsNotEmpty()
-  'hub.mode': string;
+  'hub.mode'!: string;
 
   @IsString()
   @IsNotEmpty()
-  'hub.verify_token': string;
+  'hub.verify_token'!: string;
 
   @IsString()
   @IsNotEmpty()
-  'hub.challenge': string;
+  'hub.challenge'!: string;
 }

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MessageDirection, ChannelType, ConversationType } from '@prisma/client'; // PR-03.10, PR-03.11, PR-05.1
+import { Channel } from '../domain/entities/conversation.entity'; // PR-03.11
 import type { IntentKey } from './types/intent.types'; // PR-03.5.1
 import { RouteDecisionService } from './route-decision.service'; // PR-03.5.1
 import { CustomerService } from '../services/customer.service';
@@ -146,7 +147,7 @@ export class ConversationOrchestrator {
     const conversation = await this.conversationService.getOrCreateConversation(
       customer.id,
       merchant.id,
-      'whatsapp',
+      Channel.WHATSAPP,
       input.channelId ?? null, // PR-03.11 AC-11
     );
     this.logger.debug(`Conversation resolved: ${conversation.id}`);
@@ -205,7 +206,7 @@ export class ConversationOrchestrator {
         id: merchant.id,
         name: merchant.name,
         industry: merchant.industry ?? undefined,
-        playbookConfig: merchant.playbookConfig,
+        playbookConfig: merchant.playbookConfig as unknown as Record<string, unknown> | null,
       };
 
       const response = await this.checkoutFlow.handle(
@@ -238,7 +239,7 @@ export class ConversationOrchestrator {
         id: merchant.id,
         name: merchant.name,
         industry: merchant.industry ?? undefined,
-        playbookConfig: merchant.playbookConfig,
+        playbookConfig: merchant.playbookConfig as unknown as Record<string, unknown> | null,
       };
 
       const response = await this.paymentFallbackFlow.handle(
@@ -269,7 +270,7 @@ export class ConversationOrchestrator {
         id: merchant.id,
         name: merchant.name,
         industry: merchant.industry ?? undefined,
-        playbookConfig: merchant.playbookConfig,
+        playbookConfig: merchant.playbookConfig as unknown as Record<string, unknown> | null,
       };
 
       const response = await this.postSaleFlow.handle(
@@ -296,7 +297,7 @@ export class ConversationOrchestrator {
     const classifyStartTime = Date.now();
     const routeDecision = await this.routeDecisionService.classifyAndRoute(input.text, {
       conversationId: conversation.id,
-      lastIntent: conversation.memory?.lastIntent as IntentKey | undefined,
+      lastIntent: conversation.lastIntent as IntentKey | undefined,
       merchantId: merchant.id,
     });
     const latencyMs = Date.now() - classifyStartTime;
@@ -320,7 +321,7 @@ export class ConversationOrchestrator {
       id: merchant.id,
       name: merchant.name,
       industry: merchant.industry ?? undefined,
-      playbookConfig: merchant.playbookConfig,
+      playbookConfig: merchant.playbookConfig as unknown as Record<string, unknown> | null,
     };
 
     // PR-03.5.1, REQ-08, AC-08: Route-based execution (no binary toggle)
@@ -394,7 +395,7 @@ export class ConversationOrchestrator {
     const adminConversation = await this.conversationService.getOrCreateConversation(
       merchantAsCustomer.id,
       merchantId,
-      'whatsapp',
+      Channel.WHATSAPP,
       input.channelId ?? null,
       ConversationType.MERCHANT_ADMIN,
     );

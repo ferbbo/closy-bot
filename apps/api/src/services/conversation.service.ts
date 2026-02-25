@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConversationType } from '@prisma/client'; // PR-05.1
-import { Conversation, Channel, ConversationStatus } from '../domain/entities/conversation.entity';
+import { Conversation, ConversationType } from '@prisma/client'; // PR-05.1
+import { Channel, ConversationStatus } from '../domain/entities/conversation.entity';
 import { ConversationRepository } from '../persistence/repositories/conversation.repository';
 
 /**

@@ -212,8 +212,8 @@ export class LlmService {
 
       // Map to simple format (no PII logging)
       const recentHistory = messageLogs.reverse().map((log) => ({
-        direction: log.direction,
-        text: log.text,
+        direction: log.direction as 'IN' | 'OUT',
+        text: log.text ?? undefined,
         timestamp: log.createdAt,
       }));
 
@@ -223,7 +223,7 @@ export class LlmService {
       );
 
       return {
-        ...baseContext,
+        ...(baseContext as LlmContext),
         conversationMemory: {
           recentHistory,
           summary: conversation?.summary ?? undefined,
@@ -236,7 +236,7 @@ export class LlmService {
         `Failed to build context with memory for conversation ${conversationContext.conversationId}, using base context`,
         error,
       );
-      return baseContext;
+      return baseContext as LlmContext;
     }
   }
 

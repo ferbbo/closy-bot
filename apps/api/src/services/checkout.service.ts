@@ -338,7 +338,7 @@ export class CheckoutService {
     const updatedMeta = { ...existingMeta, checkout: state };
 
     await this.conversationRepository.update(conversationId, {
-      metadata: updatedMeta as Prisma.InputJsonValue,
+      metadata: updatedMeta as unknown as Prisma.InputJsonValue,
     });
   }
 }

@@ -7,18 +7,18 @@ import { IsString, IsNotEmpty, IsOptional, IsDateString, IsIn } from 'class-vali
 export class InboundMessageDto {
   @IsString()
   @IsNotEmpty()
-  message_id: string;
+  message_id!: string;
 
   @IsString()
   @IsNotEmpty()
-  from: string;
+  from!: string;
 
   @IsString()
   @IsOptional()
   receiver_phone_id?: string; // WhatsApp phone number ID (for merchant resolution)
 
   @IsDateString()
-  timestamp: string;
+  timestamp!: string;
 
   @IsString()
   @IsOptional()
@@ -38,6 +38,6 @@ export class InboundMessageDto {
  * Response DTO for webhook processing
  */
 export class InboundMessageResponseDto {
-  processed: boolean;
+  processed!: boolean;
   duplicate?: boolean;
 }

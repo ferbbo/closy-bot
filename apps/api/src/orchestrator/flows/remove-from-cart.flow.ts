@@ -77,7 +77,7 @@ export class RemoveFromCartFlow {
 
       return `${confirmation}\n\n${postRemove}`;
     } catch (error) {
-      this.logger.error(`Failed to remove item: ${error.message}`, error.stack);
+      this.logger.error(`Failed to remove item: ${(error as Error).message}`, (error as Error).stack);
       return this.playbookService.getMessage(merchant, 'genericError', { action: 'remover item' });
     }
   }

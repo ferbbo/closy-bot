@@ -36,6 +36,7 @@ export class Conversation {
   channel: Channel;
   type?: ConversationTypeEnum; // PR-05.1
   status: ConversationStatus;
+  lastIntent?: string | null; // PR-03.10
   handoffActive: boolean; // PR-05.2: relay bidireccional activo
   lastMessageAt: Date | null;
   createdAt: Date;

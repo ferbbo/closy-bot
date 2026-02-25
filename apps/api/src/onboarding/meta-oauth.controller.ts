@@ -107,9 +107,10 @@ export class MetaOAuthController {
       // Redirect to dashboard with success
       res.redirect(HttpStatus.FOUND, `/dashboard?status=success&channelId=${result.channelId}`);
     } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
       this.logger.error(
-        `OAuth callback error for merchant ${merchantId}: ${error.message}`,
-        error.stack,
+        `OAuth callback error for merchant ${merchantId}: ${err.message}`,
+        err.stack,
       );
 
       // AC-12: ConflictException (409) should not redirect - let exception filter handle it
@@ -120,9 +121,9 @@ export class MetaOAuthController {
 
       // Handle other errors with redirect
       let reason = 'unknown_error';
-      if (error.message.includes('exchange failed')) {
+      if (err.message.includes('exchange failed')) {
         reason = 'invalid_code';
-      } else if (error.message.includes('WABA')) {
+      } else if (err.message.includes('WABA')) {
         reason = 'waba_fetch_failed';
       }
 
