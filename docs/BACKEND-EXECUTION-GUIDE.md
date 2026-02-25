@@ -3054,6 +3054,128 @@ done
 
 ---
 
+## PR-OB-01 — Onboarding Wizard API (✅ Implementado)
+
+**Auth**: Session Cookie (`session_id`) — igual que dashboard endpoints  
+**Base URL**: `http://localhost:3000`
+
+### GET /onboarding/progress — Progreso del onboarding
+
+```bash
+# Ver estado actual de onboarding para el merchant autenticado
+curl -s -X GET http://localhost:3000/onboarding/progress \
+  -H "Cookie: session_id=<session_cookie>" | jq
+```
+
+**Respuesta esperada (200):**
+```json
+{
+  "completedSteps": ["profile"],
+  "pendingSteps": ["channel", "catalog", "config", "test"],
+  "percentage": 20,
+  "nextStep": "channel"
+}
+```
+
+**Pasos posibles:** `profile` (nombre + industria configurados), `channel` (≥1 canal activo), `catalog` (≥1 producto), `config` (≥1 método de pago), `test` (≥1 mensaje entrante recibido)
+
+---
+
+### POST /onboarding/apply-preset — Aplicar plantilla de industria
+
+```bash
+# Aplicar preset ropa (también soporta: belleza, minimarket)
+curl -s -X POST http://localhost:3000/onboarding/apply-preset \
+  -H "Cookie: session_id=<session_cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{"industry":"ropa"}' | jq
+```
+
+**Cuerpo requerido:**
+| Campo | Tipo | Valores válidos |
+|-------|------|----------------|
+| `industry` | string | `ropa`, `belleza`, `minimarket` |
+
+**Respuesta esperada (200):**
+```json
+{
+  "completedSteps": ["profile", "config"],
+  "pendingSteps": ["channel", "catalog", "test"],
+  "percentage": 40,
+  "nextStep": "channel"
+}
+```
+
+**Comportamiento:**
+- Si el merchant **no tiene** `playbookConfig` previo: aplica todos los defaults de la industria (mensajes, métodos de pago, saludos, etc.)
+- Si ya **tiene** `playbookConfig`: solo actualiza la clave `industry` (preserva customizaciones)
+- Siempre retorna el progreso actualizado
+
+---
+
+### POST /onboarding/activate — Activar merchant
+
+```bash
+# Activar merchant (cambia status de 'onboarding' a 'active')
+curl -s -X POST http://localhost:3000/onboarding/activate \
+  -H "Cookie: session_id=<session_cookie>" | jq
+```
+
+**Respuesta exitosa (200):**
+```json
+{
+  "activated": true,
+  "status": "active"
+}
+```
+
+**Respuesta con requisitos faltantes (400):**
+```json
+{
+  "activated": false,
+  "status": "onboarding",
+  "missingRequirements": ["channel", "catalog"]
+}
+```
+
+**Requisitos mínimos para activar:** `channel`, `catalog`, `config`  
+**Comportamiento:** Idempotente — si el merchant ya está `active`, retorna `{ activated: true, status: "active" }` sin efecto secundario.
+
+---
+
+### Errores comunes
+
+| Código | Descripción | Solución |
+|--------|-------------|----------|
+| `401` | Sin sesión o sesión expirada | Autenticar con `POST /auth/session` |
+| `400` | `industry` inválida en `apply-preset` | Usar: `ropa`, `belleza` o `minimarket` |
+| `400` | Requisitos faltantes en `activate` | Ver campo `missingRequirements` en respuesta |
+
+---
+
+### Variables de entorno (PR-OB-01)
+
+No requiere variables de entorno adicionales. Usa la misma configuración de DB y sesión que los demás módulos.
+
+---
+
+### Evidence por AC
+
+- ✅ **AC-01**: `GET /onboarding/progress` retorna `completedSteps[]` calculados dinámicamente | `onboarding.service.spec.ts`
+- ✅ **AC-02**: `percentage` calculado correctamente (completedSteps/totalSteps * 100) | `onboarding.service.spec.ts`
+- ✅ **AC-03**: `OnboardingService` con métodos `getProgress`, `applyPreset`, `activate` | `onboarding.service.spec.ts`
+- ✅ **AC-04**: `POST /onboarding/apply-preset` con `industry` válida aplica defaults de industria | `onboarding.service.spec.ts`
+- ✅ **AC-05**: `apply-preset` con config existente preserva customizaciones (solo actualiza `industry`) | `onboarding.service.spec.ts`
+- ✅ **AC-06**: `POST /onboarding/activate` con requisitos completos → `status: active` + `activated: true` | `onboarding.service.spec.ts`
+- ✅ **AC-07**: `activate` con requisitos faltantes → 400 + `missingRequirements[]` | `onboarding.service.spec.ts`
+- ✅ **AC-08**: `Merchant.status` enum (`onboarding|active|paused`) + migración `20260225210000_pr_ob_01_add_merchant_status` | `prisma migrate status`
+- ✅ **AC-09**: `ConversationOrchestrator` bloquea mensajes de clientes si `merchant.status !== 'active'` | `conversation.orchestrator.spec.ts`
+- ✅ **AC-10**: Unit tests para `OnboardingService` (25 tests) | `onboarding.service.spec.ts`
+- ✅ **AC-11**: Unit tests para `OnboardingController` (7 tests) | `onboarding.controller.spec.ts`
+- ✅ **AC-12**: E2E tests cubren full flow: auth, apply-preset, activate, idempotencia | `onboarding.e2e-spec.ts`
+
+---
+
 ## Próximos Pasos
 
 Todos los flujos del MVP Core V1 están implementados. Ver `docs/plan/PR-STACK-core-v1.md` para el estado actualizado.
