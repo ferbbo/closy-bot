@@ -23,7 +23,7 @@ import { MerchantCommandParserService } from '../services/merchant-command-parse
 import { MerchantCommandService } from '../services/merchant-command.service'; // PR-05.1
 import { MessageRelayService } from '../services/message-relay.service'; // PR-05.2
 import { LlmService } from '../llm/llm.service';
-import { Customer, Merchant, Conversation, ConversationType } from '@prisma/client';
+import { Customer, Merchant, Conversation, ConversationType, MerchantStatus } from '@prisma/client';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10
 
@@ -46,6 +46,7 @@ describe('ConversationOrchestrator', () => {
     industry: null,
     playbookConfig: null,
     botPaused: false, // PR-05.1
+    status: MerchantStatus.active, // PR-OB-01: merchant must be active to process messages
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -527,6 +528,57 @@ describe('ConversationOrchestrator', () => {
         expect(result.response).toBe('');
         // routeDecision should NOT be called
         expect(routeDecisionService.classifyAndRoute).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('PR-OB-01 AC-09: merchant status guards customer messages', () => {
+      it('AC-09: should return "Tienda en configuración" when merchant.status=onboarding', async () => {
+        const onboardingMerchant = { ...mockMerchant, status: MerchantStatus.onboarding };
+        jest
+          .spyOn(merchantResolver, 'resolveByWhatsAppPhoneId')
+          .mockResolvedValue(onboardingMerchant);
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          from: '+573001234567',
+          text: 'Hola, ¿tienen zapatos?',
+        });
+
+        expect(result.shouldSend).toBe(true);
+        expect(result.response).toBe('Tienda en configuración. Por favor intenta más tarde.');
+        expect(routeDecisionService.classifyAndRoute).not.toHaveBeenCalled();
+      });
+
+      it('AC-09: should return "Tienda en configuración" when merchant.status=paused', async () => {
+        const pausedStatusMerchant = { ...mockMerchant, status: MerchantStatus.paused };
+        jest
+          .spyOn(merchantResolver, 'resolveByWhatsAppPhoneId')
+          .mockResolvedValue(pausedStatusMerchant);
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          from: '+573001234567',
+          text: 'Hola',
+        });
+
+        expect(result.shouldSend).toBe(true);
+        expect(result.response).toBe('Tienda en configuración. Por favor intenta más tarde.');
+        expect(routeDecisionService.classifyAndRoute).not.toHaveBeenCalled();
+      });
+
+      it('AC-09: should process normally when merchant.status=active', async () => {
+        // mockMerchant already has status=active
+        jest.spyOn(merchantResolver, 'resolveByWhatsAppPhoneId').mockResolvedValue(mockMerchant);
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          from: '+573001234567',
+          text: 'Hola',
+        });
+
+        // Should proceed to normal processing
+        expect(result.shouldSend).toBe(true);
+        expect(result.response).not.toBe('Tienda en configuración. Por favor intenta más tarde.');
       });
     });
 

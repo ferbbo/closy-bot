@@ -56,7 +56,6 @@ describe('HandoffService', () => {
   let prisma: jest.Mocked<PrismaService>;
   let outboxRepository: jest.Mocked<OutboxRepository>;
   let llmService: jest.Mocked<LlmService>;
-  let playbookService: jest.Mocked<PlaybookService>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -130,7 +129,7 @@ describe('HandoffService', () => {
     prisma = module.get(PrismaService);
     outboxRepository = module.get(OutboxRepository);
     llmService = module.get(LlmService);
-    playbookService = module.get(PlaybookService);
+    module.get(PlaybookService); // retained in module but not used directly in tests
   });
 
   it('should be defined', () => {
@@ -370,12 +369,15 @@ describe('HandoffService', () => {
           {
             provide: PrismaService,
             useValue: {
-              conversation: { findUnique: jest.fn().mockResolvedValue(mockConversation), update: jest.fn() },
+              conversation: {
+                findUnique: jest.fn().mockResolvedValue(mockConversation),
+                update: jest.fn(),
+              },
               cart: { findFirst: jest.fn().mockResolvedValue(null) },
               messageLog: {
-                findMany: jest.fn().mockResolvedValue([
-                  { direction: 'IN', text: 'Hola', createdAt: new Date() },
-                ]),
+                findMany: jest
+                  .fn()
+                  .mockResolvedValue([{ direction: 'IN', text: 'Hola', createdAt: new Date() }]),
               },
               merchant: { findUnique: jest.fn().mockResolvedValue(mockMerchant) },
               handoff: { findFirst: jest.fn(), create: jest.fn() },
