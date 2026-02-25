@@ -20,6 +20,7 @@ import { PaymentFallbackFlow } from './flows/payment-fallback.flow'; // PR-06
 import { PostSaleFlow } from './flows/post-sale.flow'; // PR-07
 import { MerchantCommandParserService } from '../services/merchant-command-parser.service'; // PR-05.1
 import { MerchantCommandService } from '../services/merchant-command.service'; // PR-05.1
+import { MessageRelayService } from '../services/message-relay.service'; // PR-05.2
 import { LlmService } from '../llm/llm.service';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10 AC-06
@@ -79,6 +80,7 @@ export class ConversationOrchestrator {
     private readonly postSaleFlow: PostSaleFlow, // PR-07
     private readonly merchantCommandParser: MerchantCommandParserService, // PR-05.1
     private readonly merchantCommandService: MerchantCommandService, // PR-05.1
+    private readonly messageRelayService: MessageRelayService, // PR-05.2
     private readonly llmService: LlmService,
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
     private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
@@ -148,6 +150,27 @@ export class ConversationOrchestrator {
       input.channelId ?? null, // PR-03.11 AC-11
     );
     this.logger.debug(`Conversation resolved: ${conversation.id}`);
+
+    // PR-05.2 REQ-08, AC-07: Handoff relay — if handoffActive, relay to merchant, skip flows/LLM
+    if (conversation.handoffActive) {
+      this.logger.log(
+        `PR-05.2: handoffActive=true for conversation ${conversation.id}, relaying to merchant`,
+      );
+      await this.messageRelayService.relayCustomerMessageToMerchant(
+        merchant.id,
+        customer.id,
+        conversation.id,
+        input.from,
+        input.text,
+      );
+      return {
+        response: '',
+        shouldSend: false, // Merchant receives relay, no direct response to customer
+        conversationId: conversation.id,
+        merchantId: merchant.id,
+        intent: 'HANDOFF' as IntentKey,
+      };
+    }
 
     // 4. PR-03.10: Log inbound message (REQ-07, AC-07)
     try {

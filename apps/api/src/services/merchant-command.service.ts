@@ -3,6 +3,7 @@ import { OutboxChannel, OutboxMessageType, OrderStatus } from '@prisma/client';
 import { PrismaService } from '../persistence/prisma/prisma.service';
 import { OrderRepository } from '../persistence/repositories/order.repository';
 import { OutboxRepository } from '../persistence/repositories/outbox.repository';
+import { MessageRelayService } from './message-relay.service'; // PR-05.2
 import type { ParsedCommand } from './merchant-command-parser.service';
 
 // ---------------------------------------------------------------------------
@@ -42,6 +43,7 @@ export class MerchantCommandService {
     private readonly prisma: PrismaService,
     private readonly orderRepository: OrderRepository,
     private readonly outboxRepository: OutboxRepository,
+    private readonly messageRelayService: MessageRelayService, // PR-05.2
   ) {}
 
   /**
@@ -69,6 +71,17 @@ export class MerchantCommandService {
         return this.pauseBot(merchantId);
       case 'activar_bot':
         return this.activateBot(merchantId);
+      // PR-05.2: relay commands
+      case 'msg':
+        return this.messageRelayService.sendMessageToCustomer(
+          merchantId,
+          command.args['orderCode']!,
+          command.args['text']!,
+        );
+      case 'handoff':
+        return this.messageRelayService.activateHandoff(merchantId, command.args['orderCode']!);
+      case 'cerrar_handoff':
+        return this.messageRelayService.deactivateHandoff(merchantId);
       default:
         return "❌ Comando no reconocido. Escribe 'ayuda' para ver comandos disponibles.";
     }
@@ -275,6 +288,11 @@ export class MerchantCommandService {
       '⚙️ *Bot:*',
       '  pausar bot — pausar respuestas a clientes',
       '  activar bot — reactivar respuestas',
+      '',
+      '💬 *Relay (handoff):*',
+      '  msg ORD-XXX <texto> — enviar mensaje al cliente',
+      '  handoff ORD-XXX — activar relay bidireccional',
+      '  cerrar handoff — desactivar relay',
       '',
       '  ayuda — mostrar este menú',
     ].join('\n');

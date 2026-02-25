@@ -63,6 +63,10 @@ export class MerchantCommandParserService {
     if (normalized === 'activar bot') {
       return { command: 'activar_bot', args: {} };
     }
+    // PR-05.2: cerrar handoff — multi-word, must be checked before single-word commands
+    if (normalized === 'cerrar handoff') {
+      return { command: 'cerrar_handoff', args: {} };
+    }
     if (normalized === 'pendientes') {
       return { command: 'pendientes', args: {} };
     }
@@ -107,6 +111,30 @@ export class MerchantCommandParserService {
         args['reason'] = rechazarMatch[2].trim();
       }
       return { command: 'rechazar', args };
+    }
+
+    // PR-05.2: handoff <orderCode>
+    const handoffMatch = normalized.match(/^handoff\s+([a-z0-9_-]+)$/i);
+    if (handoffMatch) {
+      return { command: 'handoff', args: { orderCode: handoffMatch[1].toUpperCase() } };
+    }
+
+    // PR-05.2: msg <orderCode> <texto…>
+    // Use original text (not normalized) to preserve diacritics and casing in message body
+    const msgMatch = normalized.match(/^msg\s+([a-z0-9_-]+)\s+(.+)$/i);
+    if (msgMatch) {
+      // Extract original text by matching against raw input (case-insensitive prefix)
+      const originalMsgMatch = text.trim().match(/^msg\s+([a-z0-9_-]+)\s+(.+)$/i);
+      const originalText = originalMsgMatch ? originalMsgMatch[2].trim() : msgMatch[2].trim();
+      return {
+        command: 'msg',
+        args: { orderCode: msgMatch[1].toUpperCase(), text: originalText },
+      };
+    }
+
+    // PR-05.2: msg without required args → null (AC-02)
+    if (normalized.startsWith('msg')) {
+      return null;
     }
 
     // Unknown command → null (AC-05)

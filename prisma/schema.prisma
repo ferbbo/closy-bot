@@ -154,6 +154,7 @@ model Conversation {
   lastIntent       String?          @map("last_intent") // Last detected intent
   lastSummarizedAt DateTime?        @map("last_summarized_at") // Last time summary was generated
   metadata         Json?            // PR-05: Generic metadata (checkout state, etc.)
+  handoffActive    Boolean          @default(false) @map("handoff_active") // PR-05.2: relay bidireccional activo
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
@@ -188,6 +189,7 @@ model MessageLog {
   providerMessageId String?          @map("provider_message_id") // Provider ID for traceability (not used for dedupe)
   text              String?          @db.Text // Message text content
   mediaType         String?          @map("media_type") // image, document, audio, video
+  source            String?          // PR-05.2: 'relay' for relayed messages, null for normal
   expiresAt         DateTime         @map("expires_at") // TTL for automatic cleanup
   createdAt         DateTime         @default(now()) @map("created_at")
 

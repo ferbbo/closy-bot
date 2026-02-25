@@ -152,4 +152,27 @@ export class ConversationRepository {
       take: limit,
     });
   }
+
+  /**
+   * PR-05.2 REQ-06, REQ-07: Update handoffActive flag
+   */
+  async updateHandoffActive(id: string, handoffActive: boolean): Promise<Conversation> {
+    return this.update(id, { handoffActive });
+  }
+
+  /**
+   * PR-05.2 REQ-07: Find active conversation with handoffActive = true for a merchantId
+   * Used by 'cerrar handoff' command to deactivate relay.
+   */
+  async findActiveHandoffByMerchant(merchantId: string): Promise<Conversation | null> {
+    return this.prisma.conversation.findFirst({
+      where: {
+        merchantId,
+        handoffActive: true,
+        status: 'active',
+        type: 'CUSTOMER',
+      },
+      orderBy: { lastMessageAt: 'desc' },
+    });
+  }
 }

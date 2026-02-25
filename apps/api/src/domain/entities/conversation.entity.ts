@@ -36,6 +36,7 @@ export class Conversation {
   channel: Channel;
   type?: ConversationTypeEnum; // PR-05.1
   status: ConversationStatus;
+  handoffActive: boolean; // PR-05.2: relay bidireccional activo
   lastMessageAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -47,6 +48,7 @@ export class Conversation {
     this.channel = data.channel;
     this.type = data.type;
     this.status = data.status;
+    this.handoffActive = data.handoffActive ?? false;
     this.lastMessageAt = data.lastMessageAt;
     this.createdAt = data.createdAt;
     this.updatedAt = data.updatedAt;

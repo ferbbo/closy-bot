@@ -19,6 +19,7 @@ import { PaymentFallbackFlow } from './flows/payment-fallback.flow'; // PR-06
 import { PostSaleFlow } from './flows/post-sale.flow'; // PR-07
 import { MerchantCommandParserService } from '../services/merchant-command-parser.service'; // PR-05.1
 import { MerchantCommandService } from '../services/merchant-command.service'; // PR-05.1
+import { MessageRelayService } from '../services/message-relay.service'; // PR-05.2
 import { LlmService } from '../llm/llm.service';
 import { Customer, Merchant, Conversation, ConversationType } from '@prisma/client';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
@@ -63,6 +64,7 @@ describe('ConversationOrchestrator', () => {
     channel: 'whatsapp',
     type: ConversationType.CUSTOMER, // PR-05.1: ConversationType.CUSTOMER
     status: 'active',
+    handoffActive: false, // PR-05.2
     lastMessageAt: new Date(),
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -222,6 +224,13 @@ describe('ConversationOrchestrator', () => {
           provide: MerchantCommandService,
           useValue: {
             executeCommand: jest.fn().mockResolvedValue('✅ Pedido ORD-001 confirmado'),
+          },
+        },
+        // PR-05.2: Message relay service
+        {
+          provide: MessageRelayService,
+          useValue: {
+            relayCustomerMessageToMerchant: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
@@ -501,6 +510,51 @@ describe('ConversationOrchestrator', () => {
         expect(result.response).toBe('');
         // routeDecision should NOT be called
         expect(routeDecisionService.classifyAndRoute).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('PR-05.2 AC-07: handoffActive relay — customer message relayed to merchant', () => {
+      it('AC-07: should relay customer message when handoffActive = true (NO flows/LLM)', async () => {
+        // Conversation with handoffActive = true
+        const handoffConversation = { ...mockConversation, handoffActive: true };
+        jest
+          .spyOn(conversationService, 'getOrCreateConversation')
+          .mockResolvedValue(handoffConversation);
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          from: '+573001234567', // customer
+          text: 'Hola, ¿cuándo llega mi pedido?',
+        });
+
+        // Should NOT call routeDecision or flows
+        expect(routeDecisionService.classifyAndRoute).not.toHaveBeenCalled();
+        // Should return shouldSend=false (merchant receives relay, no response to customer)
+        expect(result.shouldSend).toBe(false);
+        expect(result.intent).toBe('HANDOFF');
+      });
+
+      it('AC-07: should process normally when handoffActive = false', async () => {
+        jest
+          .spyOn(conversationService, 'getOrCreateConversation')
+          .mockResolvedValue({ ...mockConversation, handoffActive: false });
+        jest.spyOn(routeDecisionService, 'classifyAndRoute').mockResolvedValue({
+          route: 'TEMPLATE',
+          intent: 'GREETING',
+          reason: 'keyword match',
+          confidence: 'HIGH',
+          signals: ['hola'],
+        });
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          from: '+573001234567',
+          text: 'hola',
+        });
+
+        // Should call normal routing
+        expect(routeDecisionService.classifyAndRoute).toHaveBeenCalled();
+        expect(result.shouldSend).toBe(true);
       });
     });
   });

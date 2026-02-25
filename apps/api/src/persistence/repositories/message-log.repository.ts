@@ -9,6 +9,7 @@ export interface CreateMessageLogDto {
   providerMessageId?: string;
   text?: string;
   mediaType?: string;
+  source?: string; // PR-05.2: 'relay' for relayed messages
   expiresAt: Date;
 }
 
@@ -20,6 +21,7 @@ export interface MessageLogDto {
   providerMessageId?: string;
   text?: string;
   mediaType?: string;
+  source?: string; // PR-05.2
   expiresAt: Date;
   createdAt: Date;
 }
@@ -47,6 +49,7 @@ export class MessageLogRepository {
         providerMessageId: dto.providerMessageId,
         text: dto.text,
         mediaType: dto.mediaType,
+        source: dto.source,
         expiresAt: dto.expiresAt,
       },
     });
@@ -176,6 +179,7 @@ export class MessageLogRepository {
     providerMessageId: string | null;
     text: string | null;
     mediaType: string | null;
+    source: string | null;
     expiresAt: Date;
     createdAt: Date;
   }): MessageLogDto {
@@ -187,6 +191,7 @@ export class MessageLogRepository {
       providerMessageId: log.providerMessageId ?? undefined,
       text: log.text ?? undefined,
       mediaType: log.mediaType ?? undefined,
+      source: log.source ?? undefined,
       expiresAt: log.expiresAt,
       createdAt: log.createdAt,
     };
