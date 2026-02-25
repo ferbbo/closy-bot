@@ -749,7 +749,9 @@ graph TD
   - Sin pedido activo → mensaje claro
   - `pnpm lint`, `pnpm test`, `pnpm db:migrate` pasan
 
-##### PR-05.2 — Message Relay: merchant ↔ cliente vía bot 🟡 NUEVO
+##### PR-05.2 — Message Relay: merchant ↔ cliente vía bot 🟡
+- **Issue:** [#94](https://github.com/ferbbo/closy-bot/issues/94)
+- **Brief:** [`docs/plan/pr-briefs/PR-05.2-message-relay.md`](../blob/main/docs/plan/pr-briefs/PR-05.2-message-relay.md)
 - **Objetivo:** permitir que merchant envíe mensajes directos a un cliente (y viceversa en handoff) vía el bot como intermediario.
 - **Depende de:** PR-05.1.
 - **Incluye:**
