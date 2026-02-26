@@ -4,11 +4,13 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { MetaEmbeddedSignupProvider } from './providers/meta-embedded-signup.provider';
 import { PrismaService } from '../persistence/prisma/prisma.service';
 import { WabaInfoDto } from './dto/waba-info.dto';
+import { FeatureFlagsService } from '../common/feature-flags/feature-flags.service';
 
 interface ChannelCredentials {
   accessToken?: string;
@@ -34,6 +36,7 @@ export class MetaOAuthService {
   constructor(
     private readonly metaProvider: MetaEmbeddedSignupProvider,
     private readonly prisma: PrismaService,
+    private readonly featureFlags: FeatureFlagsService,
   ) {
     // META_REDIRECT_URI is the full callback URL (not baseUrl)
     this.redirectUri =
@@ -108,6 +111,19 @@ export class MetaOAuthService {
         merchant: true,
       },
     });
+
+    // REQ-03 / AC-04 / AC-05: Gating — block second channel in MVP mode
+    // Only check if this phone number is NOT already owned by this merchant (new channel)
+    if (!existingChannel || existingChannel.merchantId !== merchantId) {
+      if (!this.featureFlags.isMultiChannelEnabled) {
+        const channelCount = await this.prisma.channel.count({
+          where: { merchantId },
+        });
+        if (channelCount >= 1) {
+          throw new ForbiddenException('Multi-channel requires enterprise plan');
+        }
+      }
+    }
 
     // REQ-09: AC-12 - Different merchant owns this phone number
     if (existingChannel && existingChannel.merchantId !== merchantId) {
