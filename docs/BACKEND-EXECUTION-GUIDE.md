@@ -3175,6 +3175,94 @@ No requiere variables de entorno adicionales. Usa la misma configuración de DB 
 
 ---
 
+## Feature Flags (PR-MVP-01)
+
+### Descripción
+
+Infraestructura de feature flags con kill-switch global (`FEATURES_MODE`) para separar code paths MVP de B2.
+En modo `mvp` (producción), **todos los flags B2 retornan `false`**, sin importar config granular.
+
+### Variables de entorno
+
+| Variable | Tipo | Default | Descripción |
+|----------|------|---------|-------------|
+| `FEATURES_MODE` | `mvp\|dev\|full` | `mvp` | Kill-switch global |
+| `MULTI_CHANNEL_ENABLED` | boolean | `false` | Permite más de 1 canal por merchant (B2) |
+| `INSTAGRAM_ENABLED` | boolean | `false` | Habilita onboarding Instagram (B2) |
+| `PLAYBOOK_EDITOR_ENABLED` | boolean | `false` | Editor avanzado de playbook (B2) |
+| `INDUSTRIES_ENABLED` | boolean | `false` | Selector de verticales ropa/belleza/minimarket (B2) |
+
+### Comportamiento del kill-switch
+
+```
+FEATURES_MODE=mvp  → todos los flags B2 = false (override forzado, seguro para prod)
+FEATURES_MODE=dev  → flags respetan valores individuales de env vars
+FEATURES_MODE=full → flags respetan valores individuales (futuro post-B2)
+```
+
+### Gating server-side: bloquear segundo canal (AC-04, AC-05)
+
+En modo MVP, intentar crear un segundo canal WhatsApp retorna `403 Forbidden`.
+
+```bash
+# Escenario: merchant ya tiene 1 canal, intenta crear otro
+# FEATURES_MODE=mvp (default)
+curl -X POST http://localhost:3000/onboarding/whatsapp/callback \
+  -H "Cookie: session=<session_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "abc123", "state": "xyz"}'
+
+# Respuesta esperada cuando merchant ya tiene 1 canal:
+# HTTP 403 Forbidden
+# {
+#   "statusCode": 403,
+#   "message": "Multi-channel requires enterprise plan",
+#   "error": "Forbidden"
+# }
+```
+
+```bash
+# Escenario: modo dev con flag habilitado → permite segundo canal
+# FEATURES_MODE=dev + MULTI_CHANNEL_ENABLED=true
+curl -X POST http://localhost:3000/onboarding/whatsapp/callback \
+  -H "Cookie: session=<session_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "abc123", "state": "xyz"}'
+# Respuesta esperada: 200 OK con channelId
+```
+
+### Frontend hook (AC-06)
+
+```typescript
+// apps/dashboard/src/hooks/use-features.ts
+import { useFeatures } from '@/hooks/use-features';
+
+function ChannelSettings() {
+  const { isMultiChannelEnabled } = useFeatures();
+
+  return (
+    <div>
+      {/* Solo visible en modo dev/full con flag habilitado */}
+      {isMultiChannelEnabled && <ConnectAnotherChannelButton />}
+    </div>
+  );
+}
+```
+
+### Evidence por AC
+
+- ✅ **AC-01**: `FeatureFlagsService` creado con inyección de `ConfigService` | `feature-flags.service.spec.ts`
+- ✅ **AC-02**: Kill-switch: `FEATURES_MODE=mvp` → todos los flags B2 = false | `describe('AC-02: Kill-switch mode=mvp...')`
+- ✅ **AC-03**: `env.validation.ts` validado con Joi para `FEATURES_MODE`, `MULTI_CHANNEL_ENABLED`, etc. | `env.validation.ts`
+- ✅ **AC-04**: Gating en creación de canal: max 1 en MVP → 403 | `meta-oauth.service.ts`
+- ✅ **AC-05**: Merchant con 1 canal existente no puede crear otro en MVP | `meta-oauth.service.spec.ts` integration
+- ✅ **AC-06**: Hook `useFeatures()` retorna flags correctos según env vars | `apps/dashboard/src/hooks/use-features.ts`
+- ✅ **AC-07**: `.env.example` actualizado en API y Dashboard con defaults MVP | `apps/api/.env.example`, `apps/dashboard/.env.example`
+- ✅ **AC-08**: Tests cubren modo `mvp`, `dev`, y flags individuales | `pnpm test` pasa
+- ✅ **AC-09**: Documentación en `BACKEND-EXECUTION-GUIDE.md` con ejemplos cURL | esta sección
+
+---
+
 ## Próximos Pasos
 
 Todos los flujos del MVP Core V1 están implementados. Ver `docs/plan/PR-STACK-core-v1.md` para el estado actualizado.

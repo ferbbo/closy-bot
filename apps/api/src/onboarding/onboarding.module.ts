@@ -8,6 +8,7 @@ import { ServicesModule } from '../services/services.module'; // PR-OB-01: Playb
 import { MerchantSettingsModule } from '../merchant-settings/merchant-settings.module'; // PR-OB-01: MerchantConfigService
 import { OnboardingController } from './onboarding.controller'; // PR-OB-01
 import { OnboardingService } from './onboarding.service'; // PR-OB-01
+import { FeatureFlagsModule } from '../common/feature-flags/feature-flags.module'; // PR-MVP-01
 
 /**
  * Onboarding module for merchant channel setup
@@ -22,6 +23,7 @@ import { OnboardingService } from './onboarding.service'; // PR-OB-01
     AuthModule, // For SessionAuthGuard
     ServicesModule, // PR-OB-01: PlaybookService
     MerchantSettingsModule, // PR-OB-01: MerchantConfigService
+    FeatureFlagsModule, // PR-MVP-01: Feature flags for channel gating
   ],
   controllers: [MetaOAuthController, OnboardingController], // PR-OB-01: add OnboardingController
   providers: [

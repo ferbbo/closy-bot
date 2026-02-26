@@ -17,6 +17,7 @@ import { CartCleanupModule } from './workers/cart-cleanup/cart-cleanup.module'; 
 import { AuthModule } from './auth/auth.module'; // PR-12
 import { OnboardingModule } from './onboarding/onboarding.module'; // PR-13
 import { MerchantSettingsModule } from './merchant-settings/merchant-settings.module'; // PR-15
+import { FeatureFlagsModule } from './common/feature-flags/feature-flags.module'; // PR-MVP-01
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { MerchantSettingsModule } from './merchant-settings/merchant-settings.mo
     AuthModule, // PR-12: OIDC Authentication
     OnboardingModule, // PR-13: Meta Embedded Signup
     MerchantSettingsModule, // PR-15: Merchant Settings API
+    FeatureFlagsModule, // PR-MVP-01: Feature flags infrastructure
   ],
 })
 export class AppModule {}
