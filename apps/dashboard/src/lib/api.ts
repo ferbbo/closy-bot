@@ -125,6 +125,38 @@ export interface SaveFaqsRequest {
   faqs: Faq[];
 }
 
+// PR-FE-03: Channel interfaces (from PR-16 + PR-14 backend)
+export interface Channel {
+  id: string;
+  merchantId: string;
+  type: 'whatsapp' | 'instagram'; // MVP: solo whatsapp
+  displayName: string;
+  status: 'connected' | 'pending' | 'error';
+  isActive: boolean;
+  lastWebhookAt: string | null; // ISO date
+  createdAt: string;
+}
+
+export interface ChannelHealth {
+  channelId: string;
+  status: 'connected' | 'pending' | 'error';
+  webhookSubscribed: boolean;
+  lastWebhookAt: string | null;
+  recentErrors: string[]; // max 3
+  errorCount: number;
+  lastErrorAt: string | null;
+  recommendation:
+    | 'resubscribe_webhook'
+    | 'refresh_credentials'
+    | 'check_permissions'
+    | null;
+}
+
+export interface RetryWebhookResponse {
+  success: boolean;
+  message: string;
+}
+
 async function apiFetchMultipart<T>(
   path: string,
   formData: FormData,
@@ -191,5 +223,14 @@ export const api = {
     apiFetch<{ id: string }>('/merchants/me/playbook', {
       method: 'PATCH',
       body: JSON.stringify(body),
+    }),
+
+  // PR-FE-03: Channels endpoints (PR-16 + PR-14)
+  getChannels: () => apiFetch<Channel[]>('/channels'),
+  getChannelHealth: (id: string) =>
+    apiFetch<ChannelHealth>(`/channels/${id}/health`),
+  retryWebhook: (id: string) =>
+    apiFetch<RetryWebhookResponse>(`/channels/${id}/retry-webhook`, {
+      method: 'POST',
     }),
 };
