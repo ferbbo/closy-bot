@@ -158,6 +158,82 @@ export class OrderRepository {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // PR-FE-06: Dashboard Orders API — filtered queries
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Find orders for a merchant with optional filters (status, date range, orderCode)
+   * REQ-01, AC-01, AC-02
+   */
+  async findAllByMerchantFiltered(
+    merchantId: string,
+    filters: {
+      status?: OrderStatus[];
+      dateFrom?: string;
+      dateTo?: string;
+      orderCode?: string;
+    },
+    take = 50,
+    skip = 0,
+  ): Promise<(Order & { _count: { items: number } })[]> {
+    return this.prisma.order.findMany({
+      where: {
+        merchantId,
+        ...(filters.status?.length ? { status: { in: filters.status } } : {}),
+        ...(filters.dateFrom || filters.dateTo
+          ? {
+              createdAt: {
+                ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
+                ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
+              },
+            }
+          : {}),
+        ...(filters.orderCode
+          ? { orderCode: { contains: filters.orderCode, mode: 'insensitive' } }
+          : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take,
+      skip,
+      include: {
+        _count: { select: { items: true } },
+      },
+    }) as Promise<(Order & { _count: { items: number } })[]>;
+  }
+
+  /**
+   * Count orders for a merchant with filters (for pagination total)
+   * REQ-01, AC-02
+   */
+  async countByMerchantFiltered(
+    merchantId: string,
+    filters: {
+      status?: OrderStatus[];
+      dateFrom?: string;
+      dateTo?: string;
+      orderCode?: string;
+    },
+  ): Promise<number> {
+    return this.prisma.order.count({
+      where: {
+        merchantId,
+        ...(filters.status?.length ? { status: { in: filters.status } } : {}),
+        ...(filters.dateFrom || filters.dateTo
+          ? {
+              createdAt: {
+                ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
+                ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
+              },
+            }
+          : {}),
+        ...(filters.orderCode
+          ? { orderCode: { contains: filters.orderCode, mode: 'insensitive' } }
+          : {}),
+      },
+    });
+  }
+
   /**
    * Get daily summary for merchant: count of orders created today and sum of totalAmount
    * Used by MerchantCommandService.getDailySummary() — AC-12
