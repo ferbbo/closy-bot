@@ -3344,6 +3344,139 @@ function ChannelSettings() {
 
 ---
 
+## Channels UI — PR-FE-03 (✅ Implementado)
+
+Página `/dashboard/channels` con lista de canales, health panel, retry webhook, y feature flag gating para multi-channel.
+
+### Setup previo
+
+```bash
+# 1. Backend running con PR-14 + PR-16 mergeados
+pnpm dev:api
+
+# 2. Dashboard running
+pnpm dev:dashboard
+# → http://localhost:3001
+
+# 3. Merchant con sesión activa (cookie session_id)
+# Login previo en /login con Google/Microsoft
+```
+
+### Testing manual — Canales UI
+
+#### T1: Lista de canales (AC-01, AC-02)
+
+```bash
+# Navegar a http://localhost:3001/dashboard/channels
+# → Debe mostrar lista de ChannelCards
+
+# Verificar que el request incluye cookie (AC-02)
+# DevTools → Network → GET /channels → Headers → Cookie: session_id=...
+```
+
+#### T2: Health panel expandible (AC-04, AC-05)
+
+```bash
+# 1. Click en cualquier ChannelCard
+# → Panel se expande con datos de GET /channels/:id/health
+# → Muestra: webhook status ✅/❌, errorCount, recentErrors, recommendation
+```
+
+#### T3: Retry Webhook — éxito (AC-06)
+
+```bash
+# Prerequisito: canal con status=error o webhookSubscribed=false
+# 1. Expandir health panel del canal
+# 2. Click "Retry Webhook"
+# → Spinner durante la petición
+# → Toast success: "Webhook reconectado exitosamente"
+# → Badge del canal actualiza a "Conectado"
+```
+
+#### T4: Retry Webhook — rate limit 429 (AC-07)
+
+```bash
+# Hacer 6 requests retry en <1 minuto
+# → 6to request muestra toast: "Demasiados intentos. Espera 60 segundos."
+# → Botón "Retry Webhook" se deshabilita con countdown visible
+```
+
+#### T5: Empty state (AC-08)
+
+```bash
+# Sin canales en la DB del merchant:
+# → Página muestra EmptyChannelsState
+# → Icono + "No tienes canales conectados"
+# → Botón CTA "Conectar WhatsApp" → redirect /onboarding?flow=add_channel
+```
+
+#### T6: Feature flag multi-channel (AC-09)
+
+```bash
+# apps/dashboard/.env.local (modo MVP default):
+NEXT_PUBLIC_FEATURES_MODE=mvp
+
+# → Botón "Conectar otro canal" NO visible
+# Equivalente: NEXT_PUBLIC_FEATURES_MODE=dev + NEXT_PUBLIC_MULTI_CHANNEL_ENABLED=true
+# → Botón "Conectar otro canal" SÍ visible
+```
+
+#### T7: Loading skeleton (AC-11)
+
+```bash
+# Throttle red en DevTools → "Slow 3G"
+# Navegar a /dashboard/channels
+# → Skeletons animados visibles durante la carga (no flash de pantalla vacía)
+```
+
+#### T8: Error 403 ownership (AC-10)
+
+```bash
+# Modificar URL manualmente a un canal de otro merchant
+# GET /channels/ch_otro_merchant/health → 403
+# → Toast: "No tienes permiso para ver este canal"
+```
+
+#### T9: Mobile responsive
+
+```bash
+# DevTools → Toggle device toolbar → iPhone SE (375px)
+# → Cards en columna, sin scroll horizontal
+# → Botones y badges visibles y toucheable
+```
+
+### cURL — Endpoints consumidos por la UI
+
+```bash
+# GET /channels (con cookie de sesión)
+curl -X GET http://localhost:3000/channels \
+  -H "Cookie: session_id=<tu-session-id>"
+
+# GET /channels/:id/health
+curl -X GET http://localhost:3000/channels/<channel-id>/health \
+  -H "Cookie: session_id=<tu-session-id>"
+
+# POST /channels/:id/retry-webhook
+curl -X POST http://localhost:3000/channels/<channel-id>/retry-webhook \
+  -H "Cookie: session_id=<tu-session-id>"
+```
+
+### Evidence por AC
+
+- ✅ **AC-01**: `channels/page.tsx` llama `useChannels()` → `GET /channels` | `use-channels.ts: queryFn`
+- ✅ **AC-02**: `apiFetch` con `credentials: 'include'` envía cookie automáticamente | `lib/api.ts`
+- ✅ **AC-03**: `ChannelCard` usa `Badge` con variant `success`/`destructive`/`warning` según status | `channel-card.tsx`
+- ✅ **AC-04**: Click en card expande `ChannelHealthPanel` que llama `useChannelHealth(id)` | `channel-card.tsx`
+- ✅ **AC-05**: `recommendation` mapeado a texto legible en `ChannelHealthPanel` | `channel-health-panel.tsx`
+- ✅ **AC-06**: `RetryWebhookButton` usa `useMutation` + `isPending` spinner + toast success | `retry-webhook-button.tsx`
+- ✅ **AC-07**: Error 429 → toast "Demasiados intentos..." + countdown 60s | `retry-webhook-button.tsx`
+- ✅ **AC-08**: `channels.length === 0` → `EmptyChannelsState` con CTA | `channels/page.tsx`
+- ✅ **AC-09**: `features.isMultiChannelEnabled` gatea botón "Conectar otro canal" | `channels/page.tsx`
+- ✅ **AC-10**: Error 401 → redirect `/login`; Error 403 → banner "No tienes acceso" | `channels/page.tsx`
+- ✅ **AC-11**: `isLoading` → `<ChannelCardSkeleton />` con `Skeleton` component | `channels/page.tsx`
+
+---
+
 ## Próximos Pasos
 
 Todos los flujos del MVP Core V1 están implementados. Ver `docs/plan/PR-STACK-core-v1.md` para el estado actualizado.
