@@ -5,7 +5,7 @@ import { Upload, FileText, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useImportCatalog } from '@/hooks/use-onboarding';
-import type { OnboardingStepKey } from '@/lib/api';
+import type { OnboardingStepKey, ImportStats } from '@/lib/api';
 
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -14,11 +14,6 @@ interface StepCatalogProps {
   completedSteps: OnboardingStepKey[];
   onNext: () => void;
   onBack: () => void;
-}
-
-interface ImportStats {
-  imported: number;
-  errors: string[];
 }
 
 export function StepCatalog({ completedSteps, onNext, onBack }: StepCatalogProps) {
@@ -93,11 +88,17 @@ export function StepCatalog({ completedSteps, onNext, onBack }: StepCatalogProps
         <Alert variant="success">
           <AlertTitle>✅ Importación exitosa</AlertTitle>
           <AlertDescription>
-            <p>{importStats.imported} productos importados correctamente.</p>
+            <p>
+              {importStats.created + importStats.updated} productos importados correctamente
+              {importStats.created > 0 && `, ${importStats.created} nuevos`}
+              {importStats.updated > 0 && `, ${importStats.updated} actualizados`}.
+            </p>
             {importStats.errors.length > 0 && (
               <ul className="mt-1 list-disc list-inside text-xs">
                 {importStats.errors.slice(0, 5).map((err, i) => (
-                  <li key={i}>{err}</li>
+                  <li key={i}>
+                    Fila {err.row}{err.field ? ` · ${err.field}` : ''}: {err.message}
+                  </li>
                 ))}
               </ul>
             )}
