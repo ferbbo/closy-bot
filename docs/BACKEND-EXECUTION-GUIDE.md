@@ -1237,6 +1237,87 @@ curl -X GET http://localhost:3000/merchants/me/config
 
 ---
 
+### PR-FE-OB-2: Wizard step-customize — Campos nuevos (businessHours, paymentLinkUrl, shippingPolicy)
+
+#### 8. Guardar config completa desde step-customize (pagos + políticas + horario)
+
+```bash
+curl -X PATCH http://localhost:3000/merchants/me/config \
+  -H "Cookie: session_id=<tu-session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "paymentMethods": [
+      { "type": "cod", "label": "Efectivo / Pago contra entrega" },
+      {
+        "type": "transfer",
+        "label": "Transferencia / Nequi",
+        "bankInfo": {
+          "bankName": "Bancolombia",
+          "accountNumber": "12345678",
+          "accountType": "ahorros",
+          "accountHolder": "Mi Tienda S.A.S"
+        }
+      },
+      {
+        "type": "payment_link",
+        "label": "Link de pago",
+        "paymentLinkUrl": "https://link.mercadopago.com.co/mi-tienda"
+      }
+    ],
+    "shippingConfig": {
+      "shippingPolicy": "Envíos a toda Colombia. Tiempo: 3-5 días hábiles. Costo según ciudad."
+    },
+    "returnPolicy": "Aceptamos cambios dentro de 8 días. Producto sin uso y con etiquetas.",
+    "businessHours": "Lunes a Viernes 9am-6pm, Sábados 9am-1pm"
+  }'
+```
+
+**Respuesta esperada (200):**
+```json
+{
+  "id": "cm...",
+  "merchantId": "cm...",
+  "paymentMethods": [...],
+  "shippingConfig": { "shippingPolicy": "Envíos a toda Colombia..." },
+  "returnPolicy": "Aceptamos cambios dentro de 8 días...",
+  "businessHours": "Lunes a Viernes 9am-6pm, Sábados 9am-1pm",
+  "currency": "COP",
+  "orderCodePrefix": "ORD",
+  "autoConfirmCod": true,
+  "createdAt": "2026-02-26T...",
+  "updatedAt": "2026-02-26T..."
+}
+```
+
+#### 9. Guardar FAQs desde step-customize (PATCH /merchants/me/playbook)
+
+```bash
+curl -X PATCH http://localhost:3000/merchants/me/playbook \
+  -H "Cookie: session_id=<tu-session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "faqs": [
+      {
+        "question": "¿Cuánto demora el envío?",
+        "keywords": ["envio", "demora", "llega", "tiempo", "dias"],
+        "answer": "Los envíos demoran 3-5 días hábiles después de confirmar tu pago 📦"
+      },
+      {
+        "question": "¿Qué métodos de pago aceptan?",
+        "keywords": ["pago", "pagar", "nequi", "transferencia", "efectivo"],
+        "answer": "Aceptamos efectivo contra entrega, transferencia/Nequi y links de pago 💳"
+      }
+    ]
+  }'
+```
+
+**Respuesta esperada (200):**
+```json
+{ "id": "cm..." }
+```
+
+---
+
 ## Flujo 5.6: FAQ Automáticas — PlaybookConfig + FaqFlow (PR-GAP-2)
 
 ### Descripción
