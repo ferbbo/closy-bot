@@ -105,6 +105,9 @@ export class MerchantConfigService {
     if (dto.autoConfirmCod !== undefined) {
       updateData['autoConfirmCod'] = dto.autoConfirmCod;
     }
+    if (dto.businessHours !== undefined) {
+      updateData['businessHours'] = dto.businessHours;
+    }
 
     const updated = await this.prisma.merchantConfig.update({
       where: { merchantId },
@@ -132,6 +135,7 @@ export class MerchantConfigService {
     paymentMethods: Prisma.JsonValue;
     shippingConfig: Prisma.JsonValue;
     returnPolicy: string | null;
+    businessHours: string | null;
     currency: string;
     orderCodePrefix: string;
     autoConfirmCod: boolean;
@@ -144,6 +148,7 @@ export class MerchantConfigService {
       paymentMethods: MerchantConfigData['paymentMethods'];
       shippingConfig: MerchantConfigData['shippingConfig'];
       returnPolicy: string | null;
+      businessHours: string | null;
       currency: string;
       orderCodePrefix: string;
       autoConfirmCod: boolean;
@@ -157,6 +162,7 @@ export class MerchantConfigService {
     dto.paymentMethods = data.paymentMethods;
     dto.shippingConfig = data.shippingConfig;
     dto.returnPolicy = data.returnPolicy;
+    dto.businessHours = data.businessHours;
     dto.currency = data.currency;
     dto.orderCodePrefix = data.orderCodePrefix;
     dto.autoConfirmCod = data.autoConfirmCod;

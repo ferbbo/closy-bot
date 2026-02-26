@@ -9,6 +9,7 @@ import {
   IsInt,
   Min,
   Max,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Industry } from '@prisma/client';
@@ -17,6 +18,24 @@ import { Industry } from '@prisma/client';
  * DTOs for PlaybookConfig structure validation
  * Used by PUT/PATCH /merchants/me/playbook
  */
+
+/**
+ * PR-FE-OB-2: FAQ entry DTO (AC-08)
+ * Validates individual FAQ items for keyword-based matching
+ */
+export class FaqDto {
+  @IsString()
+  @MaxLength(100)
+  question!: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  keywords!: string[];
+
+  @IsString()
+  @MaxLength(300)
+  answer!: string;
+}
 
 export class LlmPromptConfigDto {
   @IsString()
@@ -236,4 +255,11 @@ export class UpdatePlaybookConfigDto {
   @ValidateNested()
   @Type(() => BotPersonalityDto)
   botPersonality?: BotPersonalityDto;
+
+  /** PR-FE-OB-2: FAQ array for keyword-based matching (max 10 items) */
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => FaqDto)
+  faqs?: FaqDto[];
 }

@@ -10,11 +10,10 @@ export interface StepperStep {
 }
 
 export const ONBOARDING_STEPS: StepperStep[] = [
-  { key: 'profile', label: 'Perfil', index: 1 },
-  { key: 'channel', label: 'Canal', index: 2 },
-  { key: 'catalog', label: 'Catálogo', index: 3 },
-  { key: 'config', label: 'Pagos', index: 4 },
-  { key: 'test', label: 'Activar', index: 5 },
+  { key: 'channel', label: 'Canal', index: 1 },
+  { key: 'catalog', label: 'Catálogo', index: 2 },
+  { key: 'config', label: 'Personalización', index: 3 },
+  { key: 'test', label: 'Activar', index: 4 },
 ];
 
 interface StepperProps {

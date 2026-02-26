@@ -10,10 +10,9 @@ import { useActivateMerchant } from '@/hooks/use-onboarding';
 import type { OnboardingStepKey } from '@/lib/api';
 
 const STEP_LABELS: Record<OnboardingStepKey, string> = {
-  profile: 'Perfil configurado',
   channel: 'Canal WhatsApp conectado',
   catalog: 'Catálogo importado',
-  config: 'Métodos de pago configurados',
+  config: 'Tienda personalizada',
   test: 'Listo para activar',
 };
 
@@ -27,7 +26,7 @@ export function StepActivate({ completedSteps, percentage, onBack }: StepActivat
   const router = useRouter();
   const activateMutation = useActivateMerchant();
 
-  const requiredSteps: OnboardingStepKey[] = ['profile', 'channel', 'catalog', 'config'];
+  const requiredSteps: OnboardingStepKey[] = ['channel', 'catalog', 'config'];
   const missingSteps = requiredSteps.filter((s) => !completedSteps.includes(s));
   const canActivate = missingSteps.length === 0;
 
