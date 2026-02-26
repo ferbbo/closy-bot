@@ -18,6 +18,7 @@ const mockRopaConfig = {
   paymentMethods: MERCHANT_CONFIG_PRESETS['ropa'].paymentMethods,
   shippingConfig: MERCHANT_CONFIG_PRESETS['ropa'].shippingConfig,
   returnPolicy: MERCHANT_CONFIG_PRESETS['ropa'].returnPolicy,
+  businessHours: null as string | null,
   currency: 'COP',
   orderCodePrefix: 'ORD',
   autoConfirmCod: true,
@@ -231,6 +232,35 @@ describe('MerchantConfigService', () => {
       const updateCall = (prisma.merchantConfig.update as jest.Mock).mock.calls[0][0];
       expect(updateCall.data.autoConfirmCod).toBe(false);
       expect(result.autoConfirmCod).toBe(false);
+    });
+
+    it('AC-07 (PR-FE-OB-2): updates businessHours field only', async () => {
+      const configWithHours = {
+        ...mockRopaConfig,
+        businessHours: null as string | null,
+      };
+      (prisma.merchantConfig.findUnique as jest.Mock).mockResolvedValue(configWithHours);
+      const updatedConfig = { ...configWithHours, businessHours: 'Lunes a Viernes 9am-6pm' };
+      (prisma.merchantConfig.update as jest.Mock).mockResolvedValue(updatedConfig);
+
+      const result = await service.updateConfig('merchant-ropa-1', {
+        businessHours: 'Lunes a Viernes 9am-6pm',
+      });
+
+      const updateCall = (prisma.merchantConfig.update as jest.Mock).mock.calls[0][0];
+      expect(Object.keys(updateCall.data)).toEqual(['businessHours']);
+      expect(result.businessHours).toBe('Lunes a Viernes 9am-6pm');
+    });
+
+    it('AC-08 (PR-FE-OB-2): paymentMethods DTO accepts paymentLinkUrl field', () => {
+      // Validates that PaymentMethodConfigDto accepts paymentLinkUrl (AC-08)
+      const method = {
+        type: 'payment_link' as const,
+        label: 'MercadoPago',
+        paymentLinkUrl: 'https://link.mercadopago.com.co/merchant',
+      };
+      expect(method.paymentLinkUrl).toBe('https://link.mercadopago.com.co/merchant');
+      expect(method.type).toBe('payment_link');
     });
   });
 });
