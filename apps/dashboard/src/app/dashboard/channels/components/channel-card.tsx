@@ -17,7 +17,7 @@ import { ChannelHealthPanel } from './channel-health-panel';
 
 // ─── Status badge config ──────────────────────────────────────────────────────
 
-type BadgeVariant = 'success' | 'destructive' | 'warning' | 'pending' | 'default' | 'secondary' | 'outline';
+type BadgeVariant = 'success' | 'destructive' | 'warning' | 'default' | 'secondary' | 'outline';
 
 const STATUS_CONFIG: Record<
   Channel['status'],

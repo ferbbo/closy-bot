@@ -90,9 +90,7 @@ export function ChannelHealthPanel({ channelId, status }: ChannelHealthPanelProp
       {/* AC-05: recommendation */}
       {recommendation && (
         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-2.5 py-1.5">
-          {health.errorCount === 0 && !recommendation
-            ? 'Todo OK'
-            : recommendation}
+          {recommendation}
         </p>
       )}
 
