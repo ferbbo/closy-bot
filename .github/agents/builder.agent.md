@@ -329,9 +329,11 @@ Usa subagentes para trabajo paralelo y aislado. Integra outputs y manten consist
 
 ## Skills (cargar antes de implementar)
 
-Antes de escribir codigo NestJS o Prisma, carga las skills relevantes:
+Antes de escribir codigo NestJS, NextJS, React o Prisma, carga las skills relevantes:
 - **NestJS**: `read_file .github/skills/nestjs-best-practices/SKILL.md`
 - **Prisma**: `read_file .github/skills/prisma/SKILL.md`
+- **React|NextJS** (si desarrollas UI): `read_file .github/skills/react-best-practices/SKILL.md`
+- **Web Design** (si desarrollas UI): `read_file .github/skills/web-design-guidelines/SKILL.md`
 
 
 ## Output compacto (OBLIGATORIO)

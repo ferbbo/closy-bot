@@ -24,7 +24,10 @@ export async function apiFetch<T>(
   });
 
   if (!res.ok) {
-    throw new ApiError(res.status, `API Error: ${res.status}`);
+    const body = await res.json().catch(() => ({}));
+    const message =
+      (body as { message?: string }).message ?? `API Error: ${res.status}`;
+    throw new ApiError(res.status, message);
   }
 
   return res.json();
@@ -37,11 +40,104 @@ export interface AuthMeResponse {
     id: string;
     name: string;
     email: string;
+    status: 'onboarding' | 'active' | 'suspended';
+    industry?: 'ropa' | 'belleza' | 'minimarket' | null;
   };
+}
+
+// Onboarding API types
+export type OnboardingStepKey =
+  | 'profile'
+  | 'channel'
+  | 'catalog'
+  | 'config'
+  | 'test';
+
+export interface OnboardingProgress {
+  completedSteps: OnboardingStepKey[];
+  pendingSteps: OnboardingStepKey[];
+  percentage: number; // 0-100
+  nextStep: OnboardingStepKey | null;
+}
+
+export interface ApplyPresetRequest {
+  industry: 'ropa' | 'belleza' | 'minimarket';
+}
+
+export interface ApplyPresetResponse {
+  success: true;
+}
+
+export interface ActivateResponse {
+  activated: boolean;
+  status: 'active';
+}
+
+export interface ActivateErrorResponse {
+  error: string;
+  details: string[];
+}
+
+export interface PaymentMethodsConfig {
+  acceptsCash: boolean;
+  acceptsTransfer: boolean;
+  acceptsPaymentLink: boolean;
+  bankName?: string;
+  bankAccount?: string;
+  bankHolder?: string;
+}
+
+async function apiFetchMultipart<T>(
+  path: string,
+  formData: FormData,
+): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+    // Do NOT set Content-Type — browser sets it with boundary automatically
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(
+      res.status,
+      (body as { message?: string }).message ?? `API Error: ${res.status}`,
+    );
+  }
+
+  return res.json();
 }
 
 export const api = {
   getMe: () => apiFetch<AuthMeResponse>('/auth/me'),
   getGoogleAuthUrl: () => `${API_URL}/auth/login/google`,
   getMicrosoftAuthUrl: () => `${API_URL}/auth/login/microsoft`,
+
+  // Onboarding endpoints
+  getOnboardingProgress: () =>
+    apiFetch<OnboardingProgress>('/onboarding/progress'),
+  applyPreset: (body: ApplyPresetRequest) =>
+    apiFetch<ApplyPresetResponse>('/onboarding/apply-preset', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  activateMerchant: () =>
+    apiFetch<ActivateResponse>('/onboarding/activate', {
+      method: 'POST',
+    }),
+
+  // Catalog import (CSV file upload — PR-17)
+  importCatalogFile: (formData: FormData) =>
+    apiFetchMultipart<{ imported: number; errors: string[] }>(
+      '/catalog/import-file',
+      formData,
+    ),
+
+  // Payment methods config (PR-04.5)
+  savePaymentConfig: (body: PaymentMethodsConfig) =>
+    apiFetch<{ success: true }>('/merchants/me/config', {
+      method: 'PATCH',
+      body: JSON.stringify({ paymentMethods: body }),
+    }),
 };
