@@ -51,7 +51,7 @@ export function RulesSection({ rules, onSave, isSaving }: RulesSectionProps) {
     register,
     handleSubmit,
     reset,
-    formState: { errors, isDirty },
+    formState: { errors, isDirty, isValid },
   } = useForm<PlaybookRulesFormValues>({
     resolver: zodResolver(playbookRulesSchema),
     defaultValues: {
@@ -61,6 +61,7 @@ export function RulesSection({ rules, onSave, isSaving }: RulesSectionProps) {
       upsellEnabled: rules.upsellEnabled,
       maxRecommendations: rules.maxRecommendations,
     },
+    mode: 'onChange',
   });
 
   useEffect(() => {
@@ -129,7 +130,7 @@ export function RulesSection({ rules, onSave, isSaving }: RulesSectionProps) {
 
           {/* Actions */}
           <div className="flex items-center gap-3 pt-2 border-t">
-            <Button type="submit" disabled={!isDirty || isSaving}>
+            <Button type="submit" disabled={!isDirty || !isValid || isSaving}>
               {isSaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -143,7 +144,17 @@ export function RulesSection({ rules, onSave, isSaving }: RulesSectionProps) {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => reset()}
+                onClick={() => {
+                  if (window.confirm('¿Descartar cambios sin guardar?')) {
+                    reset({
+                      askSizeBeforeCart: rules.askSizeBeforeCart,
+                      askSkinTypeOnSearch: rules.askSkinTypeOnSearch,
+                      autoSubstitutions: rules.autoSubstitutions,
+                      upsellEnabled: rules.upsellEnabled,
+                      maxRecommendations: rules.maxRecommendations,
+                    });
+                  }
+                }}
                 disabled={isSaving}
               >
                 Cancelar

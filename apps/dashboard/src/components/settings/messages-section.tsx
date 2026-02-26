@@ -169,10 +169,11 @@ export function MessagesSection({ messages, onSave, isSaving }: MessagesSectionP
     register,
     handleSubmit,
     reset,
-    formState: { errors, isDirty },
+    formState: { errors, isDirty, isValid },
   } = useForm<PlaybookMessagesFormValues>({
     resolver: zodResolver(playbookMessagesSchema),
     defaultValues: messages,
+    mode: 'onChange',
   });
 
   useEffect(() => {
@@ -222,7 +223,7 @@ export function MessagesSection({ messages, onSave, isSaving }: MessagesSectionP
 
           {/* Actions */}
           <div className="flex items-center gap-3 pt-2 border-t">
-            <Button type="submit" disabled={!isDirty || isSaving}>
+            <Button type="submit" disabled={!isDirty || !isValid || isSaving}>
               {isSaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -236,7 +237,11 @@ export function MessagesSection({ messages, onSave, isSaving }: MessagesSectionP
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => reset(messages)}
+                onClick={() => {
+                  if (window.confirm('¿Descartar cambios sin guardar?')) {
+                    reset(messages);
+                  }
+                }}
                 disabled={isSaving}
               >
                 Cancelar

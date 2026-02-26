@@ -30,10 +30,11 @@ export function ProfileSection({ profile, onSave, isSaving }: ProfileSectionProp
     register,
     handleSubmit,
     reset,
-    formState: { errors, isDirty },
+    formState: { errors, isDirty, isValid },
   } = useForm<MerchantProfileFormValues>({
     resolver: zodResolver(merchantProfileSchema),
     defaultValues: { name: profile.name },
+    mode: 'onChange',
   });
 
   // Re-sync when profile data refreshes after save
@@ -81,7 +82,7 @@ export function ProfileSection({ profile, onSave, isSaving }: ProfileSectionProp
           <div className="flex items-center gap-3 pt-2 border-t">
             <Button
               type="submit"
-              disabled={!isDirty || isSaving}
+              disabled={!isDirty || !isValid || isSaving}
             >
               {isSaving ? (
                 <>
@@ -96,7 +97,11 @@ export function ProfileSection({ profile, onSave, isSaving }: ProfileSectionProp
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => reset({ name: profile.name })}
+                onClick={() => {
+                  if (window.confirm('¿Descartar cambios sin guardar?')) {
+                    reset({ name: profile.name });
+                  }
+                }}
                 disabled={isSaving}
               >
                 Cancelar

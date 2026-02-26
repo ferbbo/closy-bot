@@ -122,7 +122,7 @@ export function GuidelinesSection({
     control,
     handleSubmit,
     reset,
-    formState: { errors, isDirty },
+    formState: { errors, isDirty, isValid },
   } = useForm<LlmPromptConfigFormValues>({
     resolver: zodResolver(llmPromptConfigSchema),
     defaultValues: {
@@ -132,6 +132,7 @@ export function GuidelinesSection({
       upsellStrategy: llmPrompt.upsellStrategy,
       emojiUsage: llmPrompt.emojiUsage,
     },
+    mode: 'onChange',
   });
 
   useEffect(() => {
@@ -252,7 +253,7 @@ export function GuidelinesSection({
 
           {/* Actions */}
           <div className="flex items-center gap-3 pt-2 border-t">
-            <Button type="submit" disabled={!isDirty || isSaving}>
+            <Button type="submit" disabled={!isDirty || !isValid || isSaving}>
               {isSaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -266,7 +267,11 @@ export function GuidelinesSection({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => reset()}
+                onClick={() => {
+                  if (window.confirm('¿Descartar cambios sin guardar?')) {
+                    reset();
+                  }
+                }}
                 disabled={isSaving}
               >
                 Cancelar
