@@ -12,7 +12,7 @@
  * AC-11: Guardar persiste pagos + políticas + FAQs
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -141,6 +141,7 @@ export function StepCustomize({ completedSteps, onNext, onBack }: StepCustomizeP
     handleSubmit,
     watch,
     control,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<CustomizeFormValues>({
     resolver: zodResolver(customizeSchema),
@@ -164,11 +165,6 @@ export function StepCustomize({ completedSteps, onNext, onBack }: StepCustomizeP
   const showTransfer = watch('acceptsTransfer');
   const showPaymentLink = watch('acceptsPaymentLink');
   const faqCount = faqFields.length;
-
-  // AC-05: Pre-fill "Retail General" FAQs if array is empty when mounting
-  useEffect(() => {
-    // defaultValues already sets the 5 FAQs; this is a safety net for future extension
-  }, []);
 
   // ---------------------------------------------------------------------------
   // Submit
@@ -486,9 +482,9 @@ export function StepCustomize({ completedSteps, onNext, onBack }: StepCustomizeP
                       <input
                         {...register(`faqs.${index}.question`, {
                           onChange: (e) => {
-                            // Auto-generate keywords on question change
+                            // AC-11: Auto-generate keywords from question text (normalize: lowercase, sin tildes)
                             const keywords = normalizeKeywords(e.target.value as string);
-                            // We use a controlled approach via rhf setValue
+                            void setValue(`faqs.${index}.keywords`, keywords, { shouldValidate: false });
                           },
                         })}
                         id={`faqs.${index}.question`}
