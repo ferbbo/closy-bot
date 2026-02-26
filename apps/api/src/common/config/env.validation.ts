@@ -55,4 +55,13 @@ export const envValidationSchema = Joi.object({
   META_APP_SECRET: Joi.string().optional(),
   META_CONFIG_ID: Joi.string().optional(),
   META_REDIRECT_URI: Joi.string().uri().optional(),
+
+  // PR-MVP-01: Feature Flags infrastructure
+  // Kill-switch global: mvp → all B2 flags return false (safe default for production)
+  FEATURES_MODE: Joi.string().valid('mvp', 'dev', 'full').default('mvp'),
+  // Granular flags (only respected when FEATURES_MODE != mvp)
+  MULTI_CHANNEL_ENABLED: Joi.boolean().default(false),
+  INSTAGRAM_ENABLED: Joi.boolean().default(false),
+  PLAYBOOK_EDITOR_ENABLED: Joi.boolean().default(false),
+  INDUSTRIES_ENABLED: Joi.boolean().default(false),
 });
