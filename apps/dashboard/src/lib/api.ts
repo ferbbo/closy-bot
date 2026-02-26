@@ -47,7 +47,6 @@ export interface AuthMeResponse {
 
 // Onboarding API types
 export type OnboardingStepKey =
-  | 'profile'
   | 'channel'
   | 'catalog'
   | 'config'
@@ -85,6 +84,45 @@ export interface PaymentMethodsConfig {
   bankName?: string;
   bankAccount?: string;
   bankHolder?: string;
+}
+
+// PR-FE-OB-2: Typed interfaces for step-customize
+export interface PaymentMethodItem {
+  type: 'cod' | 'transfer' | 'payment_link';
+  label: string;
+  instructions?: string;
+  bankInfo?: {
+    bankName: string;
+    accountNumber: string;
+    accountType: 'ahorros' | 'corriente';
+    accountHolder: string;
+  };
+  paymentLinkUrl?: string;
+}
+
+export interface PoliciesConfig {
+  shippingPolicy?: string;
+  returnPolicy?: string;
+  businessHours?: string;
+}
+
+export interface Faq {
+  question: string;
+  keywords: string[];
+  answer: string;
+}
+
+export interface CustomizeConfigRequest {
+  paymentMethods?: PaymentMethodItem[];
+  shippingConfig?: {
+    shippingPolicy?: string;
+  };
+  returnPolicy?: string;
+  businessHours?: string;
+}
+
+export interface SaveFaqsRequest {
+  faqs: Faq[];
 }
 
 async function apiFetchMultipart<T>(
@@ -139,5 +177,19 @@ export const api = {
     apiFetch<{ success: true }>('/merchants/me/config', {
       method: 'PATCH',
       body: JSON.stringify({ paymentMethods: body }),
+    }),
+
+  // PR-FE-OB-2: Customize step — pagos + políticas + businessHours
+  saveCustomizeConfig: (body: CustomizeConfigRequest) =>
+    apiFetch<{ success: true }>('/merchants/me/config', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  // PR-FE-OB-2: Save FAQs via PATCH /merchants/me/playbook
+  saveFaqs: (body: SaveFaqsRequest) =>
+    apiFetch<{ id: string }>('/merchants/me/playbook', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
     }),
 };

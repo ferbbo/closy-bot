@@ -6,6 +6,8 @@ import {
   type ApplyPresetRequest,
   type OnboardingProgress,
   type PaymentMethodsConfig,
+  type CustomizeConfigRequest,
+  type SaveFaqsRequest,
 } from '@/lib/api';
 
 /** AC-11: Polling each 10s while wizard is open */
@@ -66,6 +68,28 @@ export function useActivateMerchant() {
     onSuccess: () => {
       // Invalidate auth to update merchant.status → triggers redirect
       void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+      void queryClient.invalidateQueries({ queryKey: ONBOARDING_KEYS.progress });
+    },
+  });
+}
+
+/** PR-FE-OB-2 AC-11: Save customize config (payments + policies + businessHours) */
+export function useSaveCustomizeConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (config: CustomizeConfigRequest) => api.saveCustomizeConfig(config),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ONBOARDING_KEYS.progress });
+    },
+  });
+}
+
+/** PR-FE-OB-2 AC-05/AC-06/AC-11: Save FAQs via PATCH /merchants/me/playbook */
+export function useSaveFaqs() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SaveFaqsRequest) => api.saveFaqs(body),
+    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ONBOARDING_KEYS.progress });
     },
   });
