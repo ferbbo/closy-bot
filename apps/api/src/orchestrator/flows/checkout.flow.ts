@@ -268,17 +268,24 @@ export class CheckoutFlow {
   }
 
   // ---------------------------------------------------------------------------
-  // Helper: build payment methods prompt (AC-08)
+  // Helper: build payment methods prompt (AC-08 / AC-13 PR-FE-OB-2)
   // ---------------------------------------------------------------------------
   private buildPaymentMethodsPrompt(
-    methods: Array<{ type: string; label: string }>,
+    methods: Array<{ type: string; label: string; paymentLinkUrl?: string }>,
     empty = false,
   ): string {
     if (empty || methods.length === 0) {
       return 'Selecciona tu método de pago:\n1. Contraentrega\n\nResponde con el número.';
     }
 
-    const lines = methods.map((m, i) => `${i + 1}. ${m.label}`).join('\n');
+    const lines = methods.map((m, i) => {
+      const base = `${i + 1}. ${m.label}`;
+      // AC-13: include URL for payment_link methods so customer can access it
+      if (m.type === 'payment_link' && m.paymentLinkUrl) {
+        return `${base}\n   🔗 ${m.paymentLinkUrl}`;
+      }
+      return base;
+    }).join('\n');
     return `Selecciona tu método de pago:\n${lines}\n\nResponde con el número.`;
   }
 
