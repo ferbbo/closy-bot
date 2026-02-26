@@ -71,32 +71,32 @@ export const GenericPlaybookDefaults: PlaybookConfig = {
     upsellEnabled: true,
     maxRecommendations: 3,
   },
-  // PR-GAP-2: FAQ presets genéricos (AC-04)
+  // PR-FE-OB-2: "Retail General" FAQ preset (5 items) — wizard step-customize defaults
   faqs: [
     {
       question: '¿Cuánto demora el envío?',
-      keywords: ['envio', 'demora'],
-      answer: 'Los envíos demoran 3-5 días hábiles 📦',
+      keywords: ['envio', 'demora', 'llega', 'tiempo', 'dias'],
+      answer: 'Los envíos demoran 3-5 días hábiles después de confirmar tu pago 📦',
     },
     {
-      question: '¿Cómo puedo pagar?',
-      keywords: ['pago', 'metodos'],
-      answer: 'Aceptamos transferencia y pago contra entrega 💳',
+      question: '¿Hacen envíos a mi ciudad?',
+      keywords: ['envio', 'ciudad', 'departamento', 'llegan', 'envian'],
+      answer: '¡Sí! Hacemos envíos a toda Colombia 🇨🇴',
     },
     {
-      question: '¿Cuál es el horario de atención?',
-      keywords: ['horario', 'abierto'],
-      answer: 'Escribe "ayuda" para ver nuestras opciones 💬',
+      question: '¿Puedo cambiar o devolver?',
+      keywords: ['cambio', 'devolucion', 'devolver', 'cambiar', 'garantia'],
+      answer: 'Tienes 8 días para cambios. El producto debe estar sin uso y con etiquetas 🏷️',
     },
     {
-      question: '¿Cómo los contacto?',
-      keywords: ['contacto', 'telefono', 'whatsapp'],
-      answer: 'Estoy aquí para ayudarte. ¿Qué necesitas? 😊',
+      question: '¿Qué métodos de pago aceptan?',
+      keywords: ['pago', 'pagar', 'nequi', 'transferencia', 'efectivo', 'tarjeta'],
+      answer: 'Aceptamos efectivo contra entrega, transferencia/Nequi y links de pago 💳',
     },
     {
-      question: '¿Qué opciones tienen?',
-      keywords: ['ayuda', 'opciones'],
-      answer: 'Escribe "ayuda" para ver el menú completo 📋',
+      question: '¿Tienen garantía?',
+      keywords: ['garantia', 'defecto', 'danado', 'roto'],
+      answer: 'Todos nuestros productos tienen garantía de 30 días por defectos de fábrica ✅',
     },
   ],
   // PR-08: Handoff messages for human handoff flow (AC-13)
