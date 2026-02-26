@@ -555,7 +555,7 @@ graph TD
   - En Bloque 7 se migra a Handlebars render formal
 - **Paralelizable con:** PR-03.5.1, PR-03.5.2
 
-##### PR-GAP-2 — FAQ básico: faqs en PlaybookConfig + FaqFlow 🟡 NUEVO
+##### PR-GAP-2 — FAQ básico: faqs en PlaybookConfig + FaqFlow ✅ MERGED
 - **Objetivo:** Permitir que el bot responda preguntas frecuentes (envío, devoluciones, garantía, pagos) sin RAG, usando array de FAQs en PlaybookConfig.
 - **Depende de:** PR-11 ✅ (Playbooks), PR-03.5.1 (nuevo intent QUERY_FAQ).
 - **Incluye:**
@@ -798,7 +798,7 @@ graph TD
 
 #### Fase 2.2
 
-##### PR-08 — Handoff humano: resumen estructurado + registro 🟡
+##### PR-08 — Handoff humano: resumen estructurado + registro ✅ MERGED
 - **Objetivo:** detectar necesidad de handoff y generar resumen con contexto completo. Detección es **template-first** (keyword + threshold). Summary usa LLM **solo si** `LLM_SUMMARY_ENABLED=true`, con fallback a summary determinístico.
 - **Depende de:** PR-07.
 - **Incluye:**
@@ -832,7 +832,7 @@ graph TD
 
 #### Fase 3.1 (paralelizable — APIs backend sin dependencias de Bloque 1-2)
 
-##### PR-15 — Merchant Settings API: Playbook Config + Profile Update 🟡
+##### PR-15 — Merchant Settings API: Playbook Config + Profile Update ✅ MERGED
 - **Issue:** [#55](https://github.com/ferbbo/closy-bot/issues/55)
 - **Brief:** [`docs/plan/pr-briefs/PR-15-merchant-settings-api.md`](../blob/main/docs/plan/pr-briefs/PR-15-merchant-settings-api.md)
 - **Objetivo:** endpoints HTTP para ver/actualizar perfil y playbookConfig del merchant.
@@ -855,7 +855,7 @@ graph TD
   - Sin auth → 401, validación fallida → 400
   - `pnpm lint`, `pnpm test` pasan
 
-##### PR-16 — Channel List API 🟢
+##### PR-16 — Channel List API ✅ MERGED
 - **Objetivo:** endpoint para listar channels del merchant autenticado.
 - **Depende de:** PR-14 ✅.
 - **Incluye:**
@@ -869,7 +869,7 @@ graph TD
   - Sin auth → 401, sin channels → `[]`
   - `pnpm lint`, `pnpm test` pasan
 
-##### PR-17 — Catalog Import File Upload: multipart/form-data 🟡
+##### PR-17 — Catalog Import File Upload: multipart/form-data ✅ MERGED
 - **Objetivo:** upload CSV real via `multipart/form-data` para UX drag & drop.
 - **Depende de:** PR-03.7 ✅.
 - **Incluye:**
@@ -886,7 +886,7 @@ graph TD
 
 #### Fase 3.2
 
-##### PR-FE-01 — Frontend Bootstrap: Next.js + shadcn + TanStack Query 🔵
+##### PR-FE-01 — Frontend Bootstrap: Next.js + shadcn + TanStack Query ✅ MERGED
 - **Objetivo:** package `@closy-bot/dashboard` con login + dashboard placeholder.
 - **Depende de:** PR-12 ✅, PR-FE-00.
 - **Incluye:**
@@ -910,7 +910,7 @@ graph TD
 
 #### Fase 4.1
 
-##### PR-OB-01 — Onboarding Wizard API: progress tracker + presets + activación 🟡 NUEVO
+##### PR-OB-01 — Onboarding Wizard API: progress tracker + presets + activación ✅ MERGED
 - **Objetivo:** API que guía al merchant por los pasos de setup y trackea progreso, con presets por industria para acelerar configuración.
 - **Depende de:** PR-12 ✅ (Auth), PR-11 ✅ (Playbooks), PR-04.5 (MerchantConfig).
 - **Incluye:**
@@ -940,7 +940,7 @@ graph TD
 
 #### Fase 4.2
 
-##### PR-FE-OB — Onboarding Wizard UI 🔵 NUEVO
+##### PR-FE-OB — Onboarding Wizard UI ✅ MERGED
 - **Objetivo:** wizard step-by-step en dashboard para setup inicial del merchant.
 - **Depende de:** PR-OB-01, PR-FE-01.
 - **Incluye:**
@@ -954,6 +954,37 @@ graph TD
   - Wizard completo funciona end-to-end
   - Progress se actualiza en tiempo real
   - Merchant puede completar setup en ≤10 minutos
+
+#### Fase 4.3
+
+##### PR-FE-OB-2 — Wizard: step-customize (4 pasos MVP) 🔵 PENDIENTE
+- **Objetivo:** Reducir wizard de 5 a 4 pasos eliminando step-profile (redundante) y reemplazando step-payments con step-customize que combina pagos + políticas + FAQs.
+- **Depende de:** PR-FE-OB ✅, PR-OB-01 ✅, PR-GAP-2 ✅.
+- **Incluye:**
+  - Eliminar step-profile (datos ya vienen del login OIDC)
+  - Nuevo step-customize.tsx con 3 secciones colapsables (accordion):
+    - Sección 1: Métodos de pago (COD, transferencia/Nequi + datos banco, link de pago + URL)
+    - Sección 2: Políticas (envío, devolución, horarios)
+    - Sección 3: FAQs editables (max 10, 5 prellenadas "Retail General")
+  - Actualizar ONBOARDING_STEPS a 4 pasos: channel → catalog → customize → activate
+  - Migration: agregar `businessHours` a MerchantConfig
+  - Defaults "Retail General" prellenados al montar
+- **Excluye:** selector de industria (MVP = Retail General fijo), editor visual avanzado.
+- **DoD específico:**
+  - Wizard tiene 4 pasos funcionales
+  - step-customize guarda pagos + políticas + FAQs
+  - FAQs reflejadas en respuestas del bot
+  - `pnpm build`, `pnpm lint`, `npx tsc --noEmit` pasan
+- **Tech notes:**
+  - Backend PR-OB-01 calcula requisitos dinámicamente (profile, channel, catalog, config, test)
+  - Frontend agrupa en 4 pasos de UI pero satisface los mismos requisitos:
+    - `profile` → satisfecho por login OIDC (merchantName llega del token)
+    - `channel` → step-channel (WhatsApp connected)
+    - `catalog` → step-catalog (≥1 producto)
+    - `config` → step-customize (payment methods set)
+    - `test` → step-activate incluye botón test message
+  - No requiere cambios backend, solo mapping frontend
+- **Brief:** `docs/plan/pr-briefs/PR-FE-OB-2-wizard-customize.md`
 
 ---
 
