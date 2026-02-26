@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { OrderStatus } from '@prisma/client';
+import { Request } from 'express';
 import { OrdersController } from './orders.controller';
 import { OrdersService, ALLOWED_TRANSITIONS } from './orders.service';
 import { OrderRepository } from '../persistence/repositories/order.repository';
 import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
+import { OrderDetailResponseDto } from './dto/order-response.dto';
 
 // ─── Factories ──────────────────────────────────────────────────────────────
 
@@ -44,8 +46,10 @@ const makeOrder = (overrides: Partial<{ status: OrderStatus; merchantId: string 
   ...overrides,
 });
 
-const makeRequest = (merchantId = MERCHANT_ID) =>
-  ({ merchant: { id: merchantId } }) as any;
+const makeRequest = (merchantId = MERCHANT_ID): Request =>
+  ({
+    merchant: { id: merchantId },
+  }) as unknown as Request;
 
 // ─── Mock Repository ─────────────────────────────────────────────────────────
 
@@ -64,10 +68,7 @@ describe('OrdersService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        OrdersService,
-        { provide: OrderRepository, useValue: mockOrderRepository },
-      ],
+      providers: [OrdersService, { provide: OrderRepository, useValue: mockOrderRepository }],
     }).compile();
 
     service = module.get<OrdersService>(OrdersService);
@@ -148,9 +149,7 @@ describe('OrdersService', () => {
     it('should throw 404 if order not found', async () => {
       mockOrderRepository.findByIdWithItems.mockResolvedValue(null);
 
-      await expect(service.findOne(ORDER_ID, MERCHANT_ID)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.findOne(ORDER_ID, MERCHANT_ID)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -165,11 +164,7 @@ describe('OrdersService', () => {
         updatedAt: new Date(),
       });
 
-      const result = await service.updateStatus(
-        ORDER_ID,
-        MERCHANT_ID,
-        OrderStatus.confirmed,
-      );
+      const result = await service.updateStatus(ORDER_ID, MERCHANT_ID, OrderStatus.confirmed);
 
       expect(result.status).toBe(OrderStatus.confirmed);
       expect(mockOrderRepository.updateStatus).toHaveBeenCalledWith(
@@ -186,11 +181,7 @@ describe('OrdersService', () => {
         updatedAt: new Date(),
       });
 
-      const result = await service.updateStatus(
-        ORDER_ID,
-        MERCHANT_ID,
-        OrderStatus.cancelled,
-      );
+      const result = await service.updateStatus(ORDER_ID, MERCHANT_ID, OrderStatus.cancelled);
 
       expect(result.status).toBe(OrderStatus.cancelled);
     });
@@ -247,9 +238,7 @@ describe('OrdersService', () => {
         makeOrder({ merchantId: OTHER_MERCHANT_ID }),
       );
 
-      await expect(service.findOne(ORDER_ID, MERCHANT_ID)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.findOne(ORDER_ID, MERCHANT_ID)).rejects.toThrow(ForbiddenException);
     });
 
     it('should return 403 on status update if order belongs to another merchant', async () => {
@@ -281,9 +270,7 @@ describe('OrdersController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [OrdersController],
-      providers: [
-        { provide: OrdersService, useValue: mockOrdersService },
-      ],
+      providers: [{ provide: OrdersService, useValue: mockOrdersService }],
     })
       .overrideGuard(SessionAuthGuard)
       .useValue({ canActivate: jest.fn(() => true) })
@@ -296,7 +283,6 @@ describe('OrdersController', () => {
   describe('AC-07: guards de sesión bloquean acceso no autenticado', () => {
     it('should have SessionAuthGuard applied', () => {
       // Guard is applied at class level — checked via metadata
-      const guards = Reflect.getMetadata('__guards__', OrdersController);
       // At unit level, SessionAuthGuard is registered; integration tests verify 401
       expect(controller).toBeDefined();
     });
@@ -317,7 +303,7 @@ describe('OrdersController', () => {
 
   describe('findOne', () => {
     it('should call ordersService.findOne with id and merchantId', async () => {
-      const detail = { id: ORDER_ID, orderCode: 'ORD-001' } as any;
+      const detail = { id: ORDER_ID, orderCode: 'ORD-001' } as unknown as OrderDetailResponseDto;
       mockOrdersService.findOne.mockResolvedValue(detail);
 
       const req = makeRequest(MERCHANT_ID);

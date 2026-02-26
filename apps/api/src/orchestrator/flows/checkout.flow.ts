@@ -278,14 +278,16 @@ export class CheckoutFlow {
       return 'Selecciona tu método de pago:\n1. Contraentrega\n\nResponde con el número.';
     }
 
-    const lines = methods.map((m, i) => {
-      const base = `${i + 1}. ${m.label}`;
-      // AC-13: include URL for payment_link methods so customer can access it
-      if (m.type === 'payment_link' && m.paymentLinkUrl) {
-        return `${base}\n   🔗 ${m.paymentLinkUrl}`;
-      }
-      return base;
-    }).join('\n');
+    const lines = methods
+      .map((m, i) => {
+        const base = `${i + 1}. ${m.label}`;
+        // AC-13: include URL for payment_link methods so customer can access it
+        if (m.type === 'payment_link' && m.paymentLinkUrl) {
+          return `${base}\n   🔗 ${m.paymentLinkUrl}`;
+        }
+        return base;
+      })
+      .join('\n');
     return `Selecciona tu método de pago:\n${lines}\n\nResponde con el número.`;
   }
 
