@@ -18,6 +18,7 @@ import { AuthModule } from './auth/auth.module'; // PR-12
 import { OnboardingModule } from './onboarding/onboarding.module'; // PR-13
 import { MerchantSettingsModule } from './merchant-settings/merchant-settings.module'; // PR-15
 import { FeatureFlagsModule } from './common/feature-flags/feature-flags.module'; // PR-MVP-01
+import { OrdersModule } from './orders/orders.module'; // PR-FE-06
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { FeatureFlagsModule } from './common/feature-flags/feature-flags.module'
     OnboardingModule, // PR-13: Meta Embedded Signup
     MerchantSettingsModule, // PR-15: Merchant Settings API
     FeatureFlagsModule, // PR-MVP-01: Feature flags infrastructure
+    OrdersModule, // PR-FE-06: Dashboard Orders UI
   ],
 })
 export class AppModule {}
