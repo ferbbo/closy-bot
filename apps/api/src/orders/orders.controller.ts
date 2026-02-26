@@ -59,9 +59,7 @@ export class OrdersController {
     @Req() req: AuthenticatedRequest,
     @Query() query: OrderListQueryDto,
   ): Promise<OrderListResponseDto> {
-    this.logger.log(
-      `GET /orders - merchant: ${req.merchant.id} filters: ${JSON.stringify(query)}`,
-    );
+    this.logger.log(`GET /orders - merchant: ${req.merchant.id} filters: ${JSON.stringify(query)}`);
     return this.ordersService.findAll(req.merchant.id, query);
   }
 

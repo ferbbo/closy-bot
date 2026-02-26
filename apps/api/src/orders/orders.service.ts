@@ -53,10 +53,7 @@ export class OrdersService {
    * GET /orders — Lista paginada con filtros
    * AC-01, AC-02
    */
-  async findAll(
-    merchantId: string,
-    filters: OrderListQueryDto,
-  ): Promise<OrderListResponseDto> {
+  async findAll(merchantId: string, filters: OrderListQueryDto): Promise<OrderListResponseDto> {
     const take = filters.limit ?? 50;
     const skip = filters.offset ?? 0;
 
@@ -77,8 +74,7 @@ export class OrdersService {
         paymentMethod: o.paymentMethod,
         createdAt: o.createdAt.toISOString(),
         updatedAt: o.updatedAt.toISOString(),
-        itemCount: (o as unknown as { _count?: { items: number } })._count
-          ?.items ?? 0,
+        itemCount: (o as unknown as { _count?: { items: number } })._count?.items ?? 0,
       })) as OrderSummaryDto[],
       total,
       limit: take,
@@ -122,8 +118,7 @@ export class OrdersService {
         variantId: item.variantId,
         quantity: item.quantity,
         unitPrice: item.unitPrice.toString(),
-        snapshotName:
-          `${item.variant.product.name} - ${item.variant.name}`.trim(),
+        snapshotName: `${item.variant.product.name} - ${item.variant.name}`.trim(),
       })),
     };
   }
