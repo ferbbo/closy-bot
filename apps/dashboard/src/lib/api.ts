@@ -171,6 +171,15 @@ export interface ImportStats {
 
 // ─────────────────────────────────────────────────────────────────────────
 
+// PR-FE-05: Merchant Settings — types
+export interface MerchantProfileResponse {
+  id: string;
+  name: string;
+  industry: 'ropa' | 'belleza' | 'minimarket' | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  playbookConfig: Record<string, any> | null;
+}
+
 async function apiFetchMultipart<T>(
   path: string,
   formData: FormData,
@@ -238,5 +247,24 @@ export const api = {
     apiFetch<{ id: string }>('/merchants/me/playbook', {
       method: 'PATCH',
       body: JSON.stringify(body),
+    }),
+
+  // PR-FE-05: Merchant Settings — read profile + playbook
+  getMerchantProfile: () =>
+    apiFetch<MerchantProfileResponse>('/merchants/me'),
+
+  // PR-FE-05: Update merchant name
+  updateMerchantName: (body: { name: string }) =>
+    apiFetch<MerchantProfileResponse>('/merchants/me', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  // PR-FE-05: Update playbook config (deep merge, partial)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  patchPlaybookConfig: (updates: Record<string, any>) =>
+    apiFetch<MerchantProfileResponse>('/merchants/me/playbook', {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
     }),
 };
