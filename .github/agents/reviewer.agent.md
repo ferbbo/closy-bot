@@ -88,6 +88,11 @@ Eres el **Reviewer**. Validas el codigo **contra el brief.md** y sus AC/DoD.
 8. **Tests**: unit + integration para duplicados
 9. **TypeScript**: `pnpm typecheck` pasa con cero errores — si el Builder no lo reporta, pedir evidencia
 10. **DoD**: todos los items del DoD del brief marcados
+11. **Feature Flags (si PR es B2)**:
+   - Código B2 gateado con `FeatureFlagsService.isXEnabled` → 403 si flag false
+   - Frontend B2 gateado con `useFeatures()` hook (no se renderiza en MVP)
+   - Test pasa con `FEATURES_MODE=mvp` (validar kill-switch)
+   - Brief tiene campo `Scope: MVP` o `Scope: B2`
 
 
 ## Stop conditions (PARA si)
