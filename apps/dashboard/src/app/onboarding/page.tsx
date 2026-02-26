@@ -7,13 +7,12 @@ import { Stepper, ONBOARDING_STEPS } from '@/components/ui/stepper';
 import { Progress } from '@/components/ui/progress';
 import { useOnboardingProgress } from '@/hooks/use-onboarding';
 import { useAuth } from '@/hooks/use-auth';
-import { StepProfile } from './_components/step-profile';
 import { StepChannel } from './_components/step-channel';
 import { StepCatalog } from './_components/step-catalog';
-import { StepPayments } from './_components/step-payments';
+import { StepCustomize } from './_components/step-customize';
 import { StepActivate } from './_components/step-activate';
 
-/** AC-01: Onboarding wizard con 5 steps y progress bar */
+/** AC-09: Onboarding wizard con 4 steps (canal → catálogo → personalización → activar) */
 export default function OnboardingPage() {
   const router = useRouter();
   const { merchant, isLoading: authLoading } = useAuth();
@@ -51,7 +50,7 @@ export default function OnboardingPage() {
           </p>
         </div>
 
-        {/* AC-02: Progress bar */}
+        {/* Progress bar */}
         <div className="space-y-2">
           <div className="flex justify-between text-xs font-medium text-gray-500">
             <span>Progreso de configuración</span>
@@ -60,29 +59,21 @@ export default function OnboardingPage() {
           <Progress value={percentage} aria-label={`Progreso ${percentage}%`} />
         </div>
 
-        {/* AC-01: Stepper */}
+        {/* AC-10: Stepper 4 pasos */}
         <Stepper currentStep={currentStep} completedSteps={completedSteps} />
 
         {/* Step content */}
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm min-h-[400px]">
           {currentStep === 1 && (
-            <StepProfile
-              merchantName={merchant?.name ?? ''}
-              merchantEmail={merchant?.email ?? ''}
-              completedSteps={completedSteps}
-              onNext={goNext}
-            />
-          )}
-          {currentStep === 2 && (
             <StepChannel completedSteps={completedSteps} onNext={goNext} onBack={goBack} />
           )}
-          {currentStep === 3 && (
+          {currentStep === 2 && (
             <StepCatalog completedSteps={completedSteps} onNext={goNext} onBack={goBack} />
           )}
-          {currentStep === 4 && (
-            <StepPayments completedSteps={completedSteps} onNext={goNext} onBack={goBack} />
+          {currentStep === 3 && (
+            <StepCustomize completedSteps={completedSteps} onNext={goNext} onBack={goBack} />
           )}
-          {currentStep === 5 && (
+          {currentStep === 4 && (
             <StepActivate
               completedSteps={completedSteps}
               percentage={percentage}
