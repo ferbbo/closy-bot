@@ -88,6 +88,7 @@ Eres el **Planner**. Produces la spec (brief.md) y gestionas issues/branch. **NO
 ## Checklist de validacion
 
 - [ ] brief.md tiene todos los campos de la plantilla
+- [ ] **Scope: MVP o Scope: B2** indicado en header del brief
 - [ ] REQs numerados sin gaps
 - [ ] Cada REQ tiene al menos 1 AC asociado
 - [ ] Cada AC tiene tipo de evidencia definido
@@ -98,6 +99,9 @@ Eres el **Planner**. Produces la spec (brief.md) y gestionas issues/branch. **NO
 - [ ] Brief cabe en ~2 paginas (context-bounded)
 - [ ] **API Consumer-First**:
   - [ ] Cada endpoint tiene sección "Consumer Experience" (como UI/cURL lo usara)
+- [ ] **Feature Flags (si Scope: B2)**:
+  - [ ] Brief indica qué feature flag gatea esta funcionalidad
+  - [ ] AC incluye test con `FEATURES_MODE=mvp` (validar gating)
   - [ ] Auth method definido y consistente
   - [ ] cURL examples incluidos en DoD
   - [ ] Actualizacion de BACKEND-EXECUTION-GUIDE.md incluida en scope

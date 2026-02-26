@@ -904,6 +904,76 @@ graph TD
 
 ---
 
+### BLOQUE 0 — MVP Separation Infrastructure (P0 BLOCKER)
+
+> Feature flags para separar funcionalidad MVP vs B2, habilitando lanzamiento limpio.
+
+#### Fase 0.1
+
+##### PR-MVP-01 — Feature Flags Infrastructure 🟡 EN PROGRESO
+- **Issue:** Pendiente crear
+- **Brief:** `docs/plan/pr-briefs/PR-MVP-01-feature-flags.md`
+- **Objetivo:** Implementar sistema de feature flags con kill-switch `FEATURES_MODE` para separar funcionalidad MVP de B2.
+- **Depende de:** Ninguna (independiente).
+- **Incluye:**
+  - `FeatureFlagsService` en `apps/api/src/common/feature-flags/`
+    - Inyecta `ConfigService`
+    - Kill-switch: `FEATURES_MODE` (mvp | dev | full)
+    - Getters: `isMultiChannelEnabled`, `isInstagramEnabled`, `isPlaybookEditorEnabled`, `isIndustriesEnabled`
+    - Si `FEATURES_MODE=mvp` → todos flags B2 retornan `false`
+  - Actualización `env.validation.ts`:
+    - `FEATURES_MODE`: Joi.string().valid('mvp', 'dev', 'full').default('mvp')
+    - `MULTI_CHANNEL_ENABLED`: Joi.boolean().default(false)
+    - `INSTAGRAM_ENABLED`: Joi.boolean().default(false)
+    - `PLAYBOOK_EDITOR_ENABLED`: Joi.boolean().default(false)
+    - `INDUSTRIES_ENABLED`: Joi.boolean().default(false)
+  - Gating en `ChannelController`:
+    - Si `!isMultiChannelEnabled` y merchant tiene ≥1 canal → 403 "Multi-channel requires enterprise plan"
+  - Frontend hook `useFeatures()` en `apps/dashboard/src/hooks/use-features.ts`:
+    - Lee `NEXT_PUBLIC_FEATURES_MODE` y flags públicos
+    - Export objeto con booleans por feature
+  - Actualización `.env.example` (API + Dashboard)
+  - Tests unitarios para `FeatureFlagsService`
+- **Excluye:** UI para togglear flags, admin panel.
+- **DoD específico:**
+  - `FEATURES_MODE=mvp` bloquea creación de segundo canal
+  - Dashboard no muestra opciones B2 en modo MVP
+  - `pnpm lint`, `pnpm test`, `npx tsc --noEmit` pasan
+- **Consumer experience:**
+  - Backend: cualquier endpoint que intente acceder a feature B2 en modo MVP recibe 403 con mensaje claro
+  - Frontend: opciones B2 no se renderizan (gated por `useFeatures()`)
+- **Tech notes:**
+  - Kill-switch global: si `FEATURES_MODE=mvp`, flags individuales se ignoran
+  - En modo `dev`, respeta flags individuales para testing
+  - En modo `full`, todo habilitado (producción B2 futura)
+
+#### Fase 0.2
+
+##### PR-MVP-02 — MVP Polish + Test Script + Docs 🔵 PENDIENTE
+- **Objetivo:** Script de prueba end-to-end + documentación final + hardening pre-lanzamiento.
+- **Depende de:** PR-MVP-01, PR-FE-OB-2, PR-FE-03, PR-FE-04, PR-FE-05, PR-FE-06.
+- **Incluye:**
+  - Script `scripts/test-mvp-e2e.sh` que valida:
+    - Login OIDC funcional
+    - Wizard 4 pasos completo
+    - WhatsApp webhook recibe y responde
+    - Checkout completo con notificación a merchant
+    - Commands merchant (`confirmar`, `pendientes`, etc.)
+  - `README.md` actualizado con instrucciones de deployment MVP
+  - `CHANGELOG.md` con features V1
+  - Validación `FEATURES_MODE=mvp` bloquea todo B2
+  - Smoke tests en CI para modo MVP
+- **Excluye:** Features nuevas, cambios de UX.
+- **DoD específico:**
+  - Script pasa 100% en entorno limpio
+  - Docs cubren setup → primer pedido
+  - `pnpm lint`, `pnpm test` pasan
+- **Tech notes:**
+  - Este PR es el checkpoint final antes de tag `v1.0.0`
+  - Merge a `main` solo después de QA completo
+
+---
+
 ### BLOQUE 4 — Onboarding Completo (P1)
 
 > Cumplir la promesa "tienda lista en 10 minutos".
@@ -993,8 +1063,8 @@ graph TD
 > Todas dependen de PR-FE-01 + sus APIs backend respectivas.
 
 ##### PR-FE-03 — Dashboard: Channels UI 🔵
-- **Depende de:** PR-FE-01, PR-16, PR-14 ✅.
-- **Incluye:** página `/dashboard/channels`, lista con status badges, botón "Add WhatsApp", health panel.
+- **Depende de:** PR-FE-01, PR-16, PR-14 ✅, PR-MVP-01.
+- **Incluye:** página `/dashboard/channels`, lista con status badges, botón "Add WhatsApp", health panel, gating por `useFeatures()` para ocultar multi-channel en MVP.
 - **Excluye:** CRUD channels, Instagram.
 
 ##### PR-FE-04 — Dashboard: Catalog UI 🔵
@@ -1106,10 +1176,11 @@ graph TD
 
 | Bloque | Prioridad | PRs | Dependencia previa | Paralelizable con |
 |--------|-----------|-----|-------------------|-------------------|
+| **0. MVP Separation** | **P0 BLOCKER** | **PR-MVP-01**, PR-MVP-02 | Ninguna | Bloques 1-5 |
 | 1. Pedidos | P0 | PR-04, **PR-03.5.1**, PR-03.5.2, PR-GAP-1, PR-GAP-2, PR-04.5, PR-05, PR-05.1, PR-06 | Infra mergeada ✅ | Bloque 3 |
 | 2. Operación | P0 | PR-07, PR-05.2, PR-08 | Bloque 1 | Bloque 3 |
 | 3. Dashboard Base | P1 | PR-FE-00, PR-15, PR-16, PR-17, PR-FE-01 | Infra mergeada ✅ | Bloques 1-2 |
-| 4. Onboarding | P1 | PR-OB-01, PR-FE-OB | PR-04.5 + PR-FE-01 | — |
+| 4. Onboarding | P1 | PR-OB-01, PR-FE-OB, **PR-FE-OB-2** | PR-04.5 + PR-FE-01 | — |
 | 5. Dashboard UIs | P1 | PR-FE-03, PR-FE-04, PR-FE-05, **PR-FE-06**, PR-FE-02 | PR-FE-01 + APIs backend | — |
 | 6. Mejoras | P2 | PR-09, PR-10, PR-14.1 | Bloques 1-2 | — |
 | 7. Template Formalization | P2 | PR-20, PR-21, PR-22, PR-24, PR-25 | Bloques 1-2 | Bloque 6 |

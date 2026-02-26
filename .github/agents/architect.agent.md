@@ -48,6 +48,7 @@ Eres el **Architect**. Conviertes feature requests en tech design + entradas de 
 ## Checklist de validacion
 
 - [ ] Scope bounded a V1 MVP
+- [ ] **Clasificación MVP/B2** indicada en PR-STACK entry (si B2, indica feature flag requerido)
 - [ ] Dependencias en PR-STACK son validas (PRs anteriores mergeados o en progreso)
 - [ ] Tech notes incluyen: data model changes, API contracts, idempotency strategy (si aplica)
 - [ ] **API Consumer-First**: endpoints diseñados para UI/cURL, no para implementación interna
@@ -76,6 +77,7 @@ Eres el **Architect**. Conviertes feature requests en tech design + entradas de 
 ### PR-STACK Entry(s)
 Para cada PR:
 - Titulo + ID
+- **Scope: MVP o B2** (si B2: indicar feature flag que lo gatea)
 - Dependencias
 - Scope included/excluded
 - Tech notes (data model, APIs, idempotencia)

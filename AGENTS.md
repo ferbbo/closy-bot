@@ -107,6 +107,43 @@ pnpm lint         # 0 errores obligatorio
 pnpm test         # todos los tests passing
 ```
 
+### 3.6 Feature Flags para código B2
+
+> Desde PR-MVP-01, todo código B2 debe estar gated. Referencia: `docs/architecture/mvp-separation.md`
+
+**Clasificación obligatoria:**
+
+| MVP (habilitado siempre) | B2 (requiere feature flag) |
+|--------------------------|---------------------------|
+| WhatsApp único | Multi-channel |
+| Retail General preset | Verticales (ropa/belleza/minimarket) |
+| Wizard 4 pasos | Editor playbooks avanzado |
+| Comandos merchant WhatsApp | Instagram channel |
+| FAQs editables simples | TemplatePack en DB |
+
+**Reglas duras:**
+1. Todo código B2 nuevo **DEBE** tener feature flag (`FeatureFlagsService.isXEnabled`)
+2. Frontend B2 **DEBE** usar `useFeatures()` hook para gating
+3. Tests **DEBEN** pasar con `FEATURES_MODE=mvp` (kill-switch activo)
+4. Brief **DEBE** indicar si el PR es MVP o B2
+
+**Responsabilidades por rol:**
+
+| Rol | Responsabilidad Feature Flags |
+|-----|------------------------------|
+| **Architect** | Clasificar feature como MVP/B2 en PR-STACK entry |
+| **Planner** | Incluir campo `Scope: MVP` o `Scope: B2` en brief.md |
+| **Builder** | Implementar flag + test con `FEATURES_MODE=mvp` |
+| **Reviewer** | Verificar flag existe y test pasa en modo MVP |
+
+**Anti-patrón crítico:**
+
+| Anti-patrón | Fix obligatorio |
+|-------------|-----------------|
+| Código B2 sin feature flag | Agregar `if (!this.featureFlags.isXEnabled)` guard + 403 |
+| UI B2 visible en modo MVP | Envolver con `{features.isXEnabled && <Component />}` |
+| Test solo con `FEATURES_MODE=dev` | Agregar test con `FEATURES_MODE=mvp` que valide gating |
+
 ## 4. Roles (SDD)
 
 | Rol | Responsabilidad | NO puede |

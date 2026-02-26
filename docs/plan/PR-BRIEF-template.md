@@ -1,6 +1,7 @@
 # Brief — PR-XX — <Título>
 
 > **Status**: `DRAFT` | `APPROVED` | `AMENDED`
+> **Scope**: `MVP` | `B2` (si B2: indicar feature flag)
 > **Archivo**: `docs/plan/pr-briefs/PR-XX-<slug>.md`
 > **Issue**: [#NN](link) (1 issue con todos los REQs)
 > **Parallel Mode**: `false` (default) | `true` (worktree)

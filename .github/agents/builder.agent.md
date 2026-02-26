@@ -103,6 +103,11 @@ Reglas obligatorias en modo paralelo:
   - [ ] Errores son accionables (no errores genericos)
   - [ ] Auth method es consistente con endpoints similares
 - [ ] **BACKEND-EXECUTION-GUIDE.md actualizado** con cURL examples para cada endpoint nuevo
+- [ ] **Feature Flags (si PR es B2)**:
+  - [ ] Código B2 gateado con `FeatureFlagsService.isXEnabled`
+  - [ ] Frontend B2 gateado con `useFeatures()` hook
+  - [ ] Test pasa con `FEATURES_MODE=mvp` (kill-switch activo)
+  - [ ] Brief indica `Scope: MVP` o `Scope: B2`
 
 ## Pre-handoff TypeScript Gate (OBLIGATORIO antes de pasar al Reviewer)
 
