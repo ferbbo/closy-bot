@@ -125,7 +125,7 @@ export class WhatsAppOutboundService {
         };
       }
 
-      const data = await response.json() as { messages?: Array<{ id: string }> };
+      const data = (await response.json()) as { messages?: Array<{ id: string }> };
       const messageId = data.messages?.[0]?.id;
 
       this.logger.log(`Message sent successfully: ${messageId}`);

@@ -114,7 +114,7 @@ export class MetaEmbeddedSignupProvider {
           throw new Error(`Debug token failed: ${debugResponse.status}`);
         }
 
-        const debugData = await debugResponse.json() as MetaDebugTokenData;
+        const debugData = (await debugResponse.json()) as MetaDebugTokenData;
         targetWabaId = debugData.data?.granular_scopes?.find(
           (scope) => scope.scope === 'whatsapp_business_management',
         )?.target_ids?.[0];
@@ -138,7 +138,13 @@ export class MetaEmbeddedSignupProvider {
         throw new Error(`WABA fetch failed: ${wabaResponse.status}`);
       }
 
-      const wabaData = await wabaResponse.json() as { id: string; name: string; phone_numbers?: { data: Array<{ id: string; display_phone_number: string; verified_name: string }> } };
+      const wabaData = (await wabaResponse.json()) as {
+        id: string;
+        name: string;
+        phone_numbers?: {
+          data: Array<{ id: string; display_phone_number: string; verified_name: string }>;
+        };
+      };
       this.logger.log(`WABA info fetched successfully: ${wabaData.id}`);
 
       return {
@@ -188,7 +194,7 @@ export class MetaEmbeddedSignupProvider {
         };
       }
 
-      const data = await response.json() as { success?: boolean };
+      const data = (await response.json()) as { success?: boolean };
       this.logger.log(`Webhook subscription successful for WABA: ${wabaId}`);
       return { success: data.success === true };
     } catch (error) {
