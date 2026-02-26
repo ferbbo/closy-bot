@@ -84,6 +84,7 @@ model MerchantConfig {
   paymentMethods  Json     @map("payment_methods") // PaymentMethodConfig[]
   shippingConfig  Json     @map("shipping_config") // ShippingConfig
   returnPolicy    String?  @map("return_policy") @db.Text
+  businessHours   String?  @map("business_hours") @db.VarChar(200)
   currency        String   @default("COP")
   orderCodePrefix String   @default("ORD") @map("order_code_prefix")
   autoConfirmCod  Boolean  @default(true) @map("auto_confirm_cod")
