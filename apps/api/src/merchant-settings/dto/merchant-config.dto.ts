@@ -53,6 +53,11 @@ export class PaymentMethodConfigDto {
   @ValidateNested()
   @Type(() => BankInfoDto)
   bankInfo?: BankInfoDto;
+
+  /** PR-FE-OB-2: URL for payment_link type methods */
+  @IsOptional()
+  @IsString()
+  paymentLinkUrl?: string;
 }
 
 export class ShippingConfigDto {
@@ -75,6 +80,12 @@ export class ShippingConfigDto {
   @IsString()
   @MaxLength(200)
   estimatedDays?: string;
+
+  /** PR-FE-OB-2: Human-readable shipping policy text */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  shippingPolicy?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +109,12 @@ export class UpdateMerchantConfigDto {
   @IsString()
   @MaxLength(2000)
   returnPolicy?: string | null;
+
+  /** PR-FE-OB-2: Business opening hours (max 200 chars) */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  businessHours?: string | null;
 
   @IsOptional()
   @IsString()
@@ -126,6 +143,8 @@ export class MerchantConfigResponseDto {
   paymentMethods!: PaymentMethodConfigDto[];
   shippingConfig!: ShippingConfigDto;
   returnPolicy?: string | null;
+  /** PR-FE-OB-2 */
+  businessHours?: string | null;
   currency!: string;
   orderCodePrefix!: string;
   autoConfirmCod!: boolean;

@@ -17,6 +17,8 @@ export interface PaymentMethodConfig {
   label: string;
   instructions?: string;
   bankInfo?: BankInfo;
+  /** PR-FE-OB-2: URL for payment link methods (MercadoPago, Stripe, etc.) */
+  paymentLinkUrl?: string;
 }
 
 export interface ShippingConfig {
@@ -24,12 +26,16 @@ export interface ShippingConfig {
   flatRate?: number;
   freeAbove?: number;
   estimatedDays?: string;
+  /** PR-FE-OB-2: Human-readable shipping policy text */
+  shippingPolicy?: string;
 }
 
 export interface MerchantConfigData {
   paymentMethods: PaymentMethodConfig[];
   shippingConfig: ShippingConfig;
   returnPolicy?: string | null;
+  /** PR-FE-OB-2: Business hours text (e.g. "Lunes a Viernes 9am-6pm") */
+  businessHours?: string | null;
   currency: string;
   orderCodePrefix: string;
   autoConfirmCod: boolean;
