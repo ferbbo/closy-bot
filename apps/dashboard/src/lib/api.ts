@@ -180,6 +180,69 @@ export interface MerchantProfileResponse {
   playbookConfig: Record<string, any> | null;
 }
 
+// ─── PR-FE-06: Orders types ──────────────────────────────────────────────────
+
+export type OrderStatus =
+  | 'pending_payment'
+  | 'confirmed'
+  | 'paid'
+  | 'shipped'
+  | 'delivered'
+  | 'cancelled';
+
+export interface OrderFilters {
+  status?: OrderStatus[];
+  dateFrom?: string;
+  dateTo?: string;
+  orderCode?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface OrderSummary {
+  id: string;
+  orderCode: string;
+  customerName: string;
+  customerPhone: string;
+  status: OrderStatus;
+  totalAmount: string;
+  shippingAddress: string;
+  paymentMethod: string;
+  createdAt: string;
+  updatedAt: string;
+  itemCount: number;
+}
+
+export interface OrderItem {
+  id: string;
+  variantId: string;
+  quantity: number;
+  unitPrice: string;
+  snapshotName: string;
+}
+
+export interface OrderDetail extends OrderSummary {
+  merchantId: string;
+  customerId: string;
+  shippingCost: string;
+  notes?: string;
+  items: OrderItem[];
+}
+
+export interface OrderListResponse {
+  orders: OrderSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface UpdateOrderStatusResponse {
+  id: string;
+  orderCode: string;
+  status: OrderStatus;
+  updatedAt: string;
+}
+
 async function apiFetchMultipart<T>(
   path: string,
   formData: FormData,
@@ -249,6 +312,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+<<<<<<< HEAD
   // PR-FE-05: Merchant Settings — read profile + playbook
   getMerchantProfile: () =>
     apiFetch<MerchantProfileResponse>('/merchants/me'),
@@ -267,4 +331,29 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(updates),
     }),
+=======
+  // PR-FE-06: Orders API
+  listOrders: (filters?: OrderFilters) => {
+    const params = new URLSearchParams();
+    if (filters?.status?.length) params.set('status', filters.status.join(','));
+    if (filters?.dateFrom) params.set('dateFrom', filters.dateFrom);
+    if (filters?.dateTo) params.set('dateTo', filters.dateTo);
+    if (filters?.orderCode) params.set('orderCode', filters.orderCode);
+    if (filters?.limit != null) params.set('limit', String(filters.limit));
+    if (filters?.offset != null) params.set('offset', String(filters.offset));
+    const qs = params.toString();
+    return apiFetch<OrderListResponse>(`/orders${qs ? `?${qs}` : ''}`);
+  },
+
+  getOrder: (id: string) => apiFetch<OrderDetail>(`/orders/${id}`),
+
+  updateOrderStatus: (id: string, status: OrderStatus) =>
+    apiFetch<UpdateOrderStatusResponse>(`/orders/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  getPendingOrdersCount: () =>
+    apiFetch<{ count: number }>('/orders/pending-count'),
+>>>>>>> 24b87af (feat(orders-ui): REQ-07..20 Torre de Control — orders page + sidebar badge + polling + docs)
 };

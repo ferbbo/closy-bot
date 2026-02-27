@@ -3344,6 +3344,7 @@ function ChannelSettings() {
 
 ---
 
+<<<<<<< HEAD
 ## Channels UI — PR-FE-03 (✅ Implementado)
 
 Página `/dashboard/channels` con lista de canales, health panel, retry webhook, y feature flag gating para multi-channel.
@@ -3477,6 +3478,75 @@ curl -X POST http://localhost:3000/channels/<channel-id>/retry-webhook \
 
 ---
 
+=======
+
+---
+
+## PR-FE-06: Orders API — Torre de Control
+
+> **Auth**: Session Cookie (`closy_session`). Requiere estar autenticado como merchant.
+> **Base URL**: `http://localhost:3000`
+
+### GET /orders — Listar órdenes con filtros
+
+```bash
+curl -s "http://localhost:3000/orders" \\
+  -H "Cookie: closy_session=<tu-session-cookie>" | jq .
+
+curl -s "http://localhost:3000/orders?status=pending_payment&status=confirmed&dateFrom=2026-01-01&limit=20&offset=0" \\
+  -H "Cookie: closy_session=<tu-session-cookie>" | jq .
+```
+
+Respuesta `200`: `{ orders: [...], total: N, limit: 20, offset: 0 }`
+
+---
+
+### GET /orders/pending-count — Badge sidebar
+
+```bash
+curl -s "http://localhost:3000/orders/pending-count" \\
+  -H "Cookie: closy_session=<tu-session-cookie>" | jq .
+```
+
+Respuesta `200`: `{ "count": 5 }`
+
+---
+
+### GET /orders/:id — Detalle con items
+
+```bash
+curl -s "http://localhost:3000/orders/<ORDER_ID>" \\
+  -H "Cookie: closy_session=<tu-session-cookie>" | jq .
+```
+
+Respuesta `200`: orden completa con array `items[]`. Errores: `404` | `403` multi-tenant
+
+---
+
+### PATCH /orders/:id/status — Actualizar estado (FSM)
+
+```bash
+curl -s -X PATCH "http://localhost:3000/orders/<ORDER_ID>/status" \\
+  -H "Cookie: closy_session=<tu-session-cookie>" \\
+  -H "Content-Type: application/json" \\
+  -d '{"status": "confirmed"}' | jq .
+```
+
+**FSM**: `pending_payment → confirmed|cancelled` | `confirmed → paid|cancelled` | `paid → shipped` | `shipped → delivered`
+
+Errores: `400` transición inválida | `404` no existe | `403` multi-tenant
+
+---
+
+### Evidence por AC — PR-FE-06
+
+- ✅ **AC-01..08**: Backend — `orders.controller.spec.ts` (18 tests, 846 total pasan)
+- ✅ **AC-09**: Página `/dashboard/orders` con tabla TanStack | `apps/dashboard/src/app/dashboard/orders/page.tsx`
+- ✅ **AC-10..20**: Componentes en `apps/dashboard/src/app/dashboard/orders/components/`
+- ✅ **AC-18**: Badge `usePendingOrdersCount` sidebar desktop + mobile | `layout.tsx`
+- ✅ **AC-19**: Polling 30s `refetchInterval: 30_000` | `use-orders.ts`
+
+>>>>>>> 24b87af (feat(orders-ui): REQ-07..20 Torre de Control — orders page + sidebar badge + polling + docs)
 ## Próximos Pasos
 
 Todos los flujos del MVP Core V1 están implementados. Ver `docs/plan/PR-STACK-core-v1.md` para el estado actualizado.

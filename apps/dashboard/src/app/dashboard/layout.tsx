@@ -10,9 +10,11 @@ import {
   Package,
   Settings,
   Menu,
+  ShoppingBag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState, useEffect } from 'react';
+import { usePendingOrdersCount } from '@/hooks/use-orders';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -22,6 +24,7 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Canales', href: '/dashboard/channels', icon: MessageSquare },
   { name: 'Catálogo', href: '/dashboard/catalog', icon: Package },
+  { name: 'Pedidos', href: '/dashboard/orders', icon: ShoppingBag },
   { name: 'Configuración', href: '/dashboard/settings', icon: Settings },
 ];
 
@@ -30,6 +33,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // REQ-14, AC-18: Contador de pedidos pendientes para sidebar badge
+  const { data: pendingData } = usePendingOrdersCount();
+  const pendingCount = pendingData?.count ?? 0;
 
   // AC-10: If merchant is still onboarding, redirect to /onboarding
   useEffect(() => {
@@ -87,7 +94,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                           : 'text-gray-400 group-hover:text-gray-900',
                       )}
                     />
-                    {item.name}
+                    <span className="flex-1">{item.name}</span>
+                    {/* AC-18: Pending orders badge */}
+                    {item.href === '/dashboard/orders' && pendingCount > 0 && (
+                      <span className="ml-2 inline-flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold min-w-5 h-5 px-1">
+                        {pendingCount > 99 ? '99+' : pendingCount}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
@@ -154,7 +167,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                             : 'text-gray-400 group-hover:text-gray-900',
                         )}
                       />
-                      {item.name}
+                      <span className="flex-1">{item.name}</span>
+                      {item.href === '/dashboard/orders' && pendingCount > 0 && (
+                        <span className="ml-2 inline-flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold min-w-5 h-5 px-1">
+                          {pendingCount > 99 ? '99+' : pendingCount}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}
