@@ -276,13 +276,7 @@ describe('CheckoutFlow', () => {
         },
       ]);
 
-      const result = await flow.handle(
-        mockMerchant,
-        'conv-1',
-        'cust-1',
-        'merch-1',
-        'Calle 1 #2-3',
-      );
+      const result = await flow.handle(mockMerchant, 'conv-1', 'cust-1', 'merch-1', 'Calle 1 #2-3');
 
       expect(result).toContain('https://link.mercadopago.com.co/mi-tienda');
       expect(result).toContain('Link de pago');
@@ -303,7 +297,12 @@ describe('CheckoutFlow', () => {
       ]);
       checkoutService.captureField.mockResolvedValue({
         ...selectState,
-        data: { name: 'Juan', address: 'Addr', paymentMethod: 'cod', paymentMethodLabel: 'Contraentrega' },
+        data: {
+          name: 'Juan',
+          address: 'Addr',
+          paymentMethod: 'cod',
+          paymentMethodLabel: 'Contraentrega',
+        },
         step: 'CONFIRM',
       });
 
@@ -314,7 +313,6 @@ describe('CheckoutFlow', () => {
   });
 
   // ---------------------------------------------------------------------------
-
 
   describe('CONFIRM step', () => {
     const confirmState: CheckoutState = {
