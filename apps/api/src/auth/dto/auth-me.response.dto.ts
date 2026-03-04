@@ -1,3 +1,5 @@
+import { Merchant } from '@prisma/client';
+
 /**
  * Auth Me Response DTO
  * Response for /auth/me endpoint
@@ -9,5 +11,6 @@ export class AuthMeResponseDto {
     id: string;
     name: string;
     email: string;
+    status: string;
   };
 }

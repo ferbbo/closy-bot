@@ -36,7 +36,7 @@ export class AuthController {
       secure: this.isProduction,
       sameSite: 'lax',
       maxAge: 5 * 60 * 1000, // 5 minutes
-      domain: this.cookieDomain,
+      // domain: this.cookieDomain,
     });
 
     // Redirect to provider
@@ -126,6 +126,7 @@ export class AuthController {
         id: merchant.id,
         name: merchant.name,
         email: merchant.whatsappNumber, // TODO: proper email field
+        status: merchant.status
       },
     };
   }
