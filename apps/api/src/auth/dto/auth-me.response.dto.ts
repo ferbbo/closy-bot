@@ -1,5 +1,3 @@
-import { Merchant } from '@prisma/client';
-
 /**
  * Auth Me Response DTO
  * Response for /auth/me endpoint
