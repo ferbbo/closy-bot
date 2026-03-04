@@ -1,4 +1,4 @@
-'use client';
+
 
 /**
  * TanStack Query hooks for Channels UI (PR-FE-03)

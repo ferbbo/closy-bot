@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Stepper, ONBOARDING_STEPS } from '@/components/ui/stepper';
@@ -19,11 +19,12 @@ export default function OnboardingPage() {
   const { data: progress, isLoading: progressLoading } = useOnboardingProgress();
   const [currentStep, setCurrentStep] = useState(1);
 
-  // AC-10: redirect if already active (after hooks — never conditional before hooks)
-  if (!authLoading && merchant?.status === 'active') {
-    router.replace('/dashboard');
-    return null;
-  }
+  // AC-10: redirect if already active (side effect, not during render)
+  useEffect(() => {
+    if (!authLoading && merchant?.status === 'active') {
+      router.replace('/dashboard');
+    }
+  }, [authLoading, merchant?.status, router]);
 
   const completedSteps = progress?.completedSteps ?? [];
   const percentage = progress?.percentage ?? 0;
@@ -31,7 +32,8 @@ export default function OnboardingPage() {
   const goNext = () => setCurrentStep((s) => Math.min(s + 1, ONBOARDING_STEPS.length));
   const goBack = () => setCurrentStep((s) => Math.max(s - 1, 1));
 
-  if (authLoading || progressLoading) {
+  // Show loader only on initial load (no data yet) or if already active (redirect in progress)
+  if (authLoading || (!progress && progressLoading) || merchant?.status === 'active') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" aria-label="Cargando" />

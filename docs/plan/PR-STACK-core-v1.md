@@ -1027,7 +1027,7 @@ graph TD
 
 #### Fase 4.3
 
-##### PR-FE-OB-2 — Wizard: step-customize (4 pasos MVP) 🔵 PENDIENTE
+##### PR-FE-OB-2 — Wizard: step-customize (4 pasos MVP) ✅ MERGED
 - **Objetivo:** Reducir wizard de 5 a 4 pasos eliminando step-profile (redundante) y reemplazando step-payments con step-customize que combina pagos + políticas + FAQs.
 - **Depende de:** PR-FE-OB ✅, PR-OB-01 ✅, PR-GAP-2 ✅.
 - **Incluye:**
@@ -1062,22 +1062,22 @@ graph TD
 
 > Todas dependen de PR-FE-01 + sus APIs backend respectivas.
 
-##### PR-FE-03 — Dashboard: Channels UI 🔵
+##### PR-FE-03 — Dashboard: Channels UI ✅ MERGED
 - **Depende de:** PR-FE-01, PR-16, PR-14 ✅, PR-MVP-01.
 - **Incluye:** página `/dashboard/channels`, lista con status badges, botón "Add WhatsApp", health panel, gating por `useFeatures()` para ocultar multi-channel en MVP.
 - **Excluye:** CRUD channels, Instagram.
 
-##### PR-FE-04 — Dashboard: Catalog UI 🔵
+##### PR-FE-04 — Dashboard: Catalog UI ✅ MERGED
 - **Depende de:** PR-FE-01, PR-17.
 - **Incluye:** página `/dashboard/catalog`, drag & drop CSV upload, tabla productos, import stats.
 - **Excluye:** CRUD individual, editor variantes.
 
-##### PR-FE-05 — Dashboard: Playbook Settings UI 🔵
+##### PR-FE-05 — Dashboard: Playbook Settings UI ✅ MERGED
 - **Depende de:** PR-FE-01, PR-15.
 - **Incluye:** página `/dashboard/settings`, form secciones (Profile, Messages, Rules, Guidelines).
 - **Excluye:** editor visual avanzado, preview conversación.
 
-##### PR-FE-06 — Dashboard: Orders UI ("Torre de Control") 🟡 NUEVO
+##### PR-FE-06 — Dashboard: Orders UI ("Torre de Control") ✅ MERGED
 - **Objetivo:** Página de pedidos en dashboard para que el merchant supervise y gestione órdenes.
 - **Depende de:** PR-FE-01, PR-05 (Order model + API).
 - **Incluye:**
@@ -1131,7 +1131,7 @@ graph TD
 
 ##### PR-14.1 — Custom Throttler: Rate Limit per Merchant 🟢
 - **Depende de:** PR-14 ✅.
-- **Incluye:** Custom `ThrottlerGuard` por merchant ID, tests.
+- **Incluye:** Custom `ThrottlerGuard` por merchant ID, .envtests.
 - **Prioridad:** BAJA — solo relevante si múltiples merchants comparten IP.
 
 ---

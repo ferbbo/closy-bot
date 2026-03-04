@@ -312,7 +312,6 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-<<<<<<< HEAD
   // PR-FE-05: Merchant Settings — read profile + playbook
   getMerchantProfile: () =>
     apiFetch<MerchantProfileResponse>('/merchants/me'),
@@ -331,7 +330,6 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(updates),
     }),
-=======
   // PR-FE-06: Orders API
   listOrders: (filters?: OrderFilters) => {
     const params = new URLSearchParams();
@@ -355,5 +353,4 @@ export const api = {
 
   getPendingOrdersCount: () =>
     apiFetch<{ count: number }>('/orders/pending-count'),
->>>>>>> 24b87af (feat(orders-ui): REQ-07..20 Torre de Control — orders page + sidebar badge + polling + docs)
 };

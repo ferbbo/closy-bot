@@ -1,4 +1,4 @@
-'use client';
+
 
 /**
  * PR-FE-05: usePlaybookConfig hook

@@ -127,7 +127,10 @@ curl -X GET http://localhost:3000/auth/me \
   "message": "No session cookie"
 }
 ```
-
+# Después del login, la cookie session_id está seteada
+curl -X GET http://localhost:3000/auth/me \
+  -H "Cookie: session_id=<tu-session-id>" \
+  -H "Content-Type: application/json"
 #### 3. Logout
 
 ```bash

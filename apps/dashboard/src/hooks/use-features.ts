@@ -1,4 +1,4 @@
-'use client';
+
 
 /**
  * useFeatures() hook — Feature flags for MVP/B2 separation
