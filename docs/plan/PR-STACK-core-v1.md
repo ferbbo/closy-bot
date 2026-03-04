@@ -1056,6 +1056,49 @@ graph TD
   - No requiere cambios backend, solo mapping frontend
 - **Brief:** `docs/plan/pr-briefs/PR-FE-OB-2-wizard-customize.md`
 
+#### Fase 4.4
+
+##### PR-GAP-3 — Fix Add WhatsApp Flow: URL alignment + callback redirect + popup communication 🔵 PENDIENTE
+- **Scope: MVP**
+- **Objetivo:** Completar el flujo end-to-end de "Conectar WhatsApp" desde el wizard de onboarding y la Channels UI. Actualmente el frontend abre popup a `/channels/meta/embedded-signup` (ruta inexistente), el callback redirige al backend en vez del dashboard, y no hay comunicación popup → parent window.
+- **Depende de:** PR-13 ✅ (Meta Embedded Signup), PR-FE-OB ✅ (Wizard UI), PR-FE-03 ✅ (Channels UI).
+- **Incluye:**
+  - **Frontend (step-channel.tsx):**
+    - Cambiar `signupUrl` de `/channels/meta/embedded-signup` a `/onboarding/whatsapp/start`
+    - Listener `window.addEventListener('message', ...)` para recibir resultado del popup
+    - Al recibir `{ type: 'whatsapp-connected', channelId }` → invalidar query onboarding progress + auto-avanzar step
+    - Timeout/polling: si popup cerrado sin mensaje → mostrar "Intenta de nuevo"
+  - **Frontend (channels/page.tsx + empty-channels-state.tsx):**
+    - Mismo patrón de listener para botón "Conectar WhatsApp" en Channels page
+  - **Backend (meta-oauth.controller.ts callback):**
+    - Reemplazar `res.redirect('/dashboard?status=success')` por respuesta HTML inline que ejecuta `window.opener.postMessage({ type: 'whatsapp-connected', channelId }, DASHBOARD_URL)` y luego `window.close()`
+    - Error path: HTML que comunica `{ type: 'whatsapp-error', reason }` al parent y cierra
+  - **Nueva env var:** `DASHBOARD_URL` (ej: `http://localhost:3001`) para `postMessage` targetOrigin seguro
+  - Actualizar `env.validation.ts`: `DASHBOARD_URL: Joi.string().uri().required()`
+  - Actualizar `.env.example`: `DASHBOARD_URL=http://localhost:3001`
+  - Tests unit + e2e
+  - Actualizar `BACKEND-EXECUTION-GUIDE.md` con flujo completo documentado
+- **Excluye:** Token refresh, multi-channel CRUD, Instagram, retry UI avanzada.
+- **DoD específico:**
+  - Merchant click "Conectar WhatsApp" en wizard → popup abre Meta OAuth → completa → popup cierra → step muestra "✅ WhatsApp conectado" sin reload manual
+  - Mismo flujo funciona desde Channels page (empty state y botón "Conectar otro canal")
+  - OAuth error → popup comunica error → UI muestra mensaje actionable
+  - Popup cerrado manualmente → UI detecta y permite reintentar
+  - `DASHBOARD_URL` en `.env.example` y validado en `env.validation.ts`
+  - Flujo documentado en `BACKEND-EXECUTION-GUIDE.md`
+  - `pnpm lint`, `pnpm test`, `npx tsc --noEmit` pasan
+- **Consumer experience:**
+  - El merchant nunca ve página rota ni redirect a URL inexistente
+  - Flujo completo: click botón → popup Meta → autoriza → popup cierra solo → UI se actualiza
+  - Si falla, mensajes claros sin jerga técnica
+- **Tech notes:**
+  - **3 gaps identificados:** (1) URL mismatch frontend→backend, (2) callback redirect a NestJS en vez de dashboard, (3) sin comunicación popup→parent
+  - **Approach:** Servir HTML inline desde NestJS en callback (no redirect a dashboard). El popup abierto desde dashboard usa `window.opener.postMessage()` al origin del dashboard y se cierra. Esto evita problemas cross-origin.
+  - `postMessage` targetOrigin DEBE ser `DASHBOARD_URL` (nunca `*`) para seguridad
+  - `window.opener` puede ser `null` si popup reabierto manualmente — fallback: mostrar "Vuelve al dashboard y refresca"
+  - Session cookie funciona en popup porque se abre en dominio del backend (:3000)
+  - No requiere cambios Prisma ni migraciones
+
 ---
 
 ### BLOQUE 5 — Dashboard UIs (P1)
@@ -1180,7 +1223,7 @@ graph TD
 | 1. Pedidos | P0 | PR-04, **PR-03.5.1**, PR-03.5.2, PR-GAP-1, PR-GAP-2, PR-04.5, PR-05, PR-05.1, PR-06 | Infra mergeada ✅ | Bloque 3 |
 | 2. Operación | P0 | PR-07, PR-05.2, PR-08 | Bloque 1 | Bloque 3 |
 | 3. Dashboard Base | P1 | PR-FE-00, PR-15, PR-16, PR-17, PR-FE-01 | Infra mergeada ✅ | Bloques 1-2 |
-| 4. Onboarding | P1 | PR-OB-01, PR-FE-OB, **PR-FE-OB-2** | PR-04.5 + PR-FE-01 | — |
+| 4. Onboarding | P1 | PR-OB-01, PR-FE-OB, **PR-FE-OB-2**, **PR-GAP-3** | PR-04.5 + PR-FE-01 | — |
 | 5. Dashboard UIs | P1 | PR-FE-03, PR-FE-04, PR-FE-05, **PR-FE-06**, PR-FE-02 | PR-FE-01 + APIs backend | — |
 | 6. Mejoras | P2 | PR-09, PR-10, PR-14.1 | Bloques 1-2 | — |
 | 7. Template Formalization | P2 | PR-20, PR-21, PR-22, PR-24, PR-25 | Bloques 1-2 | Bloque 6 |
