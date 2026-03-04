@@ -1,13 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ExternalLink, MessageCircle, Loader2 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { OnboardingStepKey } from '@/lib/api';
 
 const META_SIGNUP_WIDTH = 600;
 const META_SIGNUP_HEIGHT = 700;
+/** Delay after popup closes to wait for any in-flight postMessage (AC-04) */
+const POPUP_CLOSE_GRACE_MS = 2000;
+/** Poll interval to detect manual popup close */
+const POPUP_POLL_MS = 500;
 
 interface StepChannelProps {
   completedSteps: OnboardingStepKey[];
@@ -19,11 +24,83 @@ export function StepChannel({ completedSteps, onNext, onBack }: StepChannelProps
   const isCompleted = completedSteps.includes('channel');
   const [popupBlocked, setPopupBlocked] = useState(false);
   const [waitingConnection, setWaitingConnection] = useState(false);
+  const [errorReason, setErrorReason] = useState<string | null>(null);
+  const [popupClosedWithoutMessage, setPopupClosedWithoutMessage] = useState(false);
+
+  const popupRef = useRef<Window | null>(null);
+  const queryClient = useQueryClient();
+
+  /**
+   * AC-02: Register message listener for popup → parent communication.
+   * AC-03: On 'whatsapp-connected' → invalidate onboarding progress + advance.
+   * Security: validate event.origin against NEXT_PUBLIC_API_URL.
+   */
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+    const expectedOrigin = (() => {
+      try {
+        return new URL(apiUrl).origin;
+      } catch {
+        return apiUrl;
+      }
+    })();
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== expectedOrigin) return;
+
+      const data = event.data as { type: string; channelId?: string; reason?: string };
+
+      if (data.type === 'whatsapp-connected') {
+        // AC-03: Invalidate onboarding progress and advance step
+        void queryClient.invalidateQueries({ queryKey: ['onboarding', 'progress'] });
+        setWaitingConnection(false);
+        setErrorReason(null);
+        setPopupClosedWithoutMessage(false);
+        onNext();
+      } else if (data.type === 'whatsapp-error') {
+        setWaitingConnection(false);
+        setErrorReason(data.reason ?? 'unknown_error');
+        setPopupClosedWithoutMessage(false);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [queryClient, onNext]);
+
+  /**
+   * AC-04: Detect popup closed manually without sending a postMessage.
+   * Poll every POPUP_POLL_MS; on close, wait POPUP_CLOSE_GRACE_MS then fallback.
+   */
+  useEffect(() => {
+    if (!waitingConnection || !popupRef.current) return;
+
+    const interval = setInterval(() => {
+      if (popupRef.current?.closed) {
+        clearInterval(interval);
+        setTimeout(() => {
+          setWaitingConnection((prev) => {
+            if (prev) {
+              setPopupClosedWithoutMessage(true);
+              return false;
+            }
+            return prev;
+          });
+        }, POPUP_CLOSE_GRACE_MS);
+      }
+    }, POPUP_POLL_MS);
+
+    return () => clearInterval(interval);
+  }, [waitingConnection]);
 
   const handleConnectWhatsApp = () => {
     setPopupBlocked(false);
+    setErrorReason(null);
+    setPopupClosedWithoutMessage(false);
+
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
-    const signupUrl = `${apiUrl}/channels/meta/embedded-signup`;
+    // AC-01: Corrected URL — was /channels/meta/embedded-signup
+    const signupUrl = `${apiUrl}/onboarding/whatsapp/start`;
 
     const left = window.screenX + (window.outerWidth - META_SIGNUP_WIDTH) / 2;
     const top = window.screenY + (window.outerHeight - META_SIGNUP_HEIGHT) / 2;
@@ -35,9 +112,9 @@ export function StepChannel({ completedSteps, onNext, onBack }: StepChannelProps
     );
 
     if (!popup) {
-      // P2 fix: use state instead of window.alert()
       setPopupBlocked(true);
     } else {
+      popupRef.current = popup;
       setWaitingConnection(true);
     }
   };
@@ -94,6 +171,27 @@ export function StepChannel({ completedSteps, onNext, onBack }: StepChannelProps
         </div>
       )}
 
+      {/* AC-04: Popup closed without receiving a result */}
+      {popupClosedWithoutMessage && (
+        <Alert variant="info">
+          <AlertTitle>No completaste la conexión</AlertTitle>
+          <AlertDescription>
+            No completaste la conexión. Haz clic en &ldquo;Conectar WhatsApp&rdquo; si deseas
+            reintentar.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Error received from backend via postMessage */}
+      {errorReason && (
+        <Alert variant="destructive">
+          <AlertTitle>Error al conectar WhatsApp</AlertTitle>
+          <AlertDescription>
+            Hubo un problema al conectar WhatsApp ({errorReason}). Intenta de nuevo.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* P2 fix: Alert component instead of window.alert() */}
       {popupBlocked && (
         <Alert variant="destructive">
@@ -109,7 +207,7 @@ export function StepChannel({ completedSteps, onNext, onBack }: StepChannelProps
         </Alert>
       )}
 
-      {!isCompleted && !popupBlocked && !waitingConnection && (
+      {!isCompleted && !popupBlocked && !waitingConnection && !errorReason && !popupClosedWithoutMessage && (
         <Alert variant="info">
           <AlertDescription>
             <span className="font-medium">Tip:</span> Si el popup no abre, verifica que los
