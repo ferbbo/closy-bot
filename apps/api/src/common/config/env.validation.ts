@@ -50,6 +50,9 @@ export const envValidationSchema = Joi.object({
   AUTH_COOKIE_DOMAIN: Joi.string().optional(),
   AUTH_SESSION_CLEANUP_CRON: Joi.string().optional(),
 
+  // GAP-3: Dashboard URL for postMessage targetOrigin security
+  DASHBOARD_URL: Joi.string().uri().required(),
+
   // PR-13: Meta Embedded Signup configuration
   META_APP_ID: Joi.string().optional(),
   META_APP_SECRET: Joi.string().optional(),

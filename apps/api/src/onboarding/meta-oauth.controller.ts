@@ -12,6 +12,7 @@ import {
   Logger,
   HttpStatus,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { MetaOAuthService } from './meta-oauth.service';
@@ -34,7 +35,10 @@ export class MetaOAuthController {
   private readonly cookieName = 'meta_oauth_state';
   private readonly cookieTtlMs = 5 * 60 * 1000; // 5 minutes
 
-  constructor(private readonly oauthService: MetaOAuthService) {}
+  constructor(
+    private readonly oauthService: MetaOAuthService,
+    private readonly configService: ConfigService,
+  ) {}
 
   /**
    * Start OAuth flow
@@ -66,6 +70,9 @@ export class MetaOAuthController {
    * OAuth callback handler
    * REQ-05: AC-06 - Exchange code and create Channel
    * AC-07: State mismatch -> 403 Forbidden
+   * REQ-06 (GAP-3): Respond with HTML inline that executes window.opener.postMessage + window.close
+   * REQ-07 (GAP-3): Error path also returns HTML with whatsapp-error message
+   * REQ-08 (GAP-3): Uses DASHBOARD_URL env var as targetOrigin (never '*')
    */
   @Get('callback')
   async callback(
@@ -75,9 +82,10 @@ export class MetaOAuthController {
     @Res() res: Response,
   ): Promise<void> {
     const merchantId = req.merchant.id;
+    const dashboardUrl = this.configService.get<string>('DASHBOARD_URL', 'http://localhost:3001');
 
     // Validate state (CSRF protection)
-    const cookieState = req.cookies[this.cookieName];
+    const cookieState = req.cookies[this.cookieName] as string | undefined;
     if (!cookieState || cookieState !== state) {
       this.logger.warn(
         `State mismatch for merchant ${merchantId}: cookie=${cookieState}, query=${state}`,
@@ -92,7 +100,10 @@ export class MetaOAuthController {
 
     if (!code) {
       this.logger.error(`No code provided in callback for merchant ${merchantId}`);
-      res.redirect(HttpStatus.FOUND, '/dashboard?status=error&reason=no_code');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(HttpStatus.OK).send(
+        this.buildErrorHtml('no_code', 'No se recibió el código de autorización.', dashboardUrl),
+      );
       return;
     }
 
@@ -104,8 +115,11 @@ export class MetaOAuthController {
         `OAuth callback successful for merchant ${merchantId}, channel: ${result.channelId}`,
       );
 
-      // Redirect to dashboard with success
-      res.redirect(HttpStatus.FOUND, `/dashboard?status=success&channelId=${result.channelId}`);
+      // REQ-06 (GAP-3): HTML inline with postMessage + window.close
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(HttpStatus.OK).send(
+        this.buildSuccessHtml(result.channelId, dashboardUrl),
+      );
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.logger.error(
@@ -113,13 +127,12 @@ export class MetaOAuthController {
         err.stack,
       );
 
-      // AC-12: ConflictException (409) should not redirect - let exception filter handle it
-      // Rethrow known exceptions to maintain proper HTTP status codes
+      // ConflictException (409) should not be swallowed - rethrow
       if (error instanceof ConflictException) {
         throw error;
       }
 
-      // Handle other errors with redirect
+      // REQ-07 (GAP-3): Error path → HTML with whatsapp-error
       let reason = 'unknown_error';
       if (err.message.includes('exchange failed')) {
         reason = 'invalid_code';
@@ -127,8 +140,65 @@ export class MetaOAuthController {
         reason = 'waba_fetch_failed';
       }
 
-      res.redirect(HttpStatus.FOUND, `/dashboard?status=error&reason=${reason}`);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(HttpStatus.OK).send(
+        this.buildErrorHtml(reason, err.message, dashboardUrl),
+      );
     }
+  }
+
+  // ─── HTML builders (REQ-06, REQ-07, REQ-08) ────────────────────────────────
+
+  private buildSuccessHtml(channelId: string, dashboardUrl: string): string {
+    const safeChannelId = channelId.replace(/[^a-zA-Z0-9_-]/g, '');
+    const safeDashboardUrl = dashboardUrl.replace(/'/g, '');
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Conectando WhatsApp...</title>
+</head>
+<body>
+  <p>Conectando WhatsApp...</p>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage(
+        { type: 'whatsapp-connected', channelId: '${safeChannelId}', timestamp: Date.now() },
+        '${safeDashboardUrl}'
+      );
+      setTimeout(function() { window.close(); }, 500);
+    } else {
+      document.body.innerHTML = '<p>&#x2705; WhatsApp conectado. Vuelve al dashboard y refresca la p&aacute;gina.</p>';
+    }
+  </script>
+</body>
+</html>`;
+  }
+
+  private buildErrorHtml(reason: string, _message: string, dashboardUrl: string): string {
+    const safeReason = reason.replace(/[^a-zA-Z0-9_]/g, '');
+    const safeDashboardUrl = dashboardUrl.replace(/'/g, '');
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Error al conectar WhatsApp</title>
+</head>
+<body>
+  <p>Error al conectar WhatsApp.</p>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage(
+        { type: 'whatsapp-error', reason: '${safeReason}', timestamp: Date.now() },
+        '${safeDashboardUrl}'
+      );
+      setTimeout(function() { window.close(); }, 500);
+    } else {
+      document.body.innerHTML = '<p>&#x274C; Error al conectar WhatsApp. Cierra esta ventana y vuelve a intentarlo.</p>';
+    }
+  </script>
+</body>
+</html>`;
   }
 
   /**
