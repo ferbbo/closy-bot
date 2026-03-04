@@ -236,7 +236,107 @@ curl -X POST http://localhost:3000/channels/<channel-id>/retry-webhook \
 
 ---
 
+### Flujo Popup end-to-end (GAP-3 — Conectar WhatsApp desde Dashboard)
+
+> **Nota:** Este flujo no tiene cURL equivalente directo (es un popup browser ↔ parent window). Se documenta la secuencia completa para implementadores y QAs.
+
+#### Descripción del flujo (Happy path)
+
+```
+Frontend (popup) ──[GET /onboarding/whatsapp/start]──▶ Backend
+Backend ──[302 redirect]──▶ Meta OAuth (https://facebook.com/dialog/oauth)
+Merchant autoriza en Meta
+Meta ──[GET /onboarding/whatsapp/callback?code=...&state=...]──▶ Backend
+Backend:
+  1. Valida state cookie (CSRF)
+  2. Exchange code → accessToken
+  3. Crea Channel en DB
+  4. Responde HTML inline con script:
+     window.opener.postMessage(
+       { type: 'whatsapp-connected', channelId, timestamp },
+       DASHBOARD_URL    ← nunca '*', siempre env var
+     )
+     window.close()   ← popup se cierra automáticamente
+Frontend recibe mensaje type='whatsapp-connected':
+  - Invalida query ['onboarding','progress']
+  - Invalida query ['channels']
+  - Muestra "✅ WhatsApp conectado"
+  - Auto-avanza al siguiente step (si está en wizard)
+```
+
+#### Diagrama de secuencia
+
+```
+Dashboard         Popup               Backend            Meta OAuth
+   |                |                    |                    |
+   |──open popup──▶|                    |                    |
+   |  /onboard/     |──GET /start──────▶|                    |
+   |  whatsapp/start|                    |──302──────────────▶|
+   |                |◀───────────────────────────────(redirect)
+   |                |   (merchant autoriza en Meta)          |
+   |                |◀──GET /callback?code&state─────────────|
+   |                |──GET /callback──▶ |                    |
+   |                |                    |─[valida state]─   |
+   |                |                    |─[exchange code]─  |
+   |                |                    |─[crea Channel]─   |
+   |                |◀──────HTML inline──|                    |
+   |◀─postMessage───|  window.opener.postMessage(...)         |
+   |  {type:'whatsapp-connected', channelId}                  |
+   |                |──window.close()    |                    |
+[invalidate queries]
+[actualiza UI ✅]
+```
+
+#### Error path
+
+```
+Backend detecta error (código inválido, WABA fetch fallido, etc.)
+Backend responde HTML inline con:
+  window.opener.postMessage(
+    { type: 'whatsapp-error', reason: 'invalid_code' | 'waba_fetch_failed' | 'unknown_error', timestamp },
+    DASHBOARD_URL
+  )
+  window.close()
+Frontend muestra Alert accionable con reason.
+```
+
+#### Edge cases
+
+| Caso | Comportamiento |
+|------|---------------|
+| `window.opener === null` (popup reabierto del historial) | Backend muestra HTML estático: "WhatsApp conectado. Vuelve al dashboard." |
+| Popup cerrado manualmente sin completar OAuth | Frontend detecta `popup.closed` con poll de 500ms → timeout 2s → muestra "No completaste la conexión." |
+| Popup bloqueado por navegador | Frontend detecta `window.open()` retorna `null` → muestra Alert con instrucciones para permitir popups |
+
+#### Variables de entorno requeridas
+
+| Variable | Descripción | Ejemplo |
+|----------|-------------|---------|
+| `DASHBOARD_URL` | URL base del dashboard. Usado como `targetOrigin` en `postMessage`. **Nunca usar `*`** | `http://localhost:3001` |
+
+#### Seguridad: postMessage origin validation
+
+**Backend (envía mensaje):**
+```typescript
+// En meta-oauth.controller.ts
+const dashboardUrl = this.configService.get<string>('DASHBOARD_URL', 'http://localhost:3001');
+window.opener.postMessage({ ... }, dashboardUrl); // targetOrigin explícito
+```
+
+**Frontend (recibe mensaje):**
+```typescript
+// En step-channel.tsx y empty-channels-state.tsx
+const expectedOrigin = new URL(process.env.NEXT_PUBLIC_API_URL!).origin;
+const handleMessage = (event: MessageEvent) => {
+  if (event.origin !== expectedOrigin) return; // Rechaza mensajes de otros orígenes
+  // procesar event.data
+};
+```
+
+---
+
 ## Flujo 3: Conversación con Bot (PR-03.5 + PR-03.6)
+
 
 ### Descripción
 
