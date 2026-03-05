@@ -72,7 +72,7 @@ export class MetaOAuthController {
    * AC-07: State mismatch -> 403 Forbidden
    * REQ-06 (GAP-3): Respond with HTML inline that executes window.opener.postMessage + window.close
    * REQ-07 (GAP-3): Error path also returns HTML with whatsapp-error message
-   * REQ-08 (GAP-3): Uses DASHBOARD_URL env var as targetOrigin (never '*')
+   * REQ-08 (GAP-3): Uses DASHBOARD_NEXT_PUBLIC_API_URL env var as targetOrigin (never '*')
    */
   @Get('callback')
   async callback(
@@ -82,7 +82,7 @@ export class MetaOAuthController {
     @Res() res: Response,
   ): Promise<void> {
     const merchantId = req.merchant.id;
-    const dashboardUrl = this.configService.get<string>('DASHBOARD_URL', 'http://localhost:3001');
+    const dashboardUrl = this.configService.get<string>('NEXT_PUBLIC_API_URL', 'http://localhost:3001');
 
     // Validate state (CSRF protection)
     const cookieState = req.cookies[this.cookieName] as string | undefined;
@@ -101,9 +101,11 @@ export class MetaOAuthController {
     if (!code) {
       this.logger.error(`No code provided in callback for merchant ${merchantId}`);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.status(HttpStatus.OK).send(
-        this.buildErrorHtml('no_code', 'No se recibió el código de autorización.', dashboardUrl),
-      );
+      res
+        .status(HttpStatus.OK)
+        .send(
+          this.buildErrorHtml('no_code', 'No se recibió el código de autorización.', dashboardUrl),
+        );
       return;
     }
 
@@ -117,9 +119,7 @@ export class MetaOAuthController {
 
       // REQ-06 (GAP-3): HTML inline with postMessage + window.close
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.status(HttpStatus.OK).send(
-        this.buildSuccessHtml(result.channelId, dashboardUrl),
-      );
+      res.status(HttpStatus.OK).send(this.buildSuccessHtml(result.channelId, dashboardUrl));
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.logger.error(
@@ -141,9 +141,7 @@ export class MetaOAuthController {
       }
 
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.status(HttpStatus.OK).send(
-        this.buildErrorHtml(reason, err.message, dashboardUrl),
-      );
+      res.status(HttpStatus.OK).send(this.buildErrorHtml(reason, err.message, dashboardUrl));
     }
   }
 

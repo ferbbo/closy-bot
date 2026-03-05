@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/hooks/use-auth';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -13,7 +13,7 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { usePendingOrdersCount } from '@/hooks/use-orders';
 
 interface DashboardLayoutProps {
@@ -31,19 +31,11 @@ const navigation = [
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { merchant } = useAuth();
   const pathname = usePathname();
-  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // REQ-14, AC-18: Contador de pedidos pendientes para sidebar badge
   const { data: pendingData } = usePendingOrdersCount();
   const pendingCount = pendingData?.count ?? 0;
-
-  // AC-10: If merchant is still onboarding, redirect to /onboarding
-  useEffect(() => {
-    if (merchant && merchant.status === 'onboarding') {
-      router.replace('/onboarding');
-    }
-  }, [merchant, router]);
 
   return (
     <div className="min-h-screen bg-gray-50">

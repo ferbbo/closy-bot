@@ -15,10 +15,6 @@ const nextConfig = {
         source: '/onboarding/:path*',
         destination: 'http://localhost:4000/onboarding/:path*',
       },
-       {
-        source: '/channels/:path*',
-        destination: 'http://localhost:4000/channels/:path*',
-      },
     ];
   },
 };

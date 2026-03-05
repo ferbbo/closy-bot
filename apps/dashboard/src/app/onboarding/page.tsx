@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Stepper, ONBOARDING_STEPS } from '@/components/ui/stepper';
 import { Progress } from '@/components/ui/progress';
@@ -14,17 +13,10 @@ import { StepActivate } from './_components/step-activate';
 
 /** AC-09: Onboarding wizard con 4 steps (canal → catálogo → personalización → activar) */
 export default function OnboardingPage() {
-  const router = useRouter();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { merchant, isLoading: authLoading } = useAuth();
-  const { data: progress, isLoading: progressLoading } = useOnboardingProgress();
+  const { data: progress, isFetched: progressFetched } = useOnboardingProgress();
   const [currentStep, setCurrentStep] = useState(1);
-
-  // AC-10: redirect if already active (side effect, not during render)
-  useEffect(() => {
-    if (!authLoading && merchant?.status === 'active') {
-      router.replace('/dashboard');
-    }
-  }, [authLoading, merchant?.status, router]);
 
   const completedSteps = progress?.completedSteps ?? [];
   const percentage = progress?.percentage ?? 0;
@@ -32,8 +24,8 @@ export default function OnboardingPage() {
   const goNext = () => setCurrentStep((s) => Math.min(s + 1, ONBOARDING_STEPS.length));
   const goBack = () => setCurrentStep((s) => Math.max(s - 1, 1));
 
-  // Show loader only on initial load (no data yet) or if already active (redirect in progress)
-  if (authLoading || (!progress && progressLoading) || merchant?.status === 'active') {
+  // Show loader only during initial load
+  if (authLoading || !progressFetched) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" aria-label="Cargando" />

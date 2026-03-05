@@ -126,7 +126,7 @@ export class AuthController {
         id: merchant.id,
         name: merchant.name,
         email: merchant.whatsappNumber, // TODO: proper email field
-        status: merchant.status
+        status: merchant.status,
       },
     };
   }

@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const PUBLIC_PATHS = ['/login', '/api', '/_next', '/favicon.ico'];
+// Paths that skip auth check completely (API rewrites + public assets)
+const PUBLIC_PATHS = [
+  '/login',
+  '/api',
+  '/_next',
+  '/favicon.ico'
+];
 
 interface AuthMeBody {
   authenticated: boolean;
@@ -13,7 +19,7 @@ interface AuthMeBody {
 /** AC-10: Middleware redirect — onboarding → /onboarding, active → /dashboard */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
+      console.log({pathname})
   // Skip checking for public paths
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
@@ -51,6 +57,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|auth).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|auth|channels|onboarding/progress|onboarding/whatsapp/start).*)'],
 };
 
