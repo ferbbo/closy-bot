@@ -209,6 +209,20 @@ export class IntentRouterService {
       scores.set(intent as IntentKey, score);
     }
 
+    // Special case: "y <product>" continuation after SEARCH_PRODUCT
+    // Detect messages starting with conjunctions when lastIntent=SEARCH_PRODUCT
+    if (context?.lastIntent === 'SEARCH_PRODUCT') {
+      const conjunctionPattern = /^(y|e)\s+\S+/i;
+      if (conjunctionPattern.test(normalized)) {
+        const currentScore = scores.get('SEARCH_PRODUCT') || 0;
+        // Give it enough score to trigger SEARCH_PRODUCT (threshold is 2)
+        scores.set('SEARCH_PRODUCT', Math.max(currentScore, 3));
+        this.logger.debug(
+          `Conjunction continuation detected: "${normalized}" → SEARCH_PRODUCT boosted to 3`,
+        );
+      }
+    }
+
     // REQ-04, AC-04: Apply context bonuses
     const adjustedScores = this.applyContextBonuses(scores, context);
 

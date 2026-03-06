@@ -63,12 +63,28 @@ export class ProductRepository {
     limit = 20,
     onlyAvailable = true,
   ): Promise<ProductWithVariants[]> {
+    // Split query into words and filter out short words (< 2 chars)
+    const words = query
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length >= 2);
+
+    if (words.length === 0) {
+      return [];
+    }
+
+    // Build AND conditions for each word (must match in name OR description)
+    const wordConditions: Prisma.ProductWhereInput[] = words.map((word) => ({
+      OR: [
+        { name: { contains: word, mode: 'insensitive' as const } },
+        { description: { contains: word, mode: 'insensitive' as const } },
+      ],
+    }));
+
     const whereClause: Prisma.ProductWhereInput = {
       merchantId,
-      OR: [
-        { name: { contains: query, mode: 'insensitive' } },
-        { description: { contains: query, mode: 'insensitive' } },
-      ],
+      AND: wordConditions,
     };
 
     if (onlyAvailable) {
@@ -104,7 +120,7 @@ export class ProductRepository {
   /**
    * Full-Text Search using PostgreSQL tsvector + tsquery (PR-03.5.2)
    * Uses 'simple' config for Spanglish support (no stemming)
-   * Falls back to ILIKE search if FTS returns 0 results
+   * Strategy: 1) Try original query, 2) Try normalized (plural removal), 3) Fallback ILIKE
    * @param merchantId - Filter by merchant
    * @param query - Natural language search query
    * @param limit - Maximum results (default 20)
@@ -116,22 +132,26 @@ export class ProductRepository {
       return [];
     }
 
+    // Use lowercase query directly for FTS (simple config is case-insensitive)
+    const ftsQuery = query.toLowerCase().trim();
+
+    // Also prepare normalized version (Spanish plural removal)
+    const normalizedFtsQuery = this.normalizeSpanishPlurals(ftsQuery);
+    const shouldTryNormalized = normalizedFtsQuery !== ftsQuery;
+
+    this.logger.debug(
+      `FTS query: "${query}" → fts: "${ftsQuery}"${shouldTryNormalized ? ` → normalized: "${normalizedFtsQuery}"` : ''}`,
+    );
+
     try {
-      // Raw SQL for FTS with ts_rank scoring
-      // Uses parameterized queries to prevent SQL injection
-      const products = await this.prisma.$queryRaw<Product[]>`
-        SELECT p.*,
-               ts_rank(
-                 to_tsvector('simple', COALESCE(p.search_text, '')),
-                 plainto_tsquery('simple', ${query})
-               ) AS rank
-        FROM products p
-        WHERE p.merchant_id = ${merchantId}
-          AND p.is_active = true
-          AND to_tsvector('simple', COALESCE(p.search_text, '')) @@ plainto_tsquery('simple', ${query})
-        ORDER BY rank DESC
-        LIMIT ${limit}
-      `;
+      // First attempt: original query
+      let products = await this.executeFtsQuery(merchantId, ftsQuery, limit);
+
+      // Second attempt: normalized query (if different and first failed)
+      if (products.length === 0 && shouldTryNormalized) {
+        this.logger.debug(`FTS retry with normalized query: "${normalizedFtsQuery}"`);
+        products = await this.executeFtsQuery(merchantId, normalizedFtsQuery, limit);
+      }
 
       // If FTS returns 0 results, fallback to ILIKE search
       if (products.length === 0) {
@@ -142,43 +162,110 @@ export class ProductRepository {
       }
 
       // Load variants for each product (FTS only returns Product rows)
-      const productIds = products.map((p) => p.id);
-      const productsWithVariants = await this.prisma.product.findMany({
-        where: {
-          id: { in: productIds },
-          merchantId, // Defense in depth: ensure multi-tenancy
-          isActive: true,
-          variants: {
-            some: {
-              isActive: true,
-              stock: { gt: 0 },
-            },
-          },
-        },
-        include: {
-          variants: {
-            where: {
-              isActive: true,
-              stock: { gt: 0 },
-            },
-          },
-        },
-      });
-
-      // Re-order by FTS rank (since Prisma query loses the ordering)
-      const productRankMap = new Map(products.map((p) => [p.id, p]));
-      return productsWithVariants.sort((a, b) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const rankA = (productRankMap.get(a.id) as any)?.rank || 0;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const rankB = (productRankMap.get(b.id) as any)?.rank || 0;
-        return rankB - rankA;
-      });
+      return this.loadVariantsForProducts(products, merchantId);
     } catch (error) {
       this.logger.error(`FTS query failed: ${(error as Error).message}`, (error as Error).stack);
       // Fallback to ILIKE on error
       return this.search(merchantId, query, limit, true);
     }
+  }
+
+  /**
+   * Normalize Spanish plurals: "azules" → "azul", "camisas" → "camisa"
+   * Preserves words that shouldn't be stripped (e.g., "jeans" stays "jeans")
+   */
+  private normalizeSpanishPlurals(query: string): string {
+    // Common words that should NOT be normalized (English loanwords, etc.)
+    const preserveWords = new Set(['jeans', 'shorts', 'tops', 'sweaters', 'sneakers', 'boots']);
+
+    return query
+      .split(/\s+/)
+      .map((word) => {
+        if (preserveWords.has(word)) return word;
+        if (word.length <= 3) return word; // Skip short words
+        // Spanish plural rules:
+        // - Words ending in vowel + s: "camisas" → "camisa"
+        // - Words ending in -es after consonant: "pantalones" → "pantalon"
+        // - Words ending in -ces: "azules" → "azul" (z→c transformation handled by removing -es)
+        if (word.endsWith('es') && word.length > 4) {
+          // Handle "azules" → "azul" (es after l)
+          // Handle "pantalones" → "pantalon" (es after n)
+          return word.slice(0, -2);
+        }
+        if (word.endsWith('s') && word.length > 3) {
+          const beforeS = word[word.length - 2];
+          // Only remove 's' if preceded by a vowel (Spanish rule)
+          if ('aeiouáéíóú'.includes(beforeS)) {
+            return word.slice(0, -1);
+          }
+        }
+        return word;
+      })
+      .join(' ');
+  }
+
+  /**
+   * Execute FTS query and return raw Product results
+   */
+  private async executeFtsQuery(
+    merchantId: string,
+    ftsQuery: string,
+    limit: number,
+  ): Promise<Product[]> {
+    return this.prisma.$queryRaw<Product[]>`
+      SELECT p.*,
+             ts_rank(
+               to_tsvector('simple', COALESCE(p.search_text, '')),
+               plainto_tsquery('simple', ${ftsQuery})
+             ) AS rank
+      FROM products p
+      WHERE p.merchant_id = ${merchantId}
+        AND p.is_active = true
+        AND to_tsvector('simple', COALESCE(p.search_text, '')) @@ plainto_tsquery('simple', ${ftsQuery})
+      ORDER BY rank DESC
+      LIMIT ${limit}
+    `;
+  }
+
+  /**
+   * Load variants for products from FTS results
+   */
+  private async loadVariantsForProducts(
+    products: Product[],
+    merchantId: string,
+  ): Promise<ProductWithVariants[]> {
+    const productIds = products.map((p) => p.id);
+    const productsWithVariants = await this.prisma.product.findMany({
+      where: {
+        id: { in: productIds },
+        merchantId, // Defense in depth: ensure multi-tenancy
+        isActive: true,
+        variants: {
+          some: {
+            isActive: true,
+            stock: { gt: 0 },
+          },
+        },
+      },
+      include: {
+        variants: {
+          where: {
+            isActive: true,
+            stock: { gt: 0 },
+          },
+        },
+      },
+    });
+
+    // Re-order by FTS rank (since Prisma query loses the ordering)
+    const productRankMap = new Map(products.map((p) => [p.id, p]));
+    return productsWithVariants.sort((a, b) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rankA = (productRankMap.get(a.id) as any)?.rank || 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rankB = (productRankMap.get(b.id) as any)?.rank || 0;
+      return rankB - rankA;
+    });
   }
 
   /**

@@ -100,6 +100,16 @@ export class ConversationRepository {
   }
 
   /**
+   * Update last intent for context-aware routing
+   * Enables search continuations like "y camisa blanca" after SEARCH_PRODUCT
+   * @param id Conversation ID
+   * @param lastIntent The intent from the last classified message
+   */
+  async updateLastIntent(id: string, lastIntent: string): Promise<Conversation> {
+    return this.update(id, { lastIntent });
+  }
+
+  /**
    * PR-03.10: Update conversation memory fields (REQ-04, AC-04)
    * @param id Conversation ID
    * @param memory Memory data to update

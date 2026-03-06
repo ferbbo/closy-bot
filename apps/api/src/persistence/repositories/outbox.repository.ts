@@ -60,8 +60,31 @@ export class OutboxRepository {
     const now = new Date();
     const lockExpired = new Date(now.getTime() - lockTtlSeconds * 1000);
 
+    // Raw type for query result (snake_case from DB)
+    type RawOutboxMessage = {
+      id: string;
+      merchant_id: string;
+      conversation_id: string | null;
+      channel_id: string | null;
+      channel: string;
+      type: string;
+      to: string;
+      payload_json: unknown;
+      dedupe_key: string | null;
+      status: string;
+      attempts: number;
+      next_retry_at: Date;
+      locked_at: Date | null;
+      locked_by: string | null;
+      last_error: string | null;
+      provider_message_id: string | null;
+      sent_at: Date | null;
+      created_at: Date;
+      updated_at: Date;
+    };
+
     // Raw SQL for SKIP LOCKED
-    const messages = await this.prisma.$queryRaw<OutboxMessage[]>`
+    const rawMessages = await this.prisma.$queryRaw<RawOutboxMessage[]>`
       UPDATE outbox_messages
       SET 
         status = 'SENDING'::"OutboxMessageStatus",
@@ -78,6 +101,29 @@ export class OutboxRepository {
       )
       RETURNING *;
     `;
+
+    // Map snake_case to camelCase for Prisma model compatibility
+    const messages: OutboxMessage[] = rawMessages.map((raw) => ({
+      id: raw.id,
+      merchantId: raw.merchant_id,
+      conversationId: raw.conversation_id,
+      channelId: raw.channel_id,
+      channel: raw.channel as OutboxMessage['channel'],
+      type: raw.type as OutboxMessage['type'],
+      to: raw.to,
+      payloadJson: raw.payload_json as Prisma.JsonValue,
+      dedupeKey: raw.dedupe_key,
+      status: raw.status as OutboxMessage['status'],
+      attempts: raw.attempts,
+      nextRetryAt: raw.next_retry_at,
+      lockedAt: raw.locked_at,
+      lockedBy: raw.locked_by,
+      lastError: raw.last_error,
+      providerMessageId: raw.provider_message_id,
+      sentAt: raw.sent_at,
+      createdAt: raw.created_at,
+      updatedAt: raw.updated_at,
+    }));
 
     this.logger.debug(`Claimed ${messages.length} message(s) with lockId=${lockId}`);
     return messages;

@@ -432,6 +432,9 @@ export class ConversationOrchestrator {
 
     this.logger.log(`Generated response (${response.length} chars)`);
 
+    // Persist lastIntent for context-aware routing (enables "y camisa blanca" continuations)
+    await this.conversationService.updateLastIntent(conversation.id, routeDecision.intent);
+
     return {
       response,
       shouldSend: true,

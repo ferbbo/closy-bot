@@ -83,6 +83,15 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
     { phrase: 'disponible', weight: 2 },
     { phrase: 'vender', weight: 2 },
     { phrase: 'comprar', weight: 2 },
+    // Continuation keywords (work with SEARCH_PRODUCT → SEARCH_PRODUCT context bonus)
+    { phrase: 'también', weight: 1 },
+    { phrase: 'tambien', weight: 1 },
+    { phrase: 'además', weight: 1 },
+    { phrase: 'ademas', weight: 1 },
+    { phrase: 'otro', weight: 1 },
+    { phrase: 'otra', weight: 1 },
+    { phrase: 'otros', weight: 1 },
+    { phrase: 'otras', weight: 1 },
   ],
 
   CHECKOUT: [
@@ -192,10 +201,11 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
 
 // REQ-04: Context bonuses for intent scoring (context-aware)
 export const CONTEXT_BONUSES: Partial<Record<IntentKey, Partial<Record<IntentKey, number>>>> = {
-  // After SEARCH_PRODUCT, boost transactional intents
+  // After SEARCH_PRODUCT, boost transactional intents AND search continuations
   SEARCH_PRODUCT: {
     ADD_TO_CART: 2,
     VIEW_CART: 1,
+    SEARCH_PRODUCT: 3, // Enable "y camisa blanca" continuation after search results
   },
   // After ADD_TO_CART, boost cart operations
   ADD_TO_CART: {

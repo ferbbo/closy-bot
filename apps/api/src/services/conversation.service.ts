@@ -133,4 +133,12 @@ export class ConversationService {
   async updateLastMessageAt(id: string, timestamp: Date): Promise<Conversation> {
     return this.conversationRepository.updateLastMessageAt(id, timestamp);
   }
+
+  /**
+   * Update last intent for context-aware routing
+   * Used to enable search continuations like "y camisa blanca" after SEARCH_PRODUCT
+   */
+  async updateLastIntent(id: string, lastIntent: string): Promise<Conversation> {
+    return this.conversationRepository.updateLastIntent(id, lastIntent);
+  }
 }

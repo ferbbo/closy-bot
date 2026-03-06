@@ -90,15 +90,20 @@ export class MetaStatus {
   recipient_id!: string;
 }
 
+export class MetaContactProfile {
+  @IsString()
+  @IsOptional()
+  name?: string;
+}
+
 export class MetaContact {
   @IsString()
   wa_id!: string;
 
   @ValidateNested()
+  @Type(() => MetaContactProfile)
   @IsOptional()
-  profile?: {
-    name: string;
-  };
+  profile?: MetaContactProfile;
 }
 
 export class MetaMetadata {
