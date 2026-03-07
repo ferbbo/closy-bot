@@ -65,4 +65,14 @@ export class FeatureFlagsService {
     if (this.isMvpMode()) return false;
     return this.configService.get<boolean>('INDUSTRIES_ENABLED') ?? false;
   }
+
+  /**
+   * AC-05: NLU Entity Extraction for structured catalog search (B2 feature)
+   * Parses price/size/color from free-text queries and applies SQL filters.
+   * Kill-switch: FEATURES_MODE=mvp → false
+   */
+  get isSearchNluEnabled(): boolean {
+    if (this.isMvpMode()) return false;
+    return this.configService.get<boolean>('FEATURE_SEARCH_NLU') ?? false;
+  }
 }

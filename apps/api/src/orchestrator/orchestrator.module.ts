@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConversationOrchestrator } from './conversation.orchestrator';
 import { IntentRouterService } from './intent/intent-router.service';
 import { RouteDecisionService } from './route-decision.service'; // PR-03.5.1
+import { QueryParserService } from './nlu/query-parser.service'; // PR-SEARCH-NLU
 import { SearchCatalogFlow } from './flows/search-catalog.flow';
 import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
@@ -48,6 +49,7 @@ import { CommonModule } from '../common/common.module'; // PR-03.10 AC-06
     PostSaleFlow, // PR-07
     HandoffFlow, // PR-08
     HandoffService, // PR-08 (here instead of ServicesModule to avoid circular deps with LlmModule)
+    QueryParserService, // PR-SEARCH-NLU
   ],
   exports: [ConversationOrchestrator],
 })
