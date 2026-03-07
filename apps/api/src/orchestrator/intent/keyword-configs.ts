@@ -72,16 +72,23 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
     { phrase: 'busco', weight: 3 },
     { phrase: 'tienes', weight: 2 },
     { phrase: 'tienen', weight: 2 },
+    { phrase: 'tendras', weight: 2 }, // Colloquial future: "¿tendrás vestidos?"
+    { phrase: 'tendran', weight: 2 },
+    { phrase: 'hay', weight: 2 }, // "¿hay camisas?"
     { phrase: 'producto', weight: 2 },
     { phrase: 'productos', weight: 2 },
     { phrase: 'necesito', weight: 2 },
     { phrase: 'buscar', weight: 3 },
     { phrase: 'mostrar', weight: 2 },
+    { phrase: 'muestrame', weight: 2 },
+    { phrase: 'quiero', weight: 2 }, // "quiero jeans"
+    { phrase: 'quisiera', weight: 2 },
     { phrase: 'ver', weight: 1 },
     { phrase: 'precio', weight: 2 },
     { phrase: 'stock', weight: 2 },
     { phrase: 'disponible', weight: 2 },
     { phrase: 'vender', weight: 2 },
+    { phrase: 'venden', weight: 2 },
     { phrase: 'comprar', weight: 2 },
     // Continuation keywords (work with SEARCH_PRODUCT → SEARCH_PRODUCT context bonus)
     { phrase: 'también', weight: 1 },

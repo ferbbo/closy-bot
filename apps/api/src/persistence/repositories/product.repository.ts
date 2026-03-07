@@ -120,7 +120,7 @@ export class ProductRepository {
   /**
    * Full-Text Search using PostgreSQL tsvector + tsquery (PR-03.5.2)
    * Uses 'simple' config for Spanglish support (no stemming)
-   * Strategy: 1) Try original query, 2) Try normalized (plural removal), 3) Fallback ILIKE
+   * Strategy: 1) Try original query, 2) Try normalized (plural removal), 3) Trigram fallback, 4) ILIKE fallback
    * @param merchantId - Filter by merchant
    * @param query - Natural language search query
    * @param limit - Maximum results (default 20)
@@ -153,15 +153,21 @@ export class ProductRepository {
         products = await this.executeFtsQuery(merchantId, normalizedFtsQuery, limit);
       }
 
-      // If FTS returns 0 results, fallback to ILIKE search
+      // Third attempt: trigram similarity search (fuzzy matching)
+      if (products.length === 0) {
+        this.logger.debug(`FTS returned 0 results, trying trigram search for: "${ftsQuery}"`);
+        products = await this.searchTrigram(merchantId, ftsQuery, limit);
+      }
+
+      // Fourth attempt (last resort): ILIKE search
       if (products.length === 0) {
         this.logger.log(
-          `FTS returned 0 results for query "${query}", falling back to ILIKE search`,
+          `Trigram returned 0 results for query "${query}", falling back to ILIKE search`,
         );
         return this.search(merchantId, query, limit, true);
       }
 
-      // Load variants for each product (FTS only returns Product rows)
+      // Load variants for each product (FTS/trigram only returns Product rows)
       return this.loadVariantsForProducts(products, merchantId);
     } catch (error) {
       this.logger.error(`FTS query failed: ${(error as Error).message}`, (error as Error).stack);
@@ -225,6 +231,86 @@ export class ProductRepository {
       ORDER BY rank DESC
       LIMIT ${limit}
     `;
+  }
+
+  // Spanish stopwords that should not be used for trigram matching
+  private readonly TRIGRAM_STOPWORDS = new Set([
+    // Prepositions
+    'desde', 'hasta', 'para', 'con', 'sin', 'por', 'entre', 'sobre', 'bajo',
+    // Articles
+    'los', 'las', 'del', 'una', 'uno', 'unos', 'unas',
+    // Common verbs/intent words (already handled by sanitization)
+    'busco', 'quiero', 'necesito', 'tienes', 'tienen', 'tendras', 'hay',
+    // Courtesy
+    'favor', 'gracias', 'porfa', 'porfavor', 'please', 'plis',
+    // Filler
+    'muy', 'mas', 'más', 'algo', 'como', 'que', 'cual',
+  ]);
+
+  /**
+   * Trigram similarity search using pg_trgm extension
+   * Finds products where ANY word in the query has high similarity to search_text
+   * Example: "busco jeans por favor" → finds "jeans" with 0.4+ similarity
+   * @param merchantId - Filter by merchant
+   * @param query - User's search query (may contain noise words)
+   * @param limit - Maximum results
+   * @param threshold - Minimum similarity score (default 0.4)
+   */
+  private async searchTrigram(
+    merchantId: string,
+    query: string,
+    limit: number,
+    threshold = 0.4, // Increased from 0.3 to reduce false positives
+  ): Promise<Product[]> {
+    // Extract meaningful words: 3+ chars, not stopwords, not pure numbers
+    const words = query
+      .split(/\s+/)
+      .filter((w) => w.length >= 3)
+      .filter((w) => !this.TRIGRAM_STOPWORDS.has(w.toLowerCase()))
+      .filter((w) => !/^\d+$/.test(w)) // Remove pure numbers (prices)
+      .slice(0, 5); // Max 5 words to avoid expensive queries
+
+    if (words.length === 0) {
+      return [];
+    }
+
+    this.logger.debug(`Trigram words after filtering: [${words.join(', ')}]`);
+
+    // Search each word independently and combine results
+    // This avoids complex dynamic SQL and works reliably
+    const allResults = new Map<string, Product & { similarity: number }>();
+
+    for (const word of words) {
+      const wordResults = await this.prisma.$queryRaw<(Product & { similarity: number })[]>`
+        SELECT p.*,
+               word_similarity(${word}, COALESCE(p.search_text, '')) AS similarity
+        FROM products p
+        WHERE p.merchant_id = ${merchantId}
+          AND p.is_active = true
+          AND word_similarity(${word}, COALESCE(p.search_text, '')) >= ${threshold}
+        ORDER BY similarity DESC
+        LIMIT ${limit}
+      `;
+
+      // Merge results, keeping highest similarity per product
+      for (const result of wordResults) {
+        const existing = allResults.get(result.id);
+        if (!existing || result.similarity > existing.similarity) {
+          allResults.set(result.id, result);
+        }
+      }
+    }
+
+    // Sort by best similarity and return top N
+    const sorted = Array.from(allResults.values()).sort(
+      (a, b) => b.similarity - a.similarity,
+    );
+
+    this.logger.debug(
+      `Trigram search for "${query}" found ${sorted.length} products (words: ${words.join(', ')})`,
+    );
+
+    return sorted.slice(0, limit);
   }
 
   /**

@@ -55,6 +55,7 @@ export class SearchCatalogFlow {
    * "tienes jeans azul?" → "jeans azul"
    * "busco camisas blancas" → "camisas blancas"
    * "y camisa blanca" → "camisa blanca" (continuation)
+   * "busco jeans por favor" → "jeans" (courtesy phrase removed)
    */
   private sanitizeQuery(rawQuery: string): string {
     let query = rawQuery.toLowerCase().trim();
@@ -64,6 +65,11 @@ export class SearchCatalogFlow {
 
     // Remove leading conjunctions (continuation messages: "y camisa blanca" → "camisa blanca")
     query = query.replace(/^(y|e|o|también|además)\s+/i, '').trim();
+
+    // Remove trailing courtesy phrases: "por favor", "porfavor", "porfa", "gracias", "plis", "please"
+    query = query
+      .replace(/\s+(por\s*favor|porfavor|porfa|gracias|plis|please|xfa|xfavor)$/i, '')
+      .trim();
 
     // Remove intent keywords (sorted by length descending to match longer phrases first)
     const sortedKeywords = [...this.INTENT_KEYWORDS].sort((a, b) => b.length - a.length);

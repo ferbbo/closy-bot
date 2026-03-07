@@ -92,7 +92,7 @@ export class AuthController {
         secure: this.isProduction,
         sameSite: 'lax',
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        domain: this.cookieDomain,
+        // domain: this.cookieDomain,
       });
 
       this.logger.log(`Session created for merchant: ${merchant.id}`);
