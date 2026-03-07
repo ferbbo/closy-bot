@@ -67,4 +67,6 @@ export const envValidationSchema = Joi.object({
   INSTAGRAM_ENABLED: Joi.boolean().default(false),
   PLAYBOOK_EDITOR_ENABLED: Joi.boolean().default(false),
   INDUSTRIES_ENABLED: Joi.boolean().default(false),
+  // PR-SEARCH-NLU: NLU entity extraction for structured catalog search (B2 only)
+  FEATURE_SEARCH_NLU: Joi.boolean().optional().default(false),
 });
