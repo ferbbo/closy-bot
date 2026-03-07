@@ -157,21 +157,22 @@ describe('FeatureFlagsService', () => {
 
   // ──────────────────────────────────────────────────────────
   // AC-05: isSearchNluEnabled — NLU feature flag (PR-SEARCH-NLU)
+  // Kill-switch NOT applied: disponible en MVP y B2 vía FEATURE_SEARCH_NLU
   // ──────────────────────────────────────────────────────────
   describe('AC-05: isSearchNluEnabled (PR-SEARCH-NLU)', () => {
-    it('retorna false cuando FEATURES_MODE=mvp (kill-switch)', () => {
-      const service = buildService({ FEATURES_MODE: 'mvp', FEATURE_SEARCH_NLU: true });
+    it('retorna false cuando FEATURE_SEARCH_NLU no está seteado (default)', () => {
+      const service = buildService({ FEATURES_MODE: 'mvp' });
       expect(service.isSearchNluEnabled).toBe(false);
+    });
+
+    it('retorna true cuando FEATURES_MODE=mvp y FEATURE_SEARCH_NLU=true (MVP opt-in)', () => {
+      const service = buildService({ FEATURES_MODE: 'mvp', FEATURE_SEARCH_NLU: true });
+      expect(service.isSearchNluEnabled).toBe(true);
     });
 
     it('retorna true cuando FEATURES_MODE=dev y FEATURE_SEARCH_NLU=true', () => {
       const service = buildService({ FEATURES_MODE: 'dev', FEATURE_SEARCH_NLU: true });
       expect(service.isSearchNluEnabled).toBe(true);
-    });
-
-    it('retorna false cuando FEATURES_MODE=dev y FEATURE_SEARCH_NLU ausente (default false)', () => {
-      const service = buildService({ FEATURES_MODE: 'dev' });
-      expect(service.isSearchNluEnabled).toBe(false);
     });
 
     it('retorna false cuando FEATURES_MODE=dev y FEATURE_SEARCH_NLU=false', () => {

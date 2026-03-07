@@ -67,12 +67,11 @@ export class FeatureFlagsService {
   }
 
   /**
-   * AC-05: NLU Entity Extraction for structured catalog search (B2 feature)
-   * Parses price/size/color from free-text queries and applies SQL filters.
-   * Kill-switch: FEATURES_MODE=mvp → false
+   * AC-05: NLU Entity Extraction for structured catalog search
+   * Available in MVP and B2 — respects FEATURE_SEARCH_NLU env var (default false).
+   * Kill-switch NOT applied: feature is opt-in via env var in all modes.
    */
   get isSearchNluEnabled(): boolean {
-    if (this.isMvpMode()) return false;
     return this.configService.get<boolean>('FEATURE_SEARCH_NLU') ?? false;
   }
 }
