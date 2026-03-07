@@ -5,6 +5,8 @@ import { ProductWithVariants } from '../../persistence/repositories/product.repo
 import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.service';
 import { PlaybookMessages } from '../../domain/entities/playbook-config.interface';
 import { GenericPlaybookDefaults } from '../../domain/entities/playbook-defaults/generic.config';
+import { QueryParserService } from '../nlu/query-parser.service';
+import { FeatureFlagsService } from '../../common/feature-flags/feature-flags.service';
 
 function buildMockGetMessage() {
   return jest
@@ -52,6 +54,14 @@ describe('AC-04: SearchCatalogFlow uses PlaybookService.getMessage() (PR-GAP-1)'
           useValue: {
             getMessage: buildMockGetMessage(),
           },
+        },
+        {
+          provide: QueryParserService,
+          useValue: { parse: jest.fn() },
+        },
+        {
+          provide: FeatureFlagsService,
+          useValue: { isSearchNluEnabled: false }, // NLU OFF by default
         },
       ],
     }).compile();
@@ -348,5 +358,89 @@ describe('AC-04: SearchCatalogFlow uses PlaybookService.getMessage() (PR-GAP-1)'
       expect(result).toContain(longDescription.substring(0, 60));
       expect(result).not.toContain(longDescription);
     });
+  });
+});
+
+/**
+ * AC-06: SearchCatalogFlow invokes QueryParserService only if feature flag is active
+ * AC-11: With FEATURES_MODE=mvp, NLU NOT invoked — pipeline works like before
+ */
+describe('AC-06 / AC-11: NLU feature flag gating in SearchCatalogFlow', () => {
+  const merchantId = 'merchant-nlu';
+  const mockMerchantNlu: MerchantPlaybookData = { id: merchantId, name: 'NLU Merchant' };
+
+  function buildModule(isSearchNluEnabled: boolean) {
+    const mockProducts: ProductWithVariants[] = [
+      {
+        id: 'prod-nlu-1',
+        merchantId,
+        name: 'Jeans Azul',
+        description: 'Jeans de mezclilla',
+        variants: [
+          {
+            id: 'var-nlu-1',
+            productId: 'prod-nlu-1',
+            name: 'Talla 32',
+            sku: 'JAN-AZ-32',
+            price: 90000,
+            stock: 5,
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+        isActive: true,
+        categoryId: null,
+        searchText: null,
+        imageUrl: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ];
+
+    const catalogServiceMock = { searchProducts: jest.fn().mockResolvedValue(mockProducts) };
+    const queryParserMock = {
+      parse: jest.fn().mockReturnValue({ cleanText: 'jeans', filters: { priceMin: 85000 } }),
+    };
+    const flagsMock = { isSearchNluEnabled };
+    const playbookMock = { getMessage: buildMockGetMessage() };
+
+    return Test.createTestingModule({
+      providers: [
+        SearchCatalogFlow,
+        { provide: CatalogService, useValue: catalogServiceMock },
+        { provide: PlaybookService, useValue: playbookMock },
+        { provide: QueryParserService, useValue: queryParserMock },
+        { provide: FeatureFlagsService, useValue: flagsMock },
+      ],
+    })
+      .compile()
+      .then((m) => ({
+        flow: m.get<SearchCatalogFlow>(SearchCatalogFlow),
+        catalogService: m.get(CatalogService) as jest.Mocked<CatalogService>,
+        queryParser: m.get(QueryParserService) as jest.Mocked<QueryParserService>,
+      }));
+  }
+
+  it('AC-06: con flag ON → invoca QueryParserService.parse() y pasa filters a CatalogService', async () => {
+    const { flow, catalogService, queryParser } = await buildModule(true);
+
+    await flow.handle(mockMerchantNlu, merchantId, 'jeans desde 85000');
+
+    expect(queryParser.parse).toHaveBeenCalledWith('jeans desde 85000');
+    expect(catalogService.searchProducts).toHaveBeenCalledWith(merchantId, 'jeans', 5, {
+      priceMin: 85000,
+    });
+  });
+
+  it('AC-11: con flag OFF (FEATURES_MODE=mvp) → NO invoca QueryParserService', async () => {
+    const { flow, catalogService, queryParser } = await buildModule(false);
+
+    await flow.handle(mockMerchantNlu, merchantId, 'jeans desde 85000');
+
+    // NLU NOT called
+    expect(queryParser.parse).not.toHaveBeenCalled();
+    // CatalogService called with full query (no filters)
+    expect(catalogService.searchProducts).toHaveBeenCalledWith(merchantId, 'jeans desde 85000', 5);
   });
 });

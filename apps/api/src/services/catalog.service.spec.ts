@@ -235,4 +235,27 @@ describe('CatalogService', () => {
       expect(productRepository.searchFts).not.toHaveBeenCalled();
     });
   });
+
+  // ============================================================================
+  // PR-SEARCH-NLU: SearchFilters passthrough (AC-07)
+  // ============================================================================
+  describe('AC-07: searchProducts acepta filters y los pasa a searchFts', () => {
+    it('AC-07: pasa filters a productRepository.searchFts cuando se proveen', async () => {
+      productRepository.searchFts.mockResolvedValue([mockProduct]);
+      const filters = { priceMin: 85000, size: '32' };
+
+      const result = await service.searchProducts('merch_123', 'jeans', 5, filters);
+
+      expect(result).toEqual([mockProduct]);
+      expect(productRepository.searchFts).toHaveBeenCalledWith('merch_123', 'jeans', 5, filters);
+    });
+
+    it('AC-07: sin filters → llama searchFts con 3 args (backward compat — AC-10)', async () => {
+      productRepository.searchFts.mockResolvedValue([mockProduct]);
+
+      await service.searchProducts('merch_123', 'jeans', 5);
+
+      expect(productRepository.searchFts).toHaveBeenCalledWith('merch_123', 'jeans', 5);
+    });
+  });
 });

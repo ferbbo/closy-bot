@@ -154,4 +154,29 @@ describe('FeatureFlagsService', () => {
       expect(service.featuresMode).toBe('mvp');
     });
   });
+
+  // ──────────────────────────────────────────────────────────
+  // AC-05: isSearchNluEnabled — NLU feature flag (PR-SEARCH-NLU)
+  // ──────────────────────────────────────────────────────────
+  describe('AC-05: isSearchNluEnabled (PR-SEARCH-NLU)', () => {
+    it('retorna false cuando FEATURES_MODE=mvp (kill-switch)', () => {
+      const service = buildService({ FEATURES_MODE: 'mvp', FEATURE_SEARCH_NLU: true });
+      expect(service.isSearchNluEnabled).toBe(false);
+    });
+
+    it('retorna true cuando FEATURES_MODE=dev y FEATURE_SEARCH_NLU=true', () => {
+      const service = buildService({ FEATURES_MODE: 'dev', FEATURE_SEARCH_NLU: true });
+      expect(service.isSearchNluEnabled).toBe(true);
+    });
+
+    it('retorna false cuando FEATURES_MODE=dev y FEATURE_SEARCH_NLU ausente (default false)', () => {
+      const service = buildService({ FEATURES_MODE: 'dev' });
+      expect(service.isSearchNluEnabled).toBe(false);
+    });
+
+    it('retorna false cuando FEATURES_MODE=dev y FEATURE_SEARCH_NLU=false', () => {
+      const service = buildService({ FEATURES_MODE: 'dev', FEATURE_SEARCH_NLU: false });
+      expect(service.isSearchNluEnabled).toBe(false);
+    });
+  });
 });
