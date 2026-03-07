@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Product, ProductVariant, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SearchFilters } from '../../orchestrator/nlu/types'; // PR-SEARCH-NLU
 
 /**
  * Extended Product type with variants included
@@ -121,12 +122,19 @@ export class ProductRepository {
    * Full-Text Search using PostgreSQL tsvector + tsquery (PR-03.5.2)
    * Uses 'simple' config for Spanglish support (no stemming)
    * Strategy: 1) Try original query, 2) Try normalized (plural removal), 3) Trigram fallback, 4) ILIKE fallback
+   * PR-SEARCH-NLU: Accepts optional SearchFilters for variant-level filtering (AC-07, AC-08)
    * @param merchantId - Filter by merchant
    * @param query - Natural language search query
    * @param limit - Maximum results (default 20)
+   * @param filters - Optional structured filters from NLU parser (B2)
    * @returns Products ordered by relevance (ts_rank)
    */
-  async searchFts(merchantId: string, query: string, limit = 20): Promise<ProductWithVariants[]> {
+  async searchFts(
+    merchantId: string,
+    query: string,
+    limit = 20,
+    filters?: SearchFilters,
+  ): Promise<ProductWithVariants[]> {
     // Sanitize input - plainto_tsquery handles special chars automatically
     if (!query || query.trim().length === 0) {
       return [];
@@ -168,7 +176,7 @@ export class ProductRepository {
       }
 
       // Load variants for each product (FTS/trigram only returns Product rows)
-      return this.loadVariantsForProducts(products, merchantId);
+      return this.loadVariantsForProducts(products, merchantId, filters);
     } catch (error) {
       this.logger.error(`FTS query failed: ${(error as Error).message}`, (error as Error).stack);
       // Fallback to ILIKE on error
@@ -236,15 +244,46 @@ export class ProductRepository {
   // Spanish stopwords that should not be used for trigram matching
   private readonly TRIGRAM_STOPWORDS = new Set([
     // Prepositions
-    'desde', 'hasta', 'para', 'con', 'sin', 'por', 'entre', 'sobre', 'bajo',
+    'desde',
+    'hasta',
+    'para',
+    'con',
+    'sin',
+    'por',
+    'entre',
+    'sobre',
+    'bajo',
     // Articles
-    'los', 'las', 'del', 'una', 'uno', 'unos', 'unas',
+    'los',
+    'las',
+    'del',
+    'una',
+    'uno',
+    'unos',
+    'unas',
     // Common verbs/intent words (already handled by sanitization)
-    'busco', 'quiero', 'necesito', 'tienes', 'tienen', 'tendras', 'hay',
+    'busco',
+    'quiero',
+    'necesito',
+    'tienes',
+    'tienen',
+    'tendras',
+    'hay',
     // Courtesy
-    'favor', 'gracias', 'porfa', 'porfavor', 'please', 'plis',
+    'favor',
+    'gracias',
+    'porfa',
+    'porfavor',
+    'please',
+    'plis',
     // Filler
-    'muy', 'mas', 'más', 'algo', 'como', 'que', 'cual',
+    'muy',
+    'mas',
+    'más',
+    'algo',
+    'como',
+    'que',
+    'cual',
   ]);
 
   /**
@@ -302,9 +341,7 @@ export class ProductRepository {
     }
 
     // Sort by best similarity and return top N
-    const sorted = Array.from(allResults.values()).sort(
-      (a, b) => b.similarity - a.similarity,
-    );
+    const sorted = Array.from(allResults.values()).sort((a, b) => b.similarity - a.similarity);
 
     this.logger.debug(
       `Trigram search for "${query}" found ${sorted.length} products (words: ${words.join(', ')})`,
@@ -314,31 +351,57 @@ export class ProductRepository {
   }
 
   /**
-   * Load variants for products from FTS results
+   * Load variants for products from FTS results.
+   * PR-SEARCH-NLU: Applies optional price/size/color filters on variant level (AC-08).
+   * Numeric filter values are wrapped with Number() per AGENTS.md guardrail (AC-12).
    */
   private async loadVariantsForProducts(
     products: Product[],
     merchantId: string,
+    filters?: SearchFilters,
   ): Promise<ProductWithVariants[]> {
     const productIds = products.map((p) => p.id);
+
+    // Build variant WHERE conditions (AC-08: only added when filter is defined)
+    const variantWhere: Prisma.ProductVariantWhereInput = {
+      isActive: true,
+      stock: { gt: 0 },
+    };
+
+    // AC-08 + AC-12: Price filters — Number() wrapping enforced
+    if (filters?.priceMin !== undefined) {
+      variantWhere.price = {
+        ...(variantWhere.price as Prisma.DecimalFilter<'ProductVariant'> | undefined),
+        gte: Number(filters.priceMin),
+      };
+    }
+    if (filters?.priceMax !== undefined) {
+      variantWhere.price = {
+        ...(variantWhere.price as Prisma.DecimalFilter<'ProductVariant'> | undefined),
+        lte: Number(filters.priceMax),
+      };
+    }
+
+    // AC-08: Size and color applied on variant.name ILIKE
+    if (filters?.size !== undefined) {
+      variantWhere.name = { contains: filters.size, mode: 'insensitive' };
+    }
+    if (filters?.color !== undefined && filters?.size === undefined) {
+      // If size is also set, name ILIKE would conflict — prefer size over color for name filter
+      variantWhere.name = { contains: filters.color, mode: 'insensitive' };
+    }
     const productsWithVariants = await this.prisma.product.findMany({
       where: {
         id: { in: productIds },
         merchantId, // Defense in depth: ensure multi-tenancy
         isActive: true,
         variants: {
-          some: {
-            isActive: true,
-            stock: { gt: 0 },
-          },
+          some: variantWhere,
         },
       },
       include: {
         variants: {
-          where: {
-            isActive: true,
-            stock: { gt: 0 },
-          },
+          where: variantWhere,
         },
       },
     });

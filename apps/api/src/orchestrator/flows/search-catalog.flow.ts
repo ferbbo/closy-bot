@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { CatalogService } from '../../services/catalog.service';
 import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.service';
 import { ProductWithVariants } from '../../persistence/repositories/product.repository';
+import { QueryParserService } from '../nlu/query-parser.service';
+import { FeatureFlagsService } from '../../common/feature-flags/feature-flags.service';
 
 /**
  * SearchCatalogFlow
@@ -48,6 +50,8 @@ export class SearchCatalogFlow {
   constructor(
     private readonly catalogService: CatalogService,
     private readonly playbookService: PlaybookService,
+    private readonly queryParser: QueryParserService, // PR-SEARCH-NLU
+    private readonly featureFlags: FeatureFlagsService, // PR-SEARCH-NLU
   ) {}
 
   /**
@@ -108,7 +112,35 @@ export class SearchCatalogFlow {
     this.logger.log(
       `Searching catalog for merchant ${merchantId} (raw: "${query}" → sanitized: "${sanitizedQuery}" → subQueries: ${subQueries.length})`,
     );
+    // AC-06: Apply NLU entity extraction if feature flag is active (B2 only)
+    if (this.featureFlags.isSearchNluEnabled && subQueries.length === 1) {
+      const parsed = this.queryParser.parse(sanitizedQuery);
+      this.logger.debug(
+        `NLU parsed: cleanText="${parsed.cleanText}" filters=${JSON.stringify(parsed.filters)}`,
+      );
 
+      if (!parsed.cleanText) {
+        // Query became empty after filter extraction (“desde 85000 talla 32”)
+        return this.playbookService.getMessage(merchant, 'searchNoResults', {
+          query: sanitizedQuery,
+        });
+      }
+
+      const products = await this.catalogService.searchProducts(
+        merchantId,
+        parsed.cleanText,
+        5,
+        parsed.filters,
+      );
+
+      if (products.length === 0) {
+        return this.playbookService.getMessage(merchant, 'searchNoResults', {
+          query: sanitizedQuery,
+        });
+      }
+
+      return this.formatResults(merchant, sanitizedQuery, products);
+    }
     // If multiple sub-queries, search each and combine results
     if (subQueries.length > 1) {
       return this.handleMultiSearch(merchant, merchantId, subQueries);
@@ -118,7 +150,9 @@ export class SearchCatalogFlow {
     const products = await this.catalogService.searchProducts(merchantId, sanitizedQuery, 5);
 
     if (products.length === 0) {
-      return this.playbookService.getMessage(merchant, 'searchNoResults', { query: sanitizedQuery });
+      return this.playbookService.getMessage(merchant, 'searchNoResults', {
+        query: sanitizedQuery,
+      });
     }
 
     return this.formatResults(merchant, sanitizedQuery, products);
