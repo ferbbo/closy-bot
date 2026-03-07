@@ -1177,6 +1177,47 @@ graph TD
 - **Incluye:** Custom `ThrottlerGuard` por merchant ID, .envtests.
 - **Prioridad:** BAJA — solo relevante si múltiples merchants comparten IP.
 
+##### PR-SEARCH-NLU — NLU Entity Extraction para búsqueda estructurada 🔵 PENDIENTE
+- **Scope: B2** — feature flag: `FEATURE_SEARCH_NLU` (`FeatureFlagsService.isSearchNluEnabled()`)
+- **Objetivo:** Agregar una capa de extracción de entidades (NLU) al pipeline de búsqueda de catálogo para parsear filtros estructurados (precio, talla, color) del mensaje del usuario antes de ejecutar FTS/Trigram, eliminando ruido y habilitando filtros SQL precisos sobre variantes.
+- **Depende de:** PR-03.5.2 ✅ (FTS), commit trigram/sanitization (en `dev`, pendiente de merge).
+- **Scope incluido:**
+  - Nuevo `QueryParserService` (`apps/api/src/orchestrator/nlu/query-parser.service.ts`)
+  - Extracción de precio via Regex: `"desde 85000"` → `{ priceMin: 85000 }`, `"hasta 100k"` → `{ priceMax: 100000 }`, rangos `"80000-120000"`
+  - Extracción de talla via Regex + lista fija: `XS, S, M, L, XL, XXL, 28..44` → `{ size: 'M' }`
+  - Extracción de color via Levenshtein ≤ 2 contra `COLOR_DICT` (~30 colores): `"blancas"` → `{ color: 'blanco' }`
+  - Interfaz `ParsedQuery { cleanText: string; filters: { priceMin?, priceMax?, size?, color? } }`
+  - Modificación de `SearchCatalogFlow.handle()` para usar `cleanText` + `filters` (gated por feature flag)
+  - Modificación de `CatalogService.searchProducts()`: parámetro `filters?` opcional
+  - Modificación de `ProductRepository.searchFts()`: `WHERE v.price BETWEEN` + `WHERE v.name ILIKE` condicionales (NULL-check)
+  - Registro de `QueryParserService` en `OrchestratorModule`
+  - Tests unitarios `query-parser.service.spec.ts` (precio, talla, color, combinados, sin filtros)
+  - Test regresión: query sin filtros (`"jeans"`) → pipeline actual sin cambios
+  - Test con `FEATURES_MODE=mvp` → `isSearchNluEnabled()` retorna `false`, tests pasan
+- **Scope excluido:** Vector embeddings/pgvector, modelos ML/spaCy, sinonimia semántica, filtro por categoría, UI de filtros en dashboard.
+- **Dependencias externas:** Ninguna — puro TypeScript, sin nuevos paquetes npm.
+- **Tech notes:**
+  - Levenshtein de 15 líneas inline (no instalar `fastest-levenshtein` ni similar)
+  - `COLOR_DICT` y `SIZE_LIST` como constantes `readonly` en el servicio
+  - Filtros SQL via `$queryRaw` con `NULL`-check: `AND ($3::numeric IS NULL OR v.price >= $3)`
+  - Valores numéricos de ConfigService wrapeados con `Number()` (guardrail repo AGENTS.md)
+  - `ParsedQuery` exportado como interfaz pública para uso en flows
+- **Consumer Experience:**
+  - `"busco jeans desde 85000 talla 32"` → FTS con `"jeans"` + `WHERE v.price >= 85000 AND v.name ILIKE '%32%'`
+  - `"camisas blancas"` → FTS con `"camisas"` + `WHERE v.name ILIKE '%blanco%'`
+  - `"vestido rojo hasta 150k"` → FTS con `"vestido"` + `WHERE v.price <= 150000 AND v.name ILIKE '%rojo%'`
+  - Sin flag activo: flujo actual (sanitizeQuery → FTS/Trigram sin filtros)
+- **DoD específico:**
+  - `queryParser.parse("jeans desde 85000 talla 32")` → `{ cleanText: "jeans", filters: { priceMin: 85000, size: "32" } }`
+  - `queryParser.parse("camisas blancas")` → `{ cleanText: "camisas", filters: { color: "blanco" } }`
+  - `queryParser.parse("jeans")` → `{ cleanText: "jeans", filters: {} }` (sin regresión)
+  - Test e2e: búsqueda `"jeans desde 85000"` devuelve solo variantes con `price >= 85000`
+  - `FEATURES_MODE=mvp` → flag desactivado, todos los tests pasan
+  - `npx tsc --noEmit` = 0 errores
+  - cURL example en `BACKEND-EXECUTION-GUIDE.md`
+  - `pnpm lint`, `pnpm test` pasan
+- **Brief:** `docs/plan/pr-briefs/PR-SEARCH-NLU-entity-extraction.md` (pendiente)
+
 ---
 
 ### BLOQUE 7 — Template Formalization (P2)
@@ -1225,7 +1266,7 @@ graph TD
 | 3. Dashboard Base | P1 | PR-FE-00, PR-15, PR-16, PR-17, PR-FE-01 | Infra mergeada ✅ | Bloques 1-2 |
 | 4. Onboarding | P1 | PR-OB-01, PR-FE-OB, **PR-FE-OB-2**, **PR-GAP-3** | PR-04.5 + PR-FE-01 | — |
 | 5. Dashboard UIs | P1 | PR-FE-03, PR-FE-04, PR-FE-05, **PR-FE-06**, PR-FE-02 | PR-FE-01 + APIs backend | — |
-| 6. Mejoras | P2 | PR-09, PR-10, PR-14.1 | Bloques 1-2 | — |
+| 6. Mejoras | P2 | PR-09, PR-10, PR-14.1, **PR-SEARCH-NLU** | Bloques 1-2 | — |
 | 7. Template Formalization | P2 | PR-20, PR-21, PR-22, PR-24, PR-25 | Bloques 1-2 | Bloque 6 |
 
 > **Principio de diseño:** Template-first + LLM fallback desde el primer lanzamiento. Con todos los flags LLM apagados, el bot funciona al 100% ($0 costo LLM). El LLM es un acelerador opcional, no una dependencia.
