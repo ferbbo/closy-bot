@@ -71,6 +71,9 @@ export class ConversationOrchestrator {
    */
   private readonly unknownLoopCounters = new Map<string, number>();
 
+  /** PR-08: Feature flag — set HANDOFF_AUTO_ESCALATION_ENABLED=false to disable in dev/staging */
+  private readonly autoEscalationEnabled: boolean;
+
   constructor(
     private readonly configService: ConfigService,
     private readonly merchantResolver: MerchantResolverService,
@@ -98,6 +101,8 @@ export class ConversationOrchestrator {
     private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
   ) {
     // PR-03.5.1, REQ-08, AC-08: Removed `this.llmEnabled` binary toggle
+    this.autoEscalationEnabled =
+      this.configService.get<boolean>('HANDOFF_AUTO_ESCALATION_ENABLED') ?? true;
   }
 
   /**
@@ -363,7 +368,8 @@ export class ConversationOrchestrator {
     // PR-08: Trigger auto-escalation if unknownLoopCount >= 3
     if (
       unknownLoopCount >= 3 &&
-      !conversation.handoffActive // Don't escalate if already in handoff
+      !conversation.handoffActive && // Don't escalate if already in handoff
+      this.autoEscalationEnabled // HANDOFF_AUTO_ESCALATION_ENABLED flag
     ) {
       this.logger.log(
         `PR-08: Auto-escalation triggered (${unknownLoopCount} consecutive UNKNOWN) for conversation ${conversation.id}`,
@@ -611,8 +617,25 @@ export class ConversationOrchestrator {
         }
         return this.getGenericFallbackMessage();
 
-      case 'AMBIGUOUS':
+      case 'AMBIGUOUS': {
+        // Commerce bot heuristic: bare product names (e.g. "Vestido floral") have no
+        // intent keywords → score 0 → AMBIGUOUS. Attempt a catalog search before
+        // returning a generic fallback. If nothing is found, show the fallback.
+        const ambiguousWords = originalText.trim().split(/\s+/).filter((w) => w.length >= 2);
+        if (ambiguousWords.length >= 2) {
+          const ambiguousResults = await this.searchCatalogFlow.handle(
+            merchantPlaybook,
+            merchantId,
+            originalText,
+          );
+          // searchCatalogFlow returns the "no results" playbook message when empty,
+          // so only return it when it's not the generic error text.
+          if (ambiguousResults) {
+            return ambiguousResults;
+          }
+        }
         return this.getGenericFallbackMessage();
+      }
 
       case 'UNKNOWN':
       default:

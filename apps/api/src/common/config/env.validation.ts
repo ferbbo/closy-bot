@@ -69,4 +69,6 @@ export const envValidationSchema = Joi.object({
   INDUSTRIES_ENABLED: Joi.boolean().default(false),
   // PR-SEARCH-NLU: NLU entity extraction for structured catalog search (B2 only)
   FEATURE_SEARCH_NLU: Joi.boolean().optional().default(false),
+  // PR-08: Gate auto-escalation handoff (set false to disable in dev/staging)
+  HANDOFF_AUTO_ESCALATION_ENABLED: Joi.boolean().default(true),
 });

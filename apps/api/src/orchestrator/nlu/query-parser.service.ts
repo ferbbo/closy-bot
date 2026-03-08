@@ -144,26 +144,56 @@ export class QueryParserService {
   }
 
   /**
-   * Find closest color in COLOR_DICT using Levenshtein distance.
-   * Returns null if minimum distance > MAX_COLOR_DISTANCE.
-   * Short words (< 5 chars) require exact match to avoid false positives
-   * (e.g., "ropa" ≠ "rosa").
+   * Find closest color in COLOR_DICT using a 3-stage approach:
+   * 1. Exact match ("azul" → "azul")
+   * 2. Spanish plural stripping + exact match ("azules"→"azul", "blancos"→"blanco")
+   * 3. Levenshtein ≤ MAX_COLOR_DISTANCE with similarity ratio ≥ 0.75
+   *    (catches 1-char typos/gender: "blancas"→"blanco", "negor"→"negro")
+   *    Rejects false positives like "floral"→"coral" (dist=2, ratio=0.67 < 0.75)
+   *
+   * Short words (< 5 chars): exact match only to prevent "ropa"→"rosa".
    */
   private findClosestColor(word: string): string | null {
+    // Stage 1: exact match
+    if ((COLOR_DICT as readonly string[]).includes(word)) return word;
+
+    // Short words: exact match only
+    if (word.length < 5) return null;
+
+    // Stage 2: strip Spanish plural suffix and try exact match
+    const stripped = this.stripSpanishPlural(word);
+    if (stripped !== word && (COLOR_DICT as readonly string[]).includes(stripped)) return stripped;
+
+    // Stage 3: Levenshtein on the stripped form with strict ratio guard
+    const base = stripped !== word ? stripped : word;
     let bestColor: string | null = null;
     let bestDist = Infinity;
 
     for (const color of COLOR_DICT) {
-      const dist = this.levenshtein(word, color);
+      const dist = this.levenshtein(base, color);
       if (dist < bestDist) {
         bestDist = dist;
         bestColor = color;
       }
     }
 
-    // Short words require exact match to prevent spurious hits ("ropa" ≠ "rosa")
-    const maxAllowed = word.length >= 5 ? this.MAX_COLOR_DISTANCE : 0;
-    return bestDist <= maxAllowed ? bestColor : null;
+    if (bestColor === null) return null;
+
+    const MIN_RATIO = 0.75;
+    const ratio = 1 - bestDist / Math.max(base.length, bestColor.length);
+    return bestDist <= this.MAX_COLOR_DISTANCE && ratio >= MIN_RATIO ? bestColor : null;
+  }
+
+  /**
+   * Strip common Spanish plural suffixes to normalize before color matching.
+   * "azules"→"azul", "blancos"→"blanco", "rosas"→"rosa", "blancas"→"blanca"
+   */
+  private stripSpanishPlural(word: string): string {
+    if (word.endsWith('es') && word.length > 4) return word.slice(0, -2); // azules→azul
+    if (word.endsWith('os') && word.length > 3) return word.slice(0, -1); // blancos→blanco (s→o kept)
+    if (word.endsWith('as') && word.length > 3) return word.slice(0, -1); // rosas→rosa
+    if (word.endsWith('s') && word.length > 3) return word.slice(0, -1);  // otros→otro
+    return word;
   }
 
   /**
