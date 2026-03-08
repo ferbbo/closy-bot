@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { HealthModule } from './health/health.module';
 import { envValidationSchema } from './config/env.validation';
 import { MemoryConfigService } from './config/memory-config.service';
+import { FeatureFlagsService } from './feature-flags/feature-flags.service';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { MemoryConfigService } from './config/memory-config.service';
     }),
     HealthModule,
   ],
-  providers: [MemoryConfigService],
-  exports: [ConfigModule, MemoryConfigService],
+  providers: [MemoryConfigService, FeatureFlagsService],
+  exports: [ConfigModule, MemoryConfigService, FeatureFlagsService],
 })
 export class CommonModule {}
