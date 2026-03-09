@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Query, Param, Res, Req, UseGuards, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { SessionAuthGuard } from './guards/session-auth.guard';
@@ -13,11 +14,17 @@ import { AuthenticatedRequest } from './interfaces/authenticated-request.interfa
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
   private readonly cookieDomain?: string;
-  private readonly isProduction: boolean;
+  private readonly useSecureCookies: boolean;
 
-  constructor(private readonly authService: AuthService) {
-    this.cookieDomain = process.env.AUTH_COOKIE_DOMAIN;
-    this.isProduction = process.env.NODE_ENV === 'production';
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {
+    this.cookieDomain = this.configService.get<string>('AUTH_COOKIE_DOMAIN');
+    const redirectUrl = this.configService.get<string>('AUTH_REDIRECT_URL', '');
+    const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
+    // Use secure cookies if production OR if using HTTPS (e.g., ngrok in dev)
+    this.useSecureCookies = isProduction || redirectUrl.startsWith('https');
   }
 
   /**
@@ -30,13 +37,16 @@ export class AuthController {
 
     const { redirectUrl, state } = this.authService.startLogin(provider);
 
+    this.logger.debug(`Setting oidc_state cookie, secure=${this.useSecureCookies}`);
+
     // Set state cookie for CSRF protection (5 min TTL)
+    // SameSite=None required for OAuth redirect flow from third-party providers
     res.cookie('oidc_state', state, {
       httpOnly: true,
-      secure: this.isProduction,
-      sameSite: 'lax',
+      secure: this.useSecureCookies,
+      sameSite: this.useSecureCookies ? 'none' : 'lax',
       maxAge: 5 * 60 * 1000, // 5 minutes
-      // domain: this.cookieDomain,
+      path: '/',
     });
 
     // Redirect to provider
@@ -89,7 +99,7 @@ export class AuthController {
       // Set session cookie (24h by default)
       res.cookie('session_id', sessionId, {
         httpOnly: true,
-        secure: this.isProduction,
+        secure: this.useSecureCookies,
         sameSite: 'lax',
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
         // domain: this.cookieDomain,

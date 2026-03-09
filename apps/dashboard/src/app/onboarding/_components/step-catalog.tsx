@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { useRef, useState, type ChangeEvent, type DragEvent, useEffect } from 'react';
 import { Upload, FileText, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -9,6 +9,7 @@ import type { OnboardingStepKey, ImportStats } from '@/lib/api';
 
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+const TIMEOUT_ERRORS_SEG=3000
 
 interface StepCatalogProps {
   completedSteps: OnboardingStepKey[];
@@ -30,16 +31,69 @@ export function StepCatalog({ completedSteps, onNext, onBack }: StepCatalogProps
   const [importStats, setImportStats] = useState<ImportStats | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const validateAndSetFile = (file: File) => {
+
+useEffect(()=>{
+  if (validationError) {
+    setTimeout(()=>{
+    setValidationError('')   
+    }, TIMEOUT_ERRORS_SEG)
+  }
+},[validationError])
+
+  const validateAndSetFile = async (file: File): Promise<void> => {
     setValidationError(null);
-    if (!file.name.endsWith('.csv')) {
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
       setValidationError('Solo se permiten archivos .csv');
       return;
     }
+    
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      setValidationError(`El archivo supera el límite de ${MAX_FILE_SIZE_MB}MB`);
+      setValidationError(`El archivo supera el límite de ${MAX_FILE_SIZE_MB}MB (${(file.size / 1024 / 1024).toFixed(2)} MB recibidos)`);
       return;
     }
+
+    // Content sniffing: leer los primeros 512 bytes para detectar archivos binarios
+    // disfrazados con extensión .csv
+    try {
+      const buffer = await file.slice(0, 512).arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+
+      // Bytes nulos → archivo binario
+      if (bytes.some((b) => b === 0x00)) {
+        setValidationError('El archivo no es un CSV válido (contiene datos binarios).');
+        return;
+      }
+
+      // Magic bytes de formatos binarios conocidos
+      const isBinarySignature =
+        (bytes[0] === 0x4d && bytes[1] === 0x5a) ||                                          // EXE/DLL (MZ)
+        (bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04) || // ZIP / DOCX / XLSX
+        (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) || // PDF (%PDF)
+        (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) || // PNG
+        (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) ||                      // JPEG
+        (bytes[0] === 0x7f && bytes[1] === 0x45 && bytes[2] === 0x4c && bytes[3] === 0x46) || // ELF
+        (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) ||                      // GIF
+        (bytes[0] === 0x42 && bytes[1] === 0x4d);                                             // BMP
+
+      if (isBinarySignature) {
+        setValidationError('El archivo no es un CSV válido (formato binario detectado).');
+        return;
+      }
+
+      // JSON detection — texto plano, sin magic bytes binarios.
+      // El primer carácter no-whitespace de un JSON siempre es { o [.
+      // Un header CSV válido nunca puede comenzar con esos caracteres.
+      const firstSignificant = bytes.find((b) => b !== 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0d);
+      if (firstSignificant === 0x7b || firstSignificant === 0x5b) {
+        setValidationError('El archivo no es un CSV válido (formato JSON detectado).');
+        return;
+      }
+    } catch {
+      setValidationError('No se pudo verificar el contenido del archivo. Intenta de nuevo.');
+      return;
+    }
+
     setSelectedFile(file);
     setImportStats(null);
   };
@@ -48,12 +102,12 @@ export function StepCatalog({ completedSteps, onNext, onBack }: StepCatalogProps
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files[0];
-    if (file) validateAndSetFile(file);
+    if (file) void validateAndSetFile(file);
   };
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) validateAndSetFile(file);
+    if (file) void validateAndSetFile(file);
   };
 
   const handleUpload = async () => {

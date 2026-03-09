@@ -9,15 +9,31 @@ const nextConfig = {
     return [
       {
         source: '/auth/:path*',
-        destination: 'http://localhost:4000/auth/:path*',
+        destination: 'http://localhost:4001/auth/:path*',
       },
       {
         source: '/onboarding/:path*',
-        destination: 'http://localhost:4000/onboarding/:path*',
+        destination: 'http://localhost:4001/onboarding/:path*',
+      },
+      {
+        source: '/api/catalog/:path*',
+        destination: 'http://localhost:4001/api/catalog/:path*',
+      },
+      {
+        source: '/api/products/:path*',
+        destination: 'http://localhost:4001/api/products/:path*',
+      },
+      {
+        source: '/api/products',
+        destination: 'http://localhost:4001/api/products',
       },
       {
         source: '/webhooks/:path*',
-        destination: 'http://localhost:4000/webhooks/:path*',
+        destination: 'http://localhost:4001/webhooks/:path*',
+      },
+      {
+        source: '/merchants/:path*',
+        destination: 'http://localhost:4001/merchants/:path*',
       },
     ];
   },
