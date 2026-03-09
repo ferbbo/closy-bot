@@ -21,7 +21,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { Merchant } from '@prisma/client';
-import { ApiKeyAuthGuard } from '../common/guards/api-key-auth.guard';
+import { MerchantAuthGuard } from '../common/guards/merchant-auth.guard';
 import { CurrentMerchant } from '../common/decorators/merchant.decorator';
 import { ImportService } from '../services/import.service';
 import { CatalogService } from '../services/catalog.service';
@@ -40,10 +40,10 @@ import {
 
 /**
  * CatalogManagementController handles merchant catalog operations
- * All endpoints require API key authentication and enforce multi-tenancy
+ * Accepts both session cookie (dashboard) and API key (external integrations)
  */
 @Controller('api')
-@UseGuards(ApiKeyAuthGuard)
+@UseGuards(MerchantAuthGuard)
 export class CatalogManagementController {
   private readonly logger = new Logger(CatalogManagementController.name);
 
@@ -92,8 +92,14 @@ export class CatalogManagementController {
       throw new BadRequestException('File is empty');
     }
 
+    // Content sniffing: detect binary files disguised as CSV
+    this.validateCsvBuffer(file.buffer);
+
     // Convert buffer to UTF-8 string
     const csvContent = file.buffer.toString('utf-8');
+
+    // Sanitize against CSV formula injection and XSS
+    this.validateCsvContent(csvContent);
 
     // Reuse existing import service
     const result = await this.importService.importFromCSV(merchant.id, csvContent);
@@ -291,5 +297,73 @@ export class CatalogManagementController {
 
     this.logger.log(`Product soft deleted: ${id}`);
     return { success: true, id };
+  }
+
+  // ─── Private helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Content sniffing: inspect the first 512 bytes of the buffer to detect
+   * binary files (executables, archives, images…) disguised with a .csv name.
+   *
+   * Checks:
+   *  1. Null bytes → any binary format
+   *  2. Known magic-byte signatures for common binary formats
+   *  3. JSON structure (text-based, no magic bytes — detected via first non-whitespace char)
+   */
+  private validateCsvBuffer(buffer: Buffer): void {
+    const sample = buffer.slice(0, 512);
+
+    // 1. Null bytes → binary content
+    if (sample.includes(0x00)) {
+      throw new BadRequestException('File does not appear to be a valid CSV (binary content detected).');
+    }
+
+    // 2. Magic-byte signatures
+    const isExeOrDll  = sample[0] === 0x4d && sample[1] === 0x5a;                                                         // MZ  → EXE/DLL
+    const isZip       = sample[0] === 0x50 && sample[1] === 0x4b && sample[2] === 0x03 && sample[3] === 0x04;              // PK  → ZIP/DOCX/XLSX
+    const isPdf       = sample[0] === 0x25 && sample[1] === 0x50 && sample[2] === 0x44 && sample[3] === 0x46;              // %PDF
+    const isPng       = sample[0] === 0x89 && sample[1] === 0x50 && sample[2] === 0x4e && sample[3] === 0x47;              // PNG
+    const isJpeg      = sample[0] === 0xff && sample[1] === 0xd8 && sample[2] === 0xff;                                    // JPEG
+    const isElf       = sample[0] === 0x7f && sample[1] === 0x45 && sample[2] === 0x4c && sample[3] === 0x46;              // ELF
+    const isGif       = sample[0] === 0x47 && sample[1] === 0x49 && sample[2] === 0x46;                                    // GIF
+    const isBmp       = sample[0] === 0x42 && sample[1] === 0x4d;                                                          // BMP
+
+    if (isExeOrDll || isZip || isPdf || isPng || isJpeg || isElf || isGif || isBmp) {
+      throw new BadRequestException('File does not appear to be a valid CSV (binary format detected).');
+    }
+
+    // 3. JSON detection — text-based, no magic bytes.
+    // Find first non-whitespace byte and check for { (0x7B) or [ (0x5B).
+    // A valid CSV header can never start with these characters.
+    const firstSignificant = sample.find((b) => b !== 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0d);
+    if (firstSignificant === 0x7b || firstSignificant === 0x5b) {
+      throw new BadRequestException('File does not appear to be a valid CSV (JSON format detected).');
+    }
+  }
+
+  /**
+   * Sanitize CSV text content against:
+   *
+   * 1. **CSV / Formula injection** — cells that start with =, +, -, @, \t, \r
+   *    can trigger formula execution when the file is opened in a spreadsheet.
+   *    We reject the upload if any cell value begins with these characters.
+   *
+   * 2. **XSS patterns** — HTML/script tags embedded in CSV values that could
+   *    be reflected back in a browser-rendered report.
+   */
+  private validateCsvContent(csvContent: string): void {
+    const formulaInjectionPattern = /(?:^|,)([ \t]*)([=+\-@\t\r])/m;
+    if (formulaInjectionPattern.test(csvContent)) {
+      throw new BadRequestException(
+        'CSV contains potentially dangerous content (formula injection attempt detected).',
+      );
+    }
+
+    const xssPattern = /<\s*(script|img|svg|iframe|object|embed|link|style|base|form|input|button|a)[^>]*>/i;
+    if (xssPattern.test(csvContent)) {
+      throw new BadRequestException(
+        'CSV contains potentially dangerous content (HTML/script tags detected).',
+      );
+    }
   }
 }

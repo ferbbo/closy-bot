@@ -73,6 +73,7 @@ export class ImportService {
     };
 
     try {
+      
       const rows = this.parseCSV(csvContent);
       this.logger.log(`Parsed ${rows.length} rows from CSV`);
 
@@ -106,8 +107,39 @@ export class ImportService {
   }
 
   /**
-   * Parse CSV content into rows
-   * Simple parser - assumes comma-separated, no quotes handling for MVP
+   * Normalize a CSV column header to its canonical English key.
+   * Accepts Spanish aliases so merchants can upload files in Spanish.
+   *
+   * Canonical → accepted aliases
+   *   name        → nombre
+   *   description → descripcion, descripción
+   *   category    → categoria, categoría
+   *   price       → precio
+   *   stock       → stock (unchanged)
+   *   sku         → sku   (unchanged)
+   */
+  private normalizeHeader(raw: string): string {
+    const normalized = raw
+      .toLowerCase()
+      .normalize('NFD')                // decompose accents (á → a + ́)
+      .replace(/[\u0300-\u036f]/g, '') // strip combining marks
+      .trim();
+
+    const ALIASES: Record<string, string> = {
+      nombre:      'name',
+      descripcion: 'description',
+      categoria:   'category',
+      precio:      'price',
+      // stock / sku are identical in both languages — no alias needed
+    };
+
+    return ALIASES[normalized] ?? normalized;
+  }
+
+  /**
+   * Parse CSV content into rows.
+   * Simple parser - assumes comma-separated, no quotes handling for MVP.
+   * Supports both English and Spanish column headers.
    */
   private parseCSV(csvContent: string): ProductCsvRow[] {
     const lines = csvContent.trim().split('\n');
@@ -117,9 +149,8 @@ export class ImportService {
     }
 
     const header = lines[0]
-      .toLowerCase()
       .split(',')
-      .map((h) => h.trim());
+      .map((h) => this.normalizeHeader(h));
     const requiredFields = ['name', 'category', 'price', 'stock'];
 
     // Validate header

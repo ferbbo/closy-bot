@@ -30,40 +30,13 @@ import { useSaveCustomizeConfig, useSaveFaqs } from '@/hooks/use-onboarding';
 import type { OnboardingStepKey } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
-// Retail General defaults
+// Placeholders de políticas (Retail General)
 // ---------------------------------------------------------------------------
 
-const RETAIL_GENERAL_FAQS = [
-  {
-    question: '¿Cuánto demora el envío?',
-    keywords: ['envio', 'demora', 'llega', 'tiempo', 'dias'],
-    answer: 'Los envíos demoran 3-5 días hábiles después de confirmar tu pago 📦',
-  },
-  {
-    question: '¿Hacen envíos a mi ciudad?',
-    keywords: ['envio', 'ciudad', 'departamento', 'llegan', 'envian'],
-    answer: '¡Sí! Hacemos envíos a toda Colombia 🇨🇴',
-  },
-  {
-    question: '¿Puedo cambiar o devolver?',
-    keywords: ['cambio', 'devolucion', 'devolver', 'cambiar', 'garantia'],
-    answer: 'Tienes 8 días para cambios. El producto debe estar sin uso y con etiquetas 🏷️',
-  },
-  {
-    question: '¿Qué métodos de pago aceptan?',
-    keywords: ['pago', 'pagar', 'nequi', 'transferencia', 'efectivo', 'tarjeta'],
-    answer: 'Aceptamos efectivo contra entrega, transferencia/Nequi y links de pago 💳',
-  },
-  {
-    question: '¿Tienen garantía?',
-    keywords: ['garantia', 'defecto', 'danado', 'roto'],
-    answer: 'Todos nuestros productos tienen garantía de 30 días por defectos de fábrica ✅',
-  },
-];
-
-const DEFAULT_SHIPPING_POLICY =
-  'Envíos a toda Colombia. Tiempo: 3-5 días hábiles. Costo según ciudad.';
-const DEFAULT_RETURN_POLICY = 'Aceptamos cambios dentro de 8 días. Producto sin uso y con etiquetas.';
+const PLACEHOLDER_SHIPPING_POLICY =
+  'Ej: Envíos a toda Colombia. Tiempo: 3-5 días hábiles. Costo según ciudad.';
+const PLACEHOLDER_RETURN_POLICY =
+  'Ej: Aceptamos cambios dentro de 8 días. Producto sin uso y con etiquetas.';
 
 // ---------------------------------------------------------------------------
 // Keyword normalization: lowercase + remove tildes
@@ -89,19 +62,61 @@ const faqItemSchema = z.object({
   keywords: z.array(z.string()),
 });
 
+// Bancos Colombia
+const COLOMBIA_BANKS = [
+  { id: 'banco_bogota', name: 'Banco de Bogotá' },
+  { id: 'banco_popular', name: 'Banco Popular' },
+  { id: 'bancolombia', name: 'Bancolombia' },
+  { id: 'bbva', name: 'BBVA Colombia' },
+  { id: 'davivienda', name: 'Davivienda' },
+  { id: 'banco_occidente', name: 'Banco de Occidente' },
+  { id: 'av_villas', name: 'Banco AV Villas' },
+  { id: 'banco_caja_social', name: 'Banco Caja Social' },
+  { id: 'banco_agrario', name: 'Banco Agrario de Colombia' },
+  { id: 'scotiabank_colpatria', name: 'Scotiabank Colpatria' },
+  { id: 'banco_pichincha', name: 'Banco Pichincha' },
+  { id: 'gnb_sudameris', name: 'Banco GNB Sudameris' },
+  { id: 'citibank', name: 'Citibank Colombia' },
+  { id: 'banco_w', name: 'Banco W' },
+  { id: 'banco_finandina', name: 'Banco Finandina' },
+  { id: 'banco_serfinanza', name: 'Banco Serfinanza' },
+  { id: 'banco_coopcentral', name: 'Banco Cooperativo Coopcentral' },
+  { id: 'nu', name: 'Nu Bank' },
+  { id: 'lulo_bank', name: 'Lulo Bank' },
+  { id: 'uala', name: 'Ualá' },
+] as const;
+
+// Indicativos telefónicos comunes LATAM
+const COUNTRY_CODES = [
+  { code: '+57', label: '🇨🇴 +57' },
+  { code: '+58', label: '🇻🇪 +58' },
+  { code: '+51', label: '🇵🇪 +51' },
+  { code: '+52', label: '🇲🇽 +52' },
+  { code: '+54', label: '🇦🇷 +54' },
+  { code: '+56', label: '🇨🇱 +56' },
+  { code: '+593', label: '🇪🇨 +593' },
+  { code: '+1', label: '🇺🇸 +1' },
+] as const;
+
 const customizeSchema = z
   .object({
     // Payment methods
     acceptsCash: z.boolean(),
     acceptsTransfer: z.boolean(),
     acceptsPaymentLink: z.boolean(),
-    bankName: z.string().optional(),
-    bankAccount: z.string().optional(),
-    bankHolder: z.string().optional(),
-    paymentLinkUrl: z
-      .string()
-      .optional()
-      .refine((v) => !v || /^https?:\/\/.+/.test(v), { message: 'URL inválida' }),
+    // Bank transfer sub-type selector
+    transferSubtype: z.enum(['bank', 'nequi']),
+    // Bank fields
+    bankName: z.string(),
+    bankAccount: z.string(),
+    bankAccountType: z.enum(['ahorros', 'corriente']),
+    bankHolder: z.string(),
+    bankHolderDni: z.string(),
+    // Nequi fields
+    nequiCountryCode: z.string(),
+    nequiPhone: z.string(),
+    // Payment link
+    paymentLinkUrl: z.string().optional(),
     // Policies
     shippingPolicy: z.string().max(500, 'Máx 500 caracteres').min(1, 'Requerido'),
     returnPolicy: z.string().max(500, 'Máx 500 caracteres').min(1, 'Requerido'),
@@ -112,7 +127,42 @@ const customizeSchema = z
   .refine((d) => d.acceptsCash || d.acceptsTransfer || d.acceptsPaymentLink, {
     message: 'Debes seleccionar al menos un método de pago.',
     path: ['acceptsCash'],
-  });
+  })
+  // Validaciones banco
+  .refine((d) => !(d.acceptsTransfer && d.transferSubtype === 'bank') || d.bankName.trim().length > 0, {
+    message: 'El banco es requerido.',
+    path: ['bankName'],
+  })
+  .refine((d) => !(d.acceptsTransfer && d.transferSubtype === 'bank') || d.bankAccount.trim().length > 0, {
+    message: 'El número de cuenta es requerido.',
+    path: ['bankAccount'],
+  })
+  .refine((d) => !(d.acceptsTransfer && d.transferSubtype === 'bank') || d.bankHolder.trim().length > 0, {
+    message: 'El titular es requerido.',
+    path: ['bankHolder'],
+  })
+  .refine((d) => !(d.acceptsTransfer && d.transferSubtype === 'bank') || d.bankHolderDni.trim().length > 0, {
+    message: 'La cédula del titular es requerida.',
+    path: ['bankHolderDni'],
+  })
+  // Validaciones Nequi
+  .refine(
+    (d) => !(d.acceptsTransfer && d.transferSubtype === 'nequi') || d.nequiCountryCode.trim().length > 0,
+    { message: 'El indicativo es requerido.', path: ['nequiCountryCode'] },
+  )
+  .refine(
+    (d) => !(d.acceptsTransfer && d.transferSubtype === 'nequi') || /^\d{7,15}$/.test(d.nequiPhone),
+    { message: 'Número inválido (7-15 dígitos sin espacios ni guiones).', path: ['nequiPhone'] },
+  )
+  // Validaciones link de pago
+  .refine(
+    (d) => !d.acceptsPaymentLink || (!!d.paymentLinkUrl && d.paymentLinkUrl.trim().length > 0),
+    { message: 'La URL del link de pago es requerida.', path: ['paymentLinkUrl'] },
+  )
+  .refine(
+    (d) => !d.paymentLinkUrl || /^https?:\/\/.+/.test(d.paymentLinkUrl),
+    { message: 'URL inválida', path: ['paymentLinkUrl'] },
+  );
 
 type CustomizeFormValues = z.infer<typeof customizeSchema>;
 
@@ -142,21 +192,27 @@ export function StepCustomize({ completedSteps, onNext, onBack }: StepCustomizeP
     watch,
     control,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isValid },
   } = useForm<CustomizeFormValues>({
     resolver: zodResolver(customizeSchema),
+    mode: 'onChange',
     defaultValues: {
       acceptsCash: true,
       acceptsTransfer: true,
       acceptsPaymentLink: false,
+      transferSubtype: 'bank',
       bankName: '',
       bankAccount: '',
+      bankAccountType: 'ahorros',
       bankHolder: '',
+      bankHolderDni: '',
+      nequiCountryCode: '+57',
+      nequiPhone: '',
       paymentLinkUrl: '',
-      shippingPolicy: DEFAULT_SHIPPING_POLICY,
-      returnPolicy: DEFAULT_RETURN_POLICY,
+      shippingPolicy: '',
+      returnPolicy: '',
       businessHours: '',
-      faqs: RETAIL_GENERAL_FAQS,
+      faqs: [],
     },
   });
 
@@ -164,6 +220,7 @@ export function StepCustomize({ completedSteps, onNext, onBack }: StepCustomizeP
 
   const showTransfer = watch('acceptsTransfer');
   const showPaymentLink = watch('acceptsPaymentLink');
+  const transferSubtype = watch('transferSubtype');
   const faqCount = faqFields.length;
 
   // ---------------------------------------------------------------------------
@@ -191,20 +248,24 @@ export function StepCustomize({ completedSteps, onNext, onBack }: StepCustomizeP
         paymentMethods.push({ type: 'cod', label: 'Efectivo / Pago contra entrega' });
       }
       if (data.acceptsTransfer) {
-        paymentMethods.push({
-          type: 'transfer',
-          label: 'Transferencia / Nequi',
-          ...(data.bankName || data.bankAccount || data.bankHolder
-            ? {
-                bankInfo: {
-                  bankName: data.bankName ?? '',
-                  accountNumber: data.bankAccount ?? '',
-                  accountType: 'ahorros',
-                  accountHolder: data.bankHolder ?? '',
-                },
-              }
-            : {}),
-        });
+        if (data.transferSubtype === 'bank') {
+          paymentMethods.push({
+            type: 'transfer',
+            label: 'Transferencia bancaria',
+            bankInfo: {
+              bankName: data.bankName ?? '',
+              accountNumber: data.bankAccount ?? '',
+              accountType: data.bankAccountType ?? 'ahorros',
+              accountHolder: data.bankHolder ?? '',
+            },
+          });
+        } else {
+          paymentMethods.push({
+            type: 'transfer',
+            label: 'Nequi',
+            instructions: `${data.nequiCountryCode} ${data.nequiPhone}`,
+          });
+        }
       }
       if (data.acceptsPaymentLink) {
         paymentMethods.push({
@@ -296,53 +357,165 @@ export function StepCustomize({ completedSteps, onNext, onBack }: StepCustomizeP
                     </label>
                   ))}
 
-                  {errors.acceptsCash?.message && (
+                  {errors.acceptsCash?.message &&
+                    !watch('acceptsCash') &&
+                    !watch('acceptsTransfer') &&
+                    !watch('acceptsPaymentLink') && (
                     <p className="text-sm text-red-600">{errors.acceptsCash.message}</p>
                   )}
                 </fieldset>
 
-                {/* Campos bancarios — condicional */}
+                {/* Subtipo transferencia — condicional */}
                 {showTransfer && (
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
-                    <p className="text-sm font-medium text-gray-700">Datos bancarios (opcionales)</p>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1" htmlFor="bankName">
-                          Banco
-                        </label>
-                        <input
-                          {...register('bankName')}
-                          id="bankName"
-                          type="text"
-                          placeholder="Ej: Bancolombia"
-                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-4">
+                    {/* Radio: banco vs Nequi */}
+                    <fieldset className="space-y-2">
+                      <legend className="text-sm font-medium text-gray-700">
+                        Tipo de transferencia <span className="text-red-500">*</span>
+                      </legend>
+                      <div className="flex gap-6">
+                        {(['bank', 'nequi'] as const).map((sub) => (
+                          <label key={sub} className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              {...register('transferSubtype')}
+                              type="radio"
+                              value={sub}
+                              className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-600"
+                            />
+                            <span className="text-sm text-gray-700">
+                              {sub === 'bank' ? '🏦 Datos bancarios' : '📱 Nequi'}
+                            </span>
+                          </label>
+                        ))}
                       </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1" htmlFor="bankAccount">
-                          Número de cuenta
-                        </label>
-                        <input
-                          {...register('bankAccount')}
-                          id="bankAccount"
-                          type="text"
-                          placeholder="Cuenta corriente / ahorros"
-                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
+                    </fieldset>
+
+                    {/* ── Datos bancarios ── */}
+                    {transferSubtype === 'bank' && (
+                      <div className="space-y-3">
+                        {/* Tipo de cuenta */}
+                        <fieldset className="space-y-2">
+                          <legend className="text-xs text-gray-500">Tipo de cuenta</legend>
+                          <div className="flex gap-6">
+                            {(['ahorros', 'corriente'] as const).map((tipo) => (
+                              <label key={tipo} className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  {...register('bankAccountType')}
+                                  type="radio"
+                                  value={tipo}
+                                  className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-600"
+                                />
+                                <span className="text-sm text-gray-700 capitalize">{tipo}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </fieldset>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1" htmlFor="bankName">
+                              Banco <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              {...register('bankName')}
+                              id="bankName"
+                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                            >
+                              <option value="">Selecciona un banco...</option>
+                              {COLOMBIA_BANKS.map(({ id, name }) => (
+                                <option key={id} value={id}>{name}</option>
+                              ))}
+                            </select>
+                            {errors.bankName && (
+                              <p className="text-xs text-red-600 mt-1">{errors.bankName.message}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1" htmlFor="bankAccount">
+                              Número de cuenta <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              {...register('bankAccount')}
+                              id="bankAccount"
+                              type="text"
+                              placeholder="Ej: 123456789"
+                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                            {errors.bankAccount && (
+                              <p className="text-xs text-red-600 mt-1">{errors.bankAccount.message}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1" htmlFor="bankHolder">
+                              Titular <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              {...register('bankHolder')}
+                              id="bankHolder"
+                              type="text"
+                              placeholder="Nombre completo"
+                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                            {errors.bankHolder && (
+                              <p className="text-xs text-red-600 mt-1">{errors.bankHolder.message}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1" htmlFor="bankHolderDni">
+                              Cédula del titular <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              {...register('bankHolderDni')}
+                              id="bankHolderDni"
+                              type="text"
+                              placeholder="Ej: 1234567890"
+                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                            {errors.bankHolderDni && (
+                              <p className="text-xs text-red-600 mt-1">{errors.bankHolderDni.message}</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1" htmlFor="bankHolder">
-                        Titular
-                      </label>
-                      <input
-                        {...register('bankHolder')}
-                        id="bankHolder"
-                        type="text"
-                        placeholder="Nombre del titular"
-                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
-                    </div>
+                    )}
+
+                    {/* ── Nequi ── */}
+                    {transferSubtype === 'nequi' && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-gray-500">
+                          Número de Nequi <span className="text-red-500">*</span>
+                        </p>
+                        <div className="flex gap-2">
+                          <div className="w-32 shrink-0">
+                            <select
+                              {...register('nequiCountryCode')}
+                              className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                            >
+                              {COUNTRY_CODES.map(({ code, label }) => (
+                                <option key={code} value={code}>{label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex-1">
+                            <input
+                              {...register('nequiPhone')}
+                              id="nequiPhone"
+                              type="tel"
+                              placeholder="3001234567"
+                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                        {(errors.nequiCountryCode || errors.nequiPhone) && (
+                          <p className="text-xs text-red-600">
+                            {errors.nequiPhone?.message ?? errors.nequiCountryCode?.message}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -389,7 +562,7 @@ export function StepCustomize({ completedSteps, onNext, onBack }: StepCustomizeP
                     rows={3}
                     maxLength={500}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
-                    placeholder="Describe cómo haces los envíos..."
+                    placeholder={PLACEHOLDER_SHIPPING_POLICY}
                   />
                   {errors.shippingPolicy && (
                     <p className="text-sm text-red-600">{errors.shippingPolicy.message}</p>
@@ -409,7 +582,7 @@ export function StepCustomize({ completedSteps, onNext, onBack }: StepCustomizeP
                     rows={3}
                     maxLength={500}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
-                    placeholder="Describe tu política de cambios y devoluciones..."
+                    placeholder={PLACEHOLDER_RETURN_POLICY}
                   />
                   {errors.returnPolicy && (
                     <p className="text-sm text-red-600">{errors.returnPolicy.message}</p>
@@ -550,7 +723,7 @@ export function StepCustomize({ completedSteps, onNext, onBack }: StepCustomizeP
           <Button type="button" variant="outline" onClick={onBack}>
             ← Anterior
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting || !isValid}>
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Guardar y Continuar
           </Button>

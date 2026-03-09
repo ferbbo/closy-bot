@@ -287,11 +287,11 @@ export const api = {
 
   // Catalog import (CSV file upload — PR-17)
   importCatalogFile: (formData: FormData) =>
-    apiFetchMultipart<ImportStats>('/catalog/import-file', formData),
+    apiFetchMultipart<ImportStats>('/api/catalog/import-file', formData),
 
   // Catalog — list products (PR-FE-04)
   getProducts: () =>
-    apiFetch<{ data: Product[]; total: number }>('/products'),
+    apiFetch<{ data: Product[]; total: number }>('/api/products'),
 
   // Payment methods config (PR-04.5)
   savePaymentConfig: (body: PaymentMethodsConfig) =>

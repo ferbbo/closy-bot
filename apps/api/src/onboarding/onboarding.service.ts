@@ -10,6 +10,10 @@
  * AC-06: activate() valida requisitos mínimos (channel, catalog, config)
  * AC-07: activate() cambia Merchant.status = 'active' cuando OK
  * AC-08: Merchant.status default='onboarding' (garantizado por migración)
+ *
+ * NOTE: ALL_STEPS incluye solo los 4 pasos visibles del wizard (channel, catalog,
+ * config, test). El paso 'profile' se evaluaba internamente pero no aparece en
+ * el UI → se eliminó para que percentage = completedSteps/4 (25% por paso).
  */
 
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
@@ -21,8 +25,8 @@ import { OnboardingProgressResponseDto } from './dto/onboarding-progress.respons
 import { ActivateMerchantResponseDto } from './dto/activate-merchant.response.dto';
 import { ApplyPresetRequestDto } from './dto/apply-preset.request.dto';
 
-/** Steps del wizard (5 pasos × 20% cada uno) */
-const ALL_STEPS = ['profile', 'channel', 'catalog', 'config', 'test'] as const;
+/** Steps del wizard (4 pasos × 25% cada uno — alineado con el UI) */
+const ALL_STEPS = ['channel', 'catalog', 'config', 'test'] as const;
 type Step = (typeof ALL_STEPS)[number];
 
 /** Requisitos mínimos para activar (hard requirements) */
@@ -190,8 +194,6 @@ export class OnboardingService {
    */
   private computeCompletedSteps(
     merchant: {
-      name: string;
-      industry: unknown;
       channels: { id: string }[];
       products: { id: string }[];
       merchantConfig: { id: string; paymentMethods: unknown } | null;
@@ -199,11 +201,6 @@ export class OnboardingService {
     hasProcessedMessage: boolean,
   ): Step[] {
     const completed: Step[] = [];
-
-    // profile: name no vacío AND industry no null
-    if (merchant.name && merchant.name.trim().length > 0 && merchant.industry !== null) {
-      completed.push('profile');
-    }
 
     // channel: ≥1 Channel con isActive=true
     if (merchant.channels.length > 0) {
