@@ -18,7 +18,6 @@ import {
   Request,
   HttpCode,
   HttpStatus,
-  Logger
 } from '@nestjs/common';
 import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
@@ -30,8 +29,6 @@ import { ActivateMerchantResponseDto } from './dto/activate-merchant.response.dt
 @Controller('onboarding')
 @UseGuards(SessionAuthGuard)
 export class OnboardingController {
-  // private readonly logger = new Logger(OnboardingService.name);
-  
   constructor(private readonly onboardingService: OnboardingService) {}
 
   /**

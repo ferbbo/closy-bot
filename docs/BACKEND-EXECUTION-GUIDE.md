@@ -3448,6 +3448,7 @@ function ChannelSettings() {
 ---
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 ## Channels UI — PR-FE-03 (✅ Implementado)
 
 Página `/dashboard/channels` con lista de canales, health panel, retry webhook, y feature flag gating para multi-channel.
@@ -3650,6 +3651,8 @@ Errores: `400` transición inválida | `404` no existe | `403` multi-tenant
 - ✅ **AC-19**: Polling 30s `refetchInterval: 30_000` | `use-orders.ts`
 
 >>>>>>> 24b87af (feat(orders-ui): REQ-07..20 Torre de Control — orders page + sidebar badge + polling + docs)
+=======
+>>>>>>> origin
 ## Próximos Pasos
 
 Todos los flujos del MVP Core V1 están implementados. Ver `docs/plan/PR-STACK-core-v1.md` para el estado actualizado.

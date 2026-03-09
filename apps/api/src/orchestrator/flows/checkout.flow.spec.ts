@@ -314,6 +314,71 @@ describe('CheckoutFlow', () => {
 
   // ---------------------------------------------------------------------------
 
+  describe('AC-13 (PR-FE-OB-2): payment_link URL appears in checkout message', () => {
+    it('includes paymentLinkUrl in payment selection message when type is payment_link', async () => {
+      const askAddressState2 = {
+        step: 'ASK_ADDRESS' as const,
+        data: { name: 'María' } as Record<string, string>,
+        startedAt: '',
+        cartId: 'cart-1',
+        invalidAttempts: 0,
+      };
+      checkoutService.getCheckoutState.mockResolvedValue(askAddressState2);
+      const capturedWithAddress = {
+        ...askAddressState2,
+        step: 'SELECT_PAYMENT' as const,
+        data: { name: 'María', address: 'Calle 1' },
+      };
+      checkoutService.captureField.mockResolvedValue(capturedWithAddress);
+      checkoutService.getPaymentMethods.mockResolvedValue([
+        { type: 'cod', label: 'Contraentrega' },
+        {
+          type: 'payment_link',
+          label: 'Link de pago',
+          paymentLinkUrl: 'https://link.mercadopago.com.co/mi-tienda',
+        },
+      ]);
+
+      const result = await flow.handle(
+        mockMerchant,
+        'conv-1',
+        'cust-1',
+        'merch-1',
+        'Calle 1 #2-3',
+      );
+
+      expect(result).toContain('https://link.mercadopago.com.co/mi-tienda');
+      expect(result).toContain('Link de pago');
+    });
+
+    it('does NOT include URL when type is not payment_link', async () => {
+      // Build prompt with only COD (no payment_link) — URL should never appear
+      const selectState = {
+        step: 'SELECT_PAYMENT' as const,
+        data: { name: 'Juan', address: 'Addr' },
+        startedAt: '',
+        cartId: 'cart-1',
+        invalidAttempts: 0,
+      };
+      checkoutService.getCheckoutState.mockResolvedValue(selectState);
+      checkoutService.getPaymentMethods.mockResolvedValue([
+        { type: 'cod', label: 'Contraentrega' },
+      ]);
+      checkoutService.captureField.mockResolvedValue({
+        ...selectState,
+        data: { name: 'Juan', address: 'Addr', paymentMethod: 'cod', paymentMethodLabel: 'Contraentrega' },
+        step: 'CONFIRM',
+      });
+
+      const result = await flow.handle(mockMerchant, 'conv-1', 'cust-1', 'merch-1', '1');
+
+      expect(result).not.toContain('https://');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+
+
   describe('CONFIRM step', () => {
     const confirmState: CheckoutState = {
       step: 'CONFIRM',

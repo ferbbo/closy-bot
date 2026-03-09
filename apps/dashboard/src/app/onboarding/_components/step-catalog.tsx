@@ -16,6 +16,11 @@ interface StepCatalogProps {
   onBack: () => void;
 }
 
+// interface ImportStats {
+//   imported: number;
+//   errors: string[];
+// }
+
 export function StepCatalog({ completedSteps, onNext, onBack }: StepCatalogProps) {
   const isCompleted = completedSteps.includes('catalog');
   const importMutation = useImportCatalog();
