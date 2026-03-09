@@ -5,6 +5,7 @@ import {
   ProductWithVariants,
 } from '../persistence/repositories/product.repository';
 import { CategoryRepository } from '../persistence/repositories/category.repository';
+import { SearchFilters } from '../orchestrator/nlu/types'; // PR-SEARCH-NLU
 
 /**
  * CatalogService provides product search and retrieval
@@ -28,23 +29,29 @@ export class CatalogService {
   /**
    * Search products by text query
    * PR-03.5.2: Uses FTS if enabled, otherwise falls back to ILIKE
+   * PR-SEARCH-NLU: Accepts optional SearchFilters for structured filtering (AC-07)
    * @param merchantId - Merchant ID (multi-tenancy)
    * @param query - Search text
    * @param limit - Maximum results (default 20)
+   * @param filters - Optional structured filters from NLU parser (B2)
    * @returns Array of products with available variants
    */
   async searchProducts(
     merchantId: string,
     query: string,
     limit = 20,
+    filters?: SearchFilters,
   ): Promise<ProductWithVariants[]> {
     this.logger.log(
       `Searching products for merchant ${merchantId} with query: "${query}" (FTS: ${this.ftsEnabled})`,
     );
 
     // PR-03.5.2: Conditional delegation based on feature flag
+    // PR-SEARCH-NLU: Pass filters only when defined (preserves 3-arg call for backward compat — AC-10)
     const products = this.ftsEnabled
-      ? await this.productRepository.searchFts(merchantId, query, limit)
+      ? filters !== undefined
+        ? await this.productRepository.searchFts(merchantId, query, limit, filters)
+        : await this.productRepository.searchFts(merchantId, query, limit)
       : await this.productRepository.search(merchantId, query, limit, true);
 
     this.logger.log(`Found ${products.length} products`);

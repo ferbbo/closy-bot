@@ -19,6 +19,14 @@ const nextConfig = {
         source: '/webhooks/:path*',
         destination: 'http://localhost:4000/webhooks/:path*',
       },
+      {
+        source: '/products/:path*',
+        destination: 'http://localhost:4000/api/products/:path*',
+      },
+      {
+        source: '/orders/:path*',
+        destination: 'http://localhost:4000/orders/:path*',
+      },
     ];
   },
 };

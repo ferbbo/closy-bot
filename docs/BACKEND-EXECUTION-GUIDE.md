@@ -498,6 +498,72 @@ curl "http://localhost:3000/api/products?category=Ropa&limit=10" \
   -H "x-api-key: <merchant-api-key>"
 ```
 
+#### PR-SEARCH-NLU: Extracción de entidades NLU para búsqueda filtrada (B2)
+
+A partir de PR-SEARCH-NLU, la búsqueda conversacional soporta **extracción automática de filtros** (precio, talla, color) del texto del cliente cuando el feature flag está activo.
+
+> **Scope:** B2 — requiere `FEATURES_MODE=dev` y `FEATURE_SEARCH_NLU=true`
+
+**Feature Flags:**
+```bash
+# En .env — ambas requeridas para activar NLU
+FEATURES_MODE=dev
+FEATURE_SEARCH_NLU=true
+```
+
+**Entidades soportadas:**
+
+| Entidad | Ejemplos de input | Valor extraído |
+|---------|------------------|----------------|
+| Precio mínimo | `"desde 85000"`, `"desde 85k"` | `priceMin: 85000` |
+| Precio máximo | `"hasta 100000"`, `"hasta 100k"` | `priceMax: 100000` |
+| Rango precio | `"80-120k"`, `"80 a 120k"` | `priceMin: 80000, priceMax: 120000` |
+| Talla | `"talla 32"`, `"talla M"`, `"talla XL"` | `size: '32'` |
+| Color | `"blancas"` (Levenshtein≤2), `"azul"` | `color: 'blanco'` |
+
+**Comportamiento (esta feature es interna al pipeline conversacional, no es un endpoint HTTP):**
+
+La búsqueda NLU se activa automáticamente en el flujo WhatsApp. No hay endpoint HTTP dedicado — opera dentro del webhook de inbound.
+
+```bash
+# Simular mensaje WhatsApp con filtros NLU (via webhook test)
+curl -X POST http://localhost:3000/webhook/whatsapp \
+  -H "Content-Type: application/json" \
+  -H "x-hub-signature-256: sha256=<signature>" \
+  -d '{
+    "object": "whatsapp_business_account",
+    "entry": [{
+      "id": "WHATSAPP_BUSINESS_ACCOUNT_ID",
+      "changes": [{
+        "value": {
+          "metadata": {
+            "display_phone_number": "15550000000",
+            "phone_number_id": "<phone-number-id>"
+          },
+          "contacts": [{ "profile": { "name": "Test User" }, "wa_id": "5491112345678" }],
+          "messages": [{
+            "from": "5491112345678",
+            "id": "unique-msg-id-nlu-01",
+            "timestamp": "1234567890",
+            "text": { "body": "busco jeans desde 85000 talla 32" },
+            "type": "text"
+          }]
+        },
+        "field": "messages"
+      }]
+    }]
+  }'
+
+# Con NLU activo → bot responde con jeans cuyo precio ≥ 85000 con talla "32" en nombre
+# Con NLU inactivo (FEATURES_MODE=mvp) → bot responde con todos los jeans (sin filtro)
+```
+
+**Kill-switch MVP:**
+```bash
+# Con FEATURES_MODE=mvp el NLU nunca se activa aunque FEATURE_SEARCH_NLU=true
+FEATURES_MODE=mvp  # NLU disabled — producción segura
+```
+
 ---
 
 ## Flujo 4: Catalog Import File Upload (PR-17)
