@@ -28,6 +28,10 @@ const nextConfig = {
         destination: 'http://localhost:4000/api/products/:path*',
       },
       {
+        source: '/api/product-variants/:path*',
+        destination: 'http://localhost:4000/api/product-variants/:path*',
+      },
+      {
         source: '/webhooks/:path*',
         destination: 'http://localhost:4000/webhooks/:path*',
       },
