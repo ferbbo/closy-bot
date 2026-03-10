@@ -96,11 +96,12 @@ model MerchantConfig {
   @@map("merchant_configs")
 }
 
-/// Industry enum for playbook selection (PR-11)
+/// Industry enum for playbook selection (PR-11 / PR-15.1)
 enum Industry {
   ropa
   belleza
   minimarket
+  retail_general
 }
 
 /// MerchantStatus enum for onboarding lifecycle (PR-OB-01)
