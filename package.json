@@ -46,6 +46,7 @@
     "@nestjs/axios": "^4.0.1",
     "@nestjs/schedule": "^6.1.1",
     "@nestjs/throttler": "^6.5.0",
+    "@next/bundle-analyzer": "^16.1.6",
     "@prisma/client": "5.22.0",
     "axios": "^1.13.5",
     "cookie-parser": "^1.4.7",
