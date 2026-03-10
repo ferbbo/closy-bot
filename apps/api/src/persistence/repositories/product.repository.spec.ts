@@ -44,6 +44,7 @@ describe('ProductRepository', () => {
         findUnique: jest.fn(),
         create: jest.fn(),
         upsert: jest.fn(),
+        update: jest.fn(),
       },
     };
 
@@ -95,9 +96,13 @@ describe('ProductRepository', () => {
       expect(prisma.product.findMany).toHaveBeenCalledWith({
         where: {
           merchantId: 'merch_123',
-          OR: [
-            { name: { contains: 'camisa', mode: 'insensitive' } },
-            { description: { contains: 'camisa', mode: 'insensitive' } },
+          AND: [
+            {
+              OR: [
+                { name: { contains: 'camisa', mode: 'insensitive' } },
+                { description: { contains: 'camisa', mode: 'insensitive' } },
+              ],
+            },
           ],
           isActive: true,
           variants: {
@@ -395,6 +400,95 @@ describe('ProductRepository', () => {
       // $queryRaw should be called (even if returns 0)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((prisma as any).$queryRaw).toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================================
+  // PR-FE-04.1: Inline Edit — updateVariantById + findVariantByIdWithProduct
+  // ============================================================================
+
+  describe('AC-04: updateVariantById — partial update', () => {
+    it('should update only price when only price is provided', async () => {
+      const updatedVariant = { ...mockVariant, price: new Decimal(30000) };
+      prisma.productVariant.update.mockResolvedValue(updatedVariant);
+
+      const result = await repository.updateVariantById('var_123', { price: 30000 });
+
+      expect(result.price).toEqual(new Decimal(30000));
+      expect(prisma.productVariant.update).toHaveBeenCalledWith({
+        where: { id: 'var_123' },
+        data: { price: 30000 },
+      });
+    });
+
+    it('should update only stock when only stock is provided', async () => {
+      const updatedVariant = { ...mockVariant, stock: 8 };
+      prisma.productVariant.update.mockResolvedValue(updatedVariant);
+
+      const result = await repository.updateVariantById('var_123', { stock: 8 });
+
+      expect(result.stock).toBe(8);
+      expect(prisma.productVariant.update).toHaveBeenCalledWith({
+        where: { id: 'var_123' },
+        data: { stock: 8 },
+      });
+    });
+
+    it('should update price and stock together', async () => {
+      const updatedVariant = { ...mockVariant, price: new Decimal(35000), stock: 15 };
+      prisma.productVariant.update.mockResolvedValue(updatedVariant);
+
+      const result = await repository.updateVariantById('var_123', {
+        price: 35000,
+        stock: 15,
+      });
+
+      expect(result.price).toEqual(new Decimal(35000));
+      expect(result.stock).toBe(15);
+      expect(prisma.productVariant.update).toHaveBeenCalledWith({
+        where: { id: 'var_123' },
+        data: { price: 35000, stock: 15 },
+      });
+    });
+
+    it('should return the updated variant with all fields', async () => {
+      prisma.productVariant.update.mockResolvedValue(mockVariant);
+
+      const result = await repository.updateVariantById('var_123', { isActive: false });
+
+      expect(result).toEqual(mockVariant);
+    });
+  });
+
+  describe('AC-04: findVariantByIdWithProduct — ownership check', () => {
+    const mockVariantWithProduct = {
+      ...mockVariant,
+      product: { merchantId: 'merch_123' },
+    };
+
+    it('should return variant with product merchantId for ownership check', async () => {
+      prisma.productVariant.findUnique.mockResolvedValue(mockVariantWithProduct);
+
+      const result = await repository.findVariantByIdWithProduct('var_123');
+
+      expect(result).not.toBeNull();
+      expect(result!.product.merchantId).toBe('merch_123');
+      expect(prisma.productVariant.findUnique).toHaveBeenCalledWith({
+        where: { id: 'var_123' },
+        include: {
+          product: {
+            select: { merchantId: true },
+          },
+        },
+      });
+    });
+
+    it('should return null if variant does not exist', async () => {
+      prisma.productVariant.findUnique.mockResolvedValue(null);
+
+      const result = await repository.findVariantByIdWithProduct('nonexistent');
+
+      expect(result).toBeNull();
     });
   });
 });
