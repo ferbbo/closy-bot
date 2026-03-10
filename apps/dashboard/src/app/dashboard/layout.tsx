@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { usePendingOrdersCount } from '@/hooks/use-orders';
+import { useMerchantProfile } from '@/hooks/use-playbook-config';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -30,6 +31,8 @@ const navigation = [
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { merchant } = useAuth();
+  const { data: profile } = useMerchantProfile();
+  
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -42,7 +45,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Mobile header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold text-gray-900">{merchant?.name ?? 'Tu tienda online'}</h1>
+          <h1 className="text-xl font-bold text-gray-900">{profile?.name ?? 'Tu tienda online'}</h1>
         </div>
         <Button
           variant="ghost"
@@ -58,7 +61,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="flex min-h-0 flex-1 flex-col border-r border-gray-200 bg-white">
           {/* Logo */}
           <div className="flex h-16 shrink-0 items-center border-b border-gray-200 px-6">
-            <h1 className="text-xl font-bold text-gray-900">{merchant?.name ?? 'Tu tienda online'}</h1>
+            <h1 className="text-xl font-bold text-gray-900">{profile?.name ?? 'Tu tienda online'}</h1>
           </div>
 
           {/* Navigation */}
