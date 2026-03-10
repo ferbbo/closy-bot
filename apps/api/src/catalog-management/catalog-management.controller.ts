@@ -21,6 +21,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { Merchant } from '@prisma/client';
+import type { ProductVariant } from '@prisma/client';
 import { MerchantAuthGuard } from '../common/guards/merchant-auth.guard';
 import { CurrentMerchant } from '../common/decorators/merchant.decorator';
 import { ImportService } from '../services/import.service';
@@ -37,6 +38,7 @@ import {
   ImportResponseDto,
   ImportCsvDto,
 } from './dto/catalog.dto';
+import { UpdateVariantDto } from './dto/update-variant.dto';
 
 /**
  * CatalogManagementController handles merchant catalog operations
@@ -297,6 +299,33 @@ export class CatalogManagementController {
 
     this.logger.log(`Product soft deleted: ${id}`);
     return { success: true, id };
+  }
+
+  /**
+   * Update product variant (inline edit from dashboard)
+   * PATCH /api/product-variants/:id
+   * Body: UpdateVariantDto (price, stock, isActive — all optional)
+   * Auth: Session Cookie (dashboard) or API Key
+   * Ownership: variant → product → merchantId must match authenticated merchant
+   */
+  @Patch('product-variants/:id')
+  async updateVariant(
+    @CurrentMerchant() merchant: Merchant,
+    @Param('id') id: string,
+    @Body() dto: UpdateVariantDto,
+  ): Promise<ProductVariant> {
+    this.logger.log(`Update variant ${id} for merchant ${merchant.id}`);
+
+    // Ownership check: variant must belong to a product of this merchant
+    const variant = await this.productRepository.findVariantByIdWithProduct(id);
+    if (!variant || variant.product.merchantId !== merchant.id) {
+      throw new NotFoundException(`Product variant with ID ${id} not found`);
+    }
+
+    const updated = await this.productRepository.updateVariantById(id, dto);
+
+    this.logger.log(`Variant updated: ${updated.id}`);
+    return updated;
   }
 
   // ─── Private helpers ────────────────────────────────────────────────────────

@@ -440,6 +440,40 @@ export class ProductRepository {
   }
 
   /**
+   * Find variant by ID with product relation (for ownership check)
+   * Used by PR-FE-04.1 inline edit — ensures variant belongs to merchant's product
+   * @param id - Variant UUID
+   */
+  async findVariantByIdWithProduct(
+    id: string,
+  ): Promise<(ProductVariant & { product: { merchantId: string } }) | null> {
+    return this.prisma.productVariant.findUnique({
+      where: { id },
+      include: {
+        product: {
+          select: { merchantId: true },
+        },
+      },
+    });
+  }
+
+  /**
+   * Update variant by ID (direct ID update, NOT by SKU)
+   * Used for inline editing in dashboard (PR-FE-04.1)
+   * @param id - Variant UUID
+   * @param data - Partial update data (price, stock, isActive)
+   */
+  async updateVariantById(
+    id: string,
+    data: { price?: number; stock?: number; isActive?: boolean },
+  ): Promise<ProductVariant> {
+    return this.prisma.productVariant.update({
+      where: { id },
+      data,
+    });
+  }
+
+  /**
    * Create or update a product variant (upsert by SKU)
    * Note: SKU is required for idempotency
    */
