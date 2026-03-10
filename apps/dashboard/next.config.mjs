@@ -43,6 +43,10 @@ const nextConfig = {
         source: '/orders/:path*',
         destination: 'http://localhost:4000/orders/:path*',
       },
+      {
+        source: '/channels/:path*',
+        destination: 'http://localhost:4000/channels/:path*',
+      },
     ];
   },
 };
