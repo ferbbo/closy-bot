@@ -9,6 +9,8 @@ import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/persistence/prisma/prisma.service';
+import { AuthService } from '../src/auth/auth.service';
+import { GoogleOidcProvider } from '../src/auth/providers/google-oidc.provider';
 
 describe('Auth (e2e) - PR-12', () => {
   let app: INestApplication;
@@ -161,6 +163,45 @@ describe('Auth (e2e) - PR-12', () => {
       // AC-14 is covered by SessionCleanupScheduler
       // Manual test: create expired session, run cleanup, verify deletion
       expect(true).toBe(true);
+    });
+  });
+
+  describe('AC-05-PR-15.1: New merchant via OIDC callback gets retail_general industry and playbookConfig', () => {
+    it('should seed retail_general industry and non-null playbookConfig on first login', async () => {
+      const authService = app.get<AuthService>(AuthService);
+      const googleProvider = app.get<GoogleOidcProvider>(GoogleOidcProvider);
+
+      const uniqueEmail = `test-ac05-pr151-${Date.now()}@example.com`;
+      const uniqueSub = `test-sub-ac05-${Date.now()}`;
+
+      jest
+        .spyOn(googleProvider, 'exchangeCodeForTokens')
+        .mockResolvedValueOnce({ idToken: 'test-id-token-ac05' });
+      jest.spyOn(googleProvider, 'getUserInfo').mockResolvedValueOnce({
+        sub: uniqueSub,
+        email: uniqueEmail,
+        name: 'AC05 PR-15.1 Test User',
+      });
+
+      await authService.handleCallback('google', 'test-code-ac05', 'state', 'state');
+
+      const merchant = await prisma.merchant.findFirst({
+        where: { whatsappNumber: uniqueEmail },
+      });
+
+      expect(merchant).toBeDefined();
+      expect(merchant?.industry).toBe('retail_general');
+      expect(merchant?.playbookConfig).toBeDefined();
+      expect(merchant?.playbookConfig).not.toBeNull();
+      const config = merchant?.playbookConfig as Record<string, unknown>;
+      expect(config['industry']).toBe('retail_general');
+
+      // Cleanup
+      if (merchant) {
+        await prisma.merchantIdentity.deleteMany({ where: { merchantId: merchant.id } });
+        await prisma.session.deleteMany({ where: { merchantId: merchant.id } });
+        await prisma.merchant.delete({ where: { id: merchant.id } });
+      }
     });
   });
 });

@@ -22,7 +22,7 @@ import { MemoryConfigService } from '../common/config/memory-config.service'; //
 export interface ConversationContext {
   conversationId: string;
   merchantName: string;
-  industry?: 'ropa' | 'belleza' | 'minimarket';
+  industry?: 'ropa' | 'belleza' | 'minimarket' | 'retail_general';
   currentCart?: {
     itemCount: number;
     total: string;
@@ -245,7 +245,7 @@ export class LlmService {
    */
   private buildSystemPromptWithPlaybook(params: {
     merchantName: string;
-    industry?: 'ropa' | 'belleza' | 'minimarket';
+    industry?: 'ropa' | 'belleza' | 'minimarket' | 'retail_general';
     merchant?: MerchantPlaybookData;
     context?: LlmContext;
   }): string {

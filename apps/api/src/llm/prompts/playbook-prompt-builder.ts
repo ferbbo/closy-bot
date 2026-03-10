@@ -14,7 +14,7 @@ import { MINIMARKET_PLAYBOOK_STUB } from './industry-defaults/minimarket';
 
 export interface SystemPromptParams {
   merchantName: string;
-  industry?: 'ropa' | 'belleza' | 'minimarket';
+  industry?: 'ropa' | 'belleza' | 'minimarket' | 'retail_general';
   context?: LlmContext;
   playbookPrompt?: string; // PR-11: Injected playbook prompt from PlaybookService
 }

@@ -36,7 +36,7 @@ export interface LlmContext {
   /** Merchant name for personalization */
   merchantName: string;
   /** Industry/vertical (for playbook selection) */
-  industry?: 'ropa' | 'belleza' | 'minimarket';
+  industry?: 'ropa' | 'belleza' | 'minimarket' | 'retail_general';
   /** Playbook configuration (future: full playbook) */
   playbook?: PlaybookConfig;
   /** Current cart summary */

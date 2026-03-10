@@ -6,7 +6,7 @@
 import { PlaybookConfig } from '../playbook-config.interface';
 
 export const GenericPlaybookDefaults: PlaybookConfig = {
-  industry: undefined as unknown as 'ropa' | 'belleza' | 'minimarket',
+  industry: 'retail_general',
   botPersonality: {
     style: 'friendly',
     emojiUsage: 'moderate',

@@ -16,19 +16,13 @@ import {
 } from '@/components/ui/accordion';
 import { ProfileSection } from '@/components/settings/profile-section';
 import { MessagesSection } from '@/components/settings/messages-section';
-import { RulesSection } from '@/components/settings/rules-section';
+// import { RulesSection } from '@/components/settings/rules-section';
 import { GuidelinesSection } from '@/components/settings/guidelines-section';
 import {
   useMerchantProfile,
   usePatchPlaybookConfig,
   useUpdateMerchantName,
 } from '@/hooks/use-playbook-config';
-import type {
-  PlaybookConfig,
-  PlaybookMessages,
-  PlaybookRules,
-  LlmPromptConfig,
-} from '@/types/playbook';
 import type { MerchantProfileFormValues } from '@/lib/schemas/playbook-config.schema';
 import type {
   PlaybookMessagesFormValues,
@@ -36,87 +30,14 @@ import type {
   LlmPromptConfigFormValues,
 } from '@/lib/schemas/playbook-config.schema';
 
-// ── Default fallback for null PlaybookConfig (AC edge-case: merchant nuevo) ─
-
-const DEFAULT_MESSAGES: PlaybookMessages = {
-  greeting: '¡Hola! Soy {merchant_name}, tu asistente virtual. ¿En qué te puedo ayudar?',
-  addToCartConfirm: '✅ Agregué el producto a tu carrito.',
-  noStock: 'Lo sentimos, ese producto no tiene stock disponible.',
-  upsellTemplate: '¿Te interesa también {product}?',
-  checkoutStart: 'Perfecto, vamos a completar tu pedido. 🛒',
-  searchNoResults: 'No encontré resultados para "{query}". ¿Quieres buscar algo diferente?',
-  searchResultsHeader: 'Encontré {count} resultado(s) para "{query}":',
-  searchResultsFooter: '¿Cuál de estos te interesa?',
-  helpMenu: 'Puedo ayudarte con:\n1. 🔍 Buscar productos\n2. 🛒 Ver mi carrito\n3. 📦 Estado de mi pedido\n4. 🧑‍💼 Hablar con un asesor',
-  cartEmpty: 'Tu carrito está vacío. ¿Te ayudo a buscar algo?',
-  cartSummaryHeader: 'Tu carrito tiene {item_count} {item_word}:',
-  cartSummaryFooter: 'Total: {total}',
-  removeConfirm: 'Eliminé {product_name} ({variant_name}) de tu carrito.',
-  updateConfirm: 'Actualicé {product_name} a {quantity} unidad(es).',
-  quantityInvalid: 'Cantidad inválida. Por favor ingresa un número entre 1 y 99.',
-  productNotFound: 'No encontré "{query}" en nuestro catálogo.',
-  productMultipleOptions: 'Encontré varios productos:\n{product_list}',
-  variantMultipleOptions: '{product_name} tiene varias opciones:\n{variant_list}',
-  itemNotInCart: 'No encontré "{query}" en tu carrito. Tienes:\n{items_list}',
-  cartEmptyNoAction: 'Tu carrito está vacío. No puedo {action} sin productos.',
-  genericError: 'Ocurrió un error al {action}. Por favor intenta de nuevo.',
-  unknownIntent: 'No entendí bien. ¿Puedes decirme en qué te ayudo? Usa el menú de ayuda.',
-  orderStatusTemplate: 'Tu pedido #{orderCode}: {statusMessage}',
-  orderStatusPendingPayment: 'está pendiente de pago 💳',
-  orderStatusConfirmed: 'fue confirmado ✅',
-  orderStatusPaid: 'fue pagado exitosamente ✅',
-  orderStatusShipped: 'está en camino 🚚 ({trackingInfo})',
-  orderStatusDelivered: 'fue entregado 🎉',
-  orderStatusCancelled: 'fue cancelado ❌',
-  noOrderFound: 'No encontré ningún pedido activo asociado a tu cuenta.',
-  ticketTypePrompt: '¿Cuál es el motivo de tu solicitud?\n1. 📦 Producto faltante\n2. ❌ Producto dañado\n3. ⏰ Demora en entrega',
-  ticketCreatedConfirm: 'Creé tu ticket #{ticketId}. Un asesor te contactará pronto.',
-  ticketDescriptionPrompt: 'Por favor descríbenos el problema con más detalle.',
-};
-
-const DEFAULT_RULES: PlaybookRules = {
-  askSizeBeforeCart: false,
-  askSkinTypeOnSearch: false,
-  autoSubstitutions: false,
-  upsellEnabled: false,
-  maxRecommendations: 3,
-};
-
-const DEFAULT_LLM_PROMPT: LlmPromptConfig = {
-  tone: 'Amable, profesional y orientado a ayudar al cliente a encontrar el producto ideal. Responde de forma concisa y clara.',
-  focusAreas: ['talla', 'color', 'precio'],
-  commonQuestions: ['envíos', 'devoluciones', 'métodos de pago'],
-  upsellStrategy: 'Sugerir productos complementarios o de mayor valor cuando el cliente muestre interés.',
-  emojiUsage: 'moderate',
-};
-
-function getPlaybookOrDefaults(config: PlaybookConfig | null | undefined): PlaybookConfig {
-  if (!config) {
-    return {
-      industry: 'minimarket',
-      messages: DEFAULT_MESSAGES,
-      rules: DEFAULT_RULES,
-      llmPrompt: DEFAULT_LLM_PROMPT,
-      checkoutQuestions: [],
-    };
-  }
-  return {
-    ...config,
-    messages: config.messages ?? DEFAULT_MESSAGES,
-    rules: config.rules ?? DEFAULT_RULES,
-    llmPrompt: config.llmPrompt ?? DEFAULT_LLM_PROMPT,
-  };
-}
-
 // ── Sections config ───────────────────────────────────────────────────────
 
-const SECTION_IDS = ['profile', 'messages', 'rules', 'guidelines'] as const;
+const SECTION_IDS = ['profile', 'messages', 'guidelines'] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
 const SECTION_LABELS: Record<SectionId, string> = {
   profile: '👤 Perfil',
   messages: '💬 Mensajes',
-  rules: '⚙️ Reglas',
   guidelines: '🤖 Directrices',
 };
 
@@ -148,7 +69,8 @@ export default function SettingsPage() {
 
   if (!profile) return null;
 
-  const playbook = getPlaybookOrDefaults(profile.playbookConfig);
+  // Backend ALWAYS returns non-null playbookConfig (hydrated in getProfile — PR-15.1)
+  const playbook = profile.playbookConfig!;
   const isSavingPlaybook = patchMutation.isPending;
   const isSavingProfile = nameMutation.isPending;
 
@@ -187,14 +109,6 @@ export default function SettingsPage() {
           <MessagesSection
             messages={playbook.messages}
             onSave={handleSaveMessages}
-            isSaving={isSavingPlaybook}
-          />
-        );
-      case 'rules':
-        return (
-          <RulesSection
-            rules={playbook.rules}
-            onSave={handleSaveRules}
             isSaving={isSavingPlaybook}
           />
         );

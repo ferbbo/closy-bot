@@ -88,6 +88,52 @@ describe('MerchantSettingsService', () => {
       });
     });
 
+    it('AC-06: should hydrate playbookConfig when null (backward compat)', async () => {
+      const merchantWithNullPlaybook = {
+        ...mockMerchant,
+        playbookConfig: null,
+        industry: Industry.ropa,
+      };
+      const hydratedPlaybook = {
+        industry: 'ropa',
+        messages: { greeting: 'Hola' },
+        llmPrompt: { tone: 'friendly', focusAreas: [], commonQuestions: [], upsellStrategy: '', emojiUsage: 'frequent' as const },
+        rules: { askSizeBeforeCart: true, askSkinTypeOnSearch: false, autoSubstitutions: false, upsellEnabled: false, maxRecommendations: 3 },
+        checkoutQuestions: [],
+      };
+
+      prismaService.merchant.findUnique.mockResolvedValue(merchantWithNullPlaybook as never);
+      playbookService.getPlaybookForMerchant.mockReturnValue(hydratedPlaybook as never);
+
+      const result = await service.getProfile('merchant-123');
+
+      expect(result.playbookConfig).toEqual(hydratedPlaybook);
+      expect(playbookService.getPlaybookForMerchant).toHaveBeenCalledWith(merchantWithNullPlaybook);
+    });
+
+    it('AC-06: should return custom playbookConfig without modification when non-null', async () => {
+      prismaService.merchant.findUnique.mockResolvedValue(mockMerchant as never);
+
+      const result = await service.getProfile('merchant-123');
+
+      expect(result.playbookConfig).toEqual(mockMerchant.playbookConfig);
+      expect(playbookService.getPlaybookForMerchant).not.toHaveBeenCalled();
+    });
+
+    it('AC-06: should treat null industry as retail_general (backward compat)', async () => {
+      const merchantWithNullIndustry = {
+        ...mockMerchant,
+        industry: null,
+        playbookConfig: mockMerchant.playbookConfig,
+      };
+
+      prismaService.merchant.findUnique.mockResolvedValue(merchantWithNullIndustry as never);
+
+      const result = await service.getProfile('merchant-123');
+
+      expect(result.industry).toBe('retail_general');
+    });
+
     it('should throw NotFoundException if merchant not found', async () => {
       prismaService.merchant.findUnique.mockResolvedValue(null);
 

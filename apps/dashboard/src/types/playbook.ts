@@ -3,7 +3,7 @@
  * PR-FE-05: Settings UI
  */
 
-export type Industry = 'ropa' | 'belleza' | 'minimarket';
+export type Industry = 'ropa' | 'belleza' | 'minimarket' | 'retail_general';
 
 export interface PlaybookConfig {
   industry: Industry;

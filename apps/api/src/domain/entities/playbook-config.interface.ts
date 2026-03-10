@@ -4,7 +4,7 @@
  * Defines behavior, prompts, and rules per industry
  */
 
-export type Industry = 'ropa' | 'belleza' | 'minimarket';
+export type Industry = 'ropa' | 'belleza' | 'minimarket' | 'retail_general';
 
 /**
  * PR-GAP-2: FAQ entry for keyword-based matching (no RAG/embeddings)

@@ -79,6 +79,33 @@ describe('PlaybookService', () => {
       expect(playbook.llmPrompt.emojiUsage).toBe('moderate');
     });
 
+    it('AC-04: getIndustryDefaults(retail_general) should return GenericPlaybookDefaults', () => {
+      const merchant = {
+        id: 'test-retail',
+        name: 'Retail Store',
+        industry: 'retail_general' as const,
+      };
+
+      const playbook = service.getPlaybookForMerchant(merchant);
+
+      expect(playbook).toBeDefined();
+      expect(playbook.industry).toBe('retail_general');
+      expect(playbook.llmPrompt.emojiUsage).toBe('moderate');
+      expect(playbook.messages.greeting).toBeDefined();
+    });
+
+    it('AC-04: getIndustryDefaults(null) should return GenericPlaybookDefaults (backward compat)', () => {
+      const merchant = { id: 'test-null', name: 'Store', industry: null };
+      const playbook = service.getPlaybookForMerchant(merchant);
+      expect(playbook.industry).toBe('retail_general');
+    });
+
+    it('AC-04: getIndustryDefaults(undefined) should return GenericPlaybookDefaults', () => {
+      const merchant = { id: 'test-undef', name: 'Store', industry: undefined };
+      const playbook = service.getPlaybookForMerchant(merchant);
+      expect(playbook.industry).toBe('retail_general');
+    });
+
     it('should merge custom playbook config with defaults', () => {
       const merchant = {
         id: 'test-5',
