@@ -58,6 +58,7 @@ export function ProfileSection({ profile, onSave, isSaving }: ProfileSectionProp
             <Input
               id="merchant-name"
               placeholder="Ej: Mi Tienda Oficial"
+              maxLength={30}
               {...register('name')}
             />
             {errors.name && (

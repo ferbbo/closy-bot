@@ -26,7 +26,6 @@ import {
 import type { MerchantProfileFormValues } from '@/lib/schemas/playbook-config.schema';
 import type {
   PlaybookMessagesFormValues,
-  PlaybookRulesFormValues,
   LlmPromptConfigFormValues,
 } from '@/lib/schemas/playbook-config.schema';
 
@@ -84,9 +83,6 @@ export default function SettingsPage() {
     patchMutation.mutate({ messages: data });
   };
 
-  const handleSaveRules = (data: PlaybookRulesFormValues) => {
-    patchMutation.mutate({ rules: data });
-  };
 
   const handleSaveGuidelines = (data: LlmPromptConfigFormValues) => {
     patchMutation.mutate({ llmPrompt: data });
