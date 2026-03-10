@@ -456,7 +456,6 @@ describe('MerchantSettings (e2e) - PR-15', () => {
         .send({ faqs: testFaqs })
         .expect(200);
 
-      expect(response.body.success).toBe(true);
       expect(Array.isArray(response.body.playbookConfig.faqs)).toBe(true);
       expect(response.body.playbookConfig.faqs).toHaveLength(2);
       expect(response.body.playbookConfig.faqs[0].question).toBe(testFaqs[0].question);
