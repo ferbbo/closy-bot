@@ -78,7 +78,7 @@ export function ChannelHealthPanel({ channelId, status }: ChannelHealthPanelProp
       {/* Recent errors — max 3 */}
       {health.recentErrors.length > 0 && (
         <div className="space-y-1">
-          {health.recentErrors.map((err, i) => (
+          {health.recentErrors.map((err: string, i: number) => (
             <div key={i} className="flex items-start gap-1.5 text-xs text-red-600">
               <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
               <span>{err}</span>
