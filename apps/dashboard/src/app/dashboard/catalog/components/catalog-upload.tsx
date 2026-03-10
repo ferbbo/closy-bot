@@ -3,7 +3,6 @@
 import { useRef, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { Upload, FileText, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const MAX_FILE_SIZE_MB = 5;
@@ -18,8 +17,7 @@ export function CatalogUpload({ isPending, onUpload }: CatalogUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const validateAndUpload = useCallback(
-    (file: File) => {
+  const validateAndUpload = useCallback( async (file: File) => {
       // AC-10: validate extension
       if (!file.name.toLowerCase().endsWith('.csv')) {
         toast.error('Solo se permiten archivos CSV');
@@ -31,6 +29,47 @@ export function CatalogUpload({ isPending, onUpload }: CatalogUploadProps) {
         toast.error(`Archivo demasiado grande (${sizeMB}MB). Límite: ${MAX_FILE_SIZE_MB}MB`);
         return;
       }
+      // Content sniffing: leer los primeros 512 bytes para detectar archivos binarios
+    // disfrazados con extensión .csv
+    try {
+      const buffer = await file.slice(0, 512).arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+
+      // Bytes nulos → archivo binario
+      if (bytes.some((b) => b === 0x00)) {
+        toast.error('El archivo no es un CSV válido (contiene datos binarios).');
+        return;
+      }
+
+      // Magic bytes de formatos binarios conocidos
+      const isBinarySignature =
+        (bytes[0] === 0x4d && bytes[1] === 0x5a) ||                                          // EXE/DLL (MZ)
+        (bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04) || // ZIP / DOCX / XLSX
+        (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) || // PDF (%PDF)
+        (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) || // PNG
+        (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) ||                      // JPEG
+        (bytes[0] === 0x7f && bytes[1] === 0x45 && bytes[2] === 0x4c && bytes[3] === 0x46) || // ELF
+        (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) ||                      // GIF
+        (bytes[0] === 0x42 && bytes[1] === 0x4d);                                             // BMP
+
+      if (isBinarySignature) {
+        toast.error('El archivo no es un CSV válido (formato binario detectado).');
+        return;
+      }
+      // JSON detection — texto plano, sin magic bytes binarios.
+      // El primer carácter no-whitespace de un JSON siempre es { o [.
+      // Un header CSV válido nunca puede comenzar con esos caracteres.
+      const firstSignificant = bytes.find((b) => b !== 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0d);
+      if (firstSignificant === 0x7b || firstSignificant === 0x5b) {
+         toast.error('El archivo no es un CSV válido (formato JSON detectado).');
+        return;
+      }
+    } catch {
+       toast.error('No se pudo verificar el contenido del archivo. Intenta de nuevo.');
+      return;
+    }
+
+
       const formData = new FormData();
       formData.append('file', file);
       onUpload(formData);
@@ -67,8 +106,15 @@ export function CatalogUpload({ isPending, onUpload }: CatalogUploadProps) {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onClick={() => inputRef.current?.click()}
+      onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click();
+        }}
+      role='button'
+      tabIndex={0}
+      aria-label="Zona de carga de archivo CSV"
       className={cn(
-        'relative border-2 border-dashed rounded-lg p-8 text-center transition-colors',
+        'relative border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer',
         isDragging
           ? 'border-gray-900 bg-gray-50'
           : 'border-gray-300 bg-white hover:border-gray-400',
@@ -102,18 +148,9 @@ export function CatalogUpload({ isPending, onUpload }: CatalogUploadProps) {
             </div>
             <div>
               <p className="text-sm font-medium text-gray-700">
-                {isDragging ? 'Suelta el archivo aquí' : 'Arrastra tu catálogo CSV aquí'}
+                {isDragging ? 'Suelta el archivo aquí' : 'Haz click  o arrastra tu catálogo CSV'}
               </p>
-              <p className="text-xs text-gray-500 mt-1">o</p>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => inputRef.current?.click()}
-            >
-              Seleccionar archivo
-            </Button>
             <p className="text-xs text-gray-400">Solo archivos .csv · Máx {MAX_FILE_SIZE_MB}MB</p>
           </>
         )}

@@ -72,9 +72,6 @@ export function ProfileSection({ profile, onSave, isSaving }: ProfileSectionProp
               <Badge variant="secondary" className="text-sm px-3 py-1">
                 Retail General
               </Badge>
-              <p className="text-sm text-gray-500">
-                (read-only en MVP)
-              </p>
             </div>
           </div>
 

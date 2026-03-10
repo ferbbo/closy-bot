@@ -3447,8 +3447,6 @@ function ChannelSettings() {
 
 ---
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 ## Channels UI — PR-FE-03 (✅ Implementado)
 
 Página `/dashboard/channels` con lista de canales, health panel, retry webhook, y feature flag gating para multi-channel.
@@ -3582,10 +3580,6 @@ curl -X POST http://localhost:3000/channels/<channel-id>/retry-webhook \
 
 ---
 
-=======
-
----
-
 ## PR-FE-06: Orders API — Torre de Control
 
 > **Auth**: Session Cookie (`closy_session`). Requiere estar autenticado como merchant.
@@ -3650,9 +3644,80 @@ Errores: `400` transición inválida | `404` no existe | `403` multi-tenant
 - ✅ **AC-18**: Badge `usePendingOrdersCount` sidebar desktop + mobile | `layout.tsx`
 - ✅ **AC-19**: Polling 30s `refetchInterval: 30_000` | `use-orders.ts`
 
->>>>>>> 24b87af (feat(orders-ui): REQ-07..20 Torre de Control — orders page + sidebar badge + polling + docs)
-=======
->>>>>>> origin
+---
+
+## PR-FE-04.1 — Catalog Inline Edit
+
+### PATCH /api/product-variants/:id — Editar variante inline
+
+Auth: Session Cookie (dashboard) | Ownership check: variant → product → merchantId
+
+```bash
+# Actualizar precio de variante
+curl -s -X PATCH "http://localhost:3000/api/product-variants/<VARIANT_ID>" \
+  -H "Cookie: session_id=<tu-session-cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{"price": 35000}' | jq .
+
+# Actualizar stock de variante
+curl -s -X PATCH "http://localhost:3000/api/product-variants/<VARIANT_ID>" \
+  -H "Cookie: session_id=<tu-session-cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{"stock": 8}' | jq .
+
+# Actualizar precio y stock juntos (patch parcial)
+curl -s -X PATCH "http://localhost:3000/api/product-variants/<VARIANT_ID>" \
+  -H "Cookie: session_id=<tu-session-cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{"price": 35000, "stock": 15}' | jq .
+```
+
+Respuesta `200`:
+
+```json
+{
+  "id": "01936b9d-7e5a-7001-8c85-2f0e1234abcd",
+  "productId": "01936b9d-7e5a-7001-8c85-2f0e12345678",
+  "sku": "CAM-PRM-WHT-M",
+  "name": "M",
+  "price": 35000,
+  "stock": 15,
+  "isActive": true,
+  "createdAt": "2026-03-01T10:00:00.000Z",
+  "updatedAt": "2026-03-09T15:30:00.000Z"
+}
+```
+
+Errores: `400` validación (precio negativo, stock float) | `401` sin sesión | `404` variant no existe o pertenece a otro merchant
+
+### PATCH /api/products/:id — Editar nombre de producto
+
+```bash
+curl -s -X PATCH "http://localhost:3000/api/products/<PRODUCT_ID>" \
+  -H "Cookie: session_id=<tu-session-cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Camiseta Premium Blanca"}' | jq .
+```
+
+Respuesta `200`: producto completo con `variants[]`. Errores: `400` | `401` | `404` multi-tenant
+
+### Evidence por AC — PR-FE-04.1
+
+- ✅ **AC-01**: `update-variant.dto.spec.ts` — DTO valida price>=0, stock entero>=0, campos opcionales
+- ✅ **AC-02**: `catalog-management.e2e-spec.ts` — PATCH variant con ownership correcto → 200
+- ✅ **AC-03**: `catalog-management.e2e-spec.ts` — PATCH variant otro merchant → 404
+- ✅ **AC-04**: `product.repository.spec.ts` — `updateVariantById()` + `findVariantByIdWithProduct()`
+- ✅ **AC-05**: Esta sección de documentación con cURL copy-paste
+- ✅ **AC-06**: `EditableCell` component — modo lectura por defecto, edit on click, rollback
+- ✅ **AC-07**: `products-table.tsx` — columna Nombre con `EditableCell` → PATCH /api/products/:id
+- ✅ **AC-08**: `products-table.tsx` — columna Precio con `EditableCell` → PATCH /api/product-variants/:id
+- ✅ **AC-09**: `products-table.tsx` — columna Stock con `EditableCell` → PATCH /api/product-variants/:id
+- ✅ **AC-10**: `use-catalog-mutations.ts` — `useUpdateProduct()` + `useUpdateVariant()` invalidan cache
+- ✅ **AC-11**: `EditableCell` — validación client-side: precio negativo, stock no entero, nombre vacío
+- ✅ **AC-12**: Optimistic update TanStack Query + rollback on error (catch → setTempValue(originalValue))
+
+---
+
 ## Próximos Pasos
 
 Todos los flujos del MVP Core V1 están implementados. Ver `docs/plan/PR-STACK-core-v1.md` para el estado actualizado.

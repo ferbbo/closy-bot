@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useImportCatalog } from '@/hooks/use-onboarding';
 import type { OnboardingStepKey, ImportStats } from '@/lib/api';
 
+
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 const TIMEOUT_ERRORS_SEG=3000

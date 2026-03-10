@@ -127,6 +127,35 @@ export interface SaveFaqsRequest {
   faqs: Faq[];
 }
 
+// ─── Channel types (PR-FE-03) ─────────────────────────────────────────────
+
+export interface Channel {
+  id: string;
+  type: 'whatsapp' | 'instagram';
+  status: 'connected' | 'pending' | 'error';
+  displayName: string;
+  phoneNumber?: string;
+  lastActivityAt: string | null;
+  lastWebhookAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChannelHealth {
+  channelId: string;
+  isHealthy: boolean;
+  webhookSubscribed: boolean;
+  errorCount: number;
+  lastCheckedAt: string;
+  recentErrors: string[];
+  recommendation?: string | null;
+}
+
+export interface RetryWebhookResponse {
+  success: boolean;
+  message?: string;
+}
+
 // ─── Catalog types (PR-FE-04) ─────────────────────────────────────────────
 
 export interface ProductVariant {
@@ -293,6 +322,23 @@ export const api = {
   getProducts: () =>
     apiFetch<{ data: Product[]; total: number }>('/api/products'),
 
+  // Catalog — update product name/description/isActive (PR-FE-04.1)
+  updateProduct: (id: string, data: Partial<Pick<Product, 'name' | 'description' | 'isActive'>>) =>
+    apiFetch<Product>(`/api/products/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  // Catalog — update product variant price/stock/isActive (PR-FE-04.1)
+  updateVariant: (
+    id: string,
+    data: Partial<Pick<ProductVariant, 'price' | 'stock' | 'isActive'>>,
+  ) =>
+    apiFetch<ProductVariant>(`/api/product-variants/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
   // Payment methods config (PR-04.5)
   savePaymentConfig: (body: PaymentMethodsConfig) =>
     apiFetch<{ success: true }>('/merchants/me/config', {
@@ -355,4 +401,13 @@ export const api = {
 
   getPendingOrdersCount: () =>
     apiFetch<{ count: number }>('/orders/pending-count'),
+
+  // Channels (PR-FE-03)
+  getChannels: () => apiFetch<Channel[]>('/channels'),
+  getChannelHealth: (channelId: string) =>
+    apiFetch<ChannelHealth>(`/channels/${channelId}/health`),
+  retryWebhook: (channelId: string) =>
+    apiFetch<RetryWebhookResponse>(`/channels/${channelId}/retry-webhook`, {
+      method: 'POST',
+    }),
 };

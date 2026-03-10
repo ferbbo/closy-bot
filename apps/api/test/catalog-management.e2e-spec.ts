@@ -715,4 +715,148 @@ Test Product,Test description,Test Category,TEST-SKU-001,19.99,5`;
         .expect(404);
     });
   });
+
+  // ============================================================================
+  // PR-FE-04.1: PATCH /api/product-variants/:id — Inline Edit
+  // ============================================================================
+
+  describe('PATCH /api/product-variants/:id (AC-02, AC-03)', () => {
+    let variantId: string;
+
+    beforeEach(async () => {
+      const category = await prisma.category.create({
+        data: {
+          name: 'Ropa',
+          merchantId: merchantA.id,
+        },
+      });
+
+      const product = await prisma.product.create({
+        data: {
+          name: 'Camiseta Premium',
+          categoryId: category.id,
+          merchantId: merchantA.id,
+          variants: {
+            create: {
+              sku: 'CAM-PRM-M',
+              name: 'M',
+              price: 25000,
+              stock: 12,
+            },
+          },
+          include: { variants: true },
+        },
+        include: { variants: true },
+      });
+
+      variantId = product.variants[0].id;
+    });
+
+    it('AC-02: should update variant price with valid session', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/product-variants/${variantId}`)
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .send({ price: 30000 })
+        .expect(200);
+
+      expect(parseFloat(res.body.price)).toBe(30000);
+      expect(res.body.id).toBe(variantId);
+
+      // Verify persisted in DB
+      const variant = await prisma.productVariant.findUnique({ where: { id: variantId } });
+      expect(parseFloat(String(variant?.price))).toBe(30000);
+    });
+
+    it('AC-02: should update variant stock', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/product-variants/${variantId}`)
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .send({ stock: 8 })
+        .expect(200);
+
+      expect(res.body.stock).toBe(8);
+
+      // Verify persisted in DB
+      const variant = await prisma.productVariant.findUnique({ where: { id: variantId } });
+      expect(variant?.stock).toBe(8);
+    });
+
+    it('AC-02: should update price and stock together (partial update)', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/product-variants/${variantId}`)
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .send({ price: 35000, stock: 15 })
+        .expect(200);
+
+      expect(parseFloat(res.body.price)).toBe(35000);
+      expect(res.body.stock).toBe(15);
+    });
+
+    it('AC-02: should return full variant object on success', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/product-variants/${variantId}`)
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .send({ price: 30000 })
+        .expect(200);
+
+      expect(res.body).toMatchObject({
+        id: variantId,
+        sku: 'CAM-PRM-M',
+        name: 'M',
+        stock: 12,
+      });
+    });
+
+    it('AC-03: should return 404 if variant belongs to different merchant', async () => {
+      // Merchant B tries to update a variant owned by Merchant A
+      await request(app.getHttpServer())
+        .patch(`/api/product-variants/${variantId}`)
+        .set('Authorization', `Bearer ${apiKeyB}`)
+        .send({ price: 99999 })
+        .expect(404);
+
+      // Verify price was NOT changed
+      const variant = await prisma.productVariant.findUnique({ where: { id: variantId } });
+      expect(parseFloat(String(variant?.price))).toBe(25000);
+    });
+
+    it('AC-03: should return 404 for non-existent variant ID', async () => {
+      await request(app.getHttpServer())
+        .patch('/api/product-variants/00000000-0000-0000-0000-000000000000')
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .send({ price: 30000 })
+        .expect(404);
+    });
+
+    it('should return 401 without session/API key', async () => {
+      await request(app.getHttpServer())
+        .patch(`/api/product-variants/${variantId}`)
+        .send({ price: 30000 })
+        .expect(401);
+    });
+
+    it('should return 400 with negative price', async () => {
+      await request(app.getHttpServer())
+        .patch(`/api/product-variants/${variantId}`)
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .send({ price: -100 })
+        .expect(400);
+    });
+
+    it('should return 400 with float stock', async () => {
+      await request(app.getHttpServer())
+        .patch(`/api/product-variants/${variantId}`)
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .send({ stock: 2.5 })
+        .expect(400);
+    });
+
+    it('should return 400 with negative stock', async () => {
+      await request(app.getHttpServer())
+        .patch(`/api/product-variants/${variantId}`)
+        .set('Authorization', `Bearer ${apiKeyA}`)
+        .send({ stock: -5 })
+        .expect(400);
+    });
+  });
 });
