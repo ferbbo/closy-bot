@@ -80,7 +80,7 @@ describe('MerchantSettings (e2e) - PR-15', () => {
         id: testMerchant.id,
         name: 'PR15 Test Store',
         industry: 'ropa',
-        playbookConfig: null,
+        playbookConfig: expect.objectContaining({ industry: 'ropa' }),
       });
     });
   });
@@ -497,6 +497,67 @@ describe('MerchantSettings (e2e) - PR-15', () => {
 
       expect(Array.isArray(response.body.playbookConfig.faqs)).toBe(true);
       expect(response.body.playbookConfig.faqs).toHaveLength(0);
+    });
+  });
+
+  describe('AC-06-PR-15.1: GET /merchants/me hydrates playbookConfig when null in DB', () => {
+    let ac06Merchant: Awaited<ReturnType<typeof prisma.merchant.create>>;
+    let ac06SessionId: string;
+
+    beforeAll(async () => {
+      ac06Merchant = await prisma.merchant.create({
+        data: {
+          name: 'AC06 PR-15.1 Hydration Test',
+          whatsappNumber: `ac06-pr151-${Date.now()}@test.com`,
+          apiKey: `ac06-key-${Date.now()}`,
+          industry: Industry.ropa,
+          playbookConfig: null,
+        },
+      });
+
+      const session = await prisma.session.create({
+        data: {
+          sessionId: `ac06-session-pr151-${Date.now()}`,
+          merchantId: ac06Merchant.id,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      });
+      ac06SessionId = session.sessionId;
+    });
+
+    afterAll(async () => {
+      await prisma.session.deleteMany({ where: { merchantId: ac06Merchant.id } });
+      await prisma.merchant.delete({ where: { id: ac06Merchant.id } });
+    });
+
+    it('should return hydrated playbookConfig (non-null) when merchant.playbookConfig is null in DB', async () => {
+      // Verify playbookConfig is null in DB before the request
+      const raw = await prisma.merchant.findUnique({ where: { id: ac06Merchant.id } });
+      expect(raw?.playbookConfig).toBeNull();
+
+      const response = await request(app.getHttpServer())
+        .get('/merchants/me')
+        .set('Cookie', [`session_id=${ac06SessionId}`])
+        .expect(200);
+
+      expect(response.body.playbookConfig).toBeDefined();
+      expect(response.body.playbookConfig).not.toBeNull();
+      expect(response.body.playbookConfig).toMatchObject({
+        industry: 'ropa',
+        messages: expect.objectContaining({ greeting: expect.any(String) }),
+        llmPrompt: expect.objectContaining({ tone: expect.any(String) }),
+      });
+    });
+
+    it('should not persist hydrated config to DB (hydration is read-only)', async () => {
+      await request(app.getHttpServer())
+        .get('/merchants/me')
+        .set('Cookie', [`session_id=${ac06SessionId}`])
+        .expect(200);
+
+      // DB should still have null
+      const raw = await prisma.merchant.findUnique({ where: { id: ac06Merchant.id } });
+      expect(raw?.playbookConfig).toBeNull();
     });
   });
 });
