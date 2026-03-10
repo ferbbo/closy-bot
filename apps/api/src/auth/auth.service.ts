@@ -6,13 +6,14 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Merchant, OidcProvider as PrismaOidcProvider } from '@prisma/client';
+import { Merchant, OidcProvider as PrismaOidcProvider, Prisma } from '@prisma/client';
 import { PrismaService } from '../persistence/prisma/prisma.service';
 import { SessionService } from './session/session.service';
 import { OidcProvider } from './providers/oidc-provider.interface';
 import { GoogleOidcProvider } from './providers/google-oidc.provider';
 import { MicrosoftOidcProvider } from './providers/microsoft-oidc.provider';
 import { v4 as uuidv4 } from 'uuid';
+import { GenericPlaybookDefaults } from '../domain/entities/playbook-defaults/generic.config';
 
 /**
  * Auth Service
@@ -127,6 +128,8 @@ export class AuthService {
             name: name || email,
             whatsappNumber: email, // TODO: proper email field in future
             apiKey: uuidv4(), // Generate unique API key
+            industry: 'retail_general', // PR-15.1: REQ-05 seed default industry
+            playbookConfig: GenericPlaybookDefaults as unknown as Prisma.InputJsonValue, // PR-15.1: REQ-05 seed default playbook
           },
         });
         this.logger.log(`Created new merchant ${existingMerchant.id} for ${email}`);
