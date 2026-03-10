@@ -109,6 +109,8 @@ export class PlaybookService {
         return BellezaPlaybookDefaults;
       case 'minimarket':
         return MinimarketPlaybookDefaults;
+      case 'retail_general':
+        return GenericPlaybookDefaults;
       default:
         this.logger.warn(`Unknown industry: ${industry}, using generic playbook`);
         return GenericPlaybookDefaults;
