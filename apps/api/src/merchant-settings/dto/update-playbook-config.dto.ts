@@ -174,6 +174,51 @@ export class PlaybookMessagesDto {
   @IsString()
   @IsOptional()
   unknownIntent?: string;
+
+  // ── Order status & post-sale (PR-04 / playbook-config.interface.ts) ──────
+  @IsString()
+  @IsOptional()
+  orderStatusTemplate?: string;
+
+  @IsString()
+  @IsOptional()
+  orderStatusPendingPayment?: string;
+
+  @IsString()
+  @IsOptional()
+  orderStatusConfirmed?: string;
+
+  @IsString()
+  @IsOptional()
+  orderStatusPaid?: string;
+
+  @IsString()
+  @IsOptional()
+  orderStatusShipped?: string;
+
+  @IsString()
+  @IsOptional()
+  orderStatusDelivered?: string;
+
+  @IsString()
+  @IsOptional()
+  orderStatusCancelled?: string;
+
+  @IsString()
+  @IsOptional()
+  noOrderFound?: string;
+
+  @IsString()
+  @IsOptional()
+  ticketTypePrompt?: string;
+
+  @IsString()
+  @IsOptional()
+  ticketCreatedConfirm?: string;
+
+  @IsString()
+  @IsOptional()
+  ticketDescriptionPrompt?: string;
 }
 
 export class PlaybookRulesDto {
