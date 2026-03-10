@@ -43,8 +43,8 @@ export class MerchantSettingsService {
       name: merchant.name,
       industry: merchant.industry ?? 'retail_general', // PR-15.1: backward compat for null industry
       playbookConfig: merchant.playbookConfig
-        ? (merchant.playbookConfig as PlaybookConfig)
-        : this.playbookService.getPlaybookForMerchant(merchant), // PR-15.1: hydrate when null
+        ? (merchant.playbookConfig as unknown as PlaybookConfig)
+        : this.playbookService.getPlaybookForMerchant(merchant as MerchantPlaybookData), // PR-15.1: hydrate when null
     };
   }
 

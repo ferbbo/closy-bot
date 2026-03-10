@@ -7,6 +7,7 @@ import { GoogleOidcProvider } from './providers/google-oidc.provider';
 import { MicrosoftOidcProvider } from './providers/microsoft-oidc.provider';
 import { PrismaService } from '../persistence/prisma/prisma.service';
 import { OidcProvider as PrismaOidcProvider } from '@prisma/client';
+import { GenericPlaybookDefaults } from '../domain/entities/playbook-defaults/generic.config';
 
 describe('AuthService (AC-08, AC-09)', () => {
   let service: AuthService;
@@ -143,6 +144,49 @@ describe('AuthService (AC-08, AC-09)', () => {
       expect(sessionService.create).toHaveBeenCalledWith('merchant-1', {
         userAgent: 'test-agent',
         ipAddress: '127.0.0.1',
+      });
+    });
+
+    it('AC-05: should create new merchant with retail_general industry and playbookConfig on first login', async () => {
+      const mockTokens = { idToken: 'id-token' };
+      const mockUserInfo = { sub: 'new-sub-123', email: 'new@example.com', name: 'New User' };
+      const mockNewMerchant = {
+        id: 'merchant-new',
+        name: 'New User',
+        whatsappNumber: 'new@example.com',
+        apiKey: 'new-key',
+        industry: 'retail_general',
+        playbookConfig: GenericPlaybookDefaults,
+        botPaused: false,
+        status: 'onboarding',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const mockSession = {
+        id: 'session-2',
+        sessionId: 'uuid-session-new',
+        merchantId: 'merchant-new',
+        expiresAt: new Date(Date.now() + 86400000),
+        userAgent: null,
+        ipAddress: null,
+        createdAt: new Date(),
+      };
+
+      jest.spyOn(googleProvider, 'exchangeCodeForTokens').mockResolvedValue(mockTokens);
+      jest.spyOn(googleProvider, 'getUserInfo').mockResolvedValue(mockUserInfo);
+      jest.spyOn(prismaService.merchantIdentity, 'findUnique').mockResolvedValue(null);
+      jest.spyOn(prismaService.merchant, 'findFirst').mockResolvedValue(null);
+      jest.spyOn(prismaService.merchant, 'create').mockResolvedValue(mockNewMerchant as never);
+      jest.spyOn(prismaService.merchantIdentity, 'create').mockResolvedValue({} as never);
+      jest.spyOn(sessionService, 'create').mockResolvedValue(mockSession);
+
+      await service.handleCallback('google', 'code123', 'state-x', 'state-x');
+
+      expect(prismaService.merchant.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          industry: 'retail_general',
+          playbookConfig: expect.objectContaining({ industry: 'retail_general' }),
+        }),
       });
     });
   });
