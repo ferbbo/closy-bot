@@ -3447,8 +3447,6 @@ function ChannelSettings() {
 
 ---
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 ## Channels UI — PR-FE-03 (✅ Implementado)
 
 Página `/dashboard/channels` con lista de canales, health panel, retry webhook, y feature flag gating para multi-channel.
@@ -3582,10 +3580,6 @@ curl -X POST http://localhost:3000/channels/<channel-id>/retry-webhook \
 
 ---
 
-=======
-
----
-
 ## PR-FE-06: Orders API — Torre de Control
 
 > **Auth**: Session Cookie (`closy_session`). Requiere estar autenticado como merchant.
@@ -3661,19 +3655,19 @@ Auth: Session Cookie (dashboard) | Ownership check: variant → product → merc
 ```bash
 # Actualizar precio de variante
 curl -s -X PATCH "http://localhost:3000/api/product-variants/<VARIANT_ID>" \
-  -H "Cookie: closy_session=<tu-session-cookie>" \
+  -H "Cookie: session_id=<tu-session-cookie>" \
   -H "Content-Type: application/json" \
   -d '{"price": 35000}' | jq .
 
 # Actualizar stock de variante
 curl -s -X PATCH "http://localhost:3000/api/product-variants/<VARIANT_ID>" \
-  -H "Cookie: closy_session=<tu-session-cookie>" \
+  -H "Cookie: session_id=<tu-session-cookie>" \
   -H "Content-Type: application/json" \
   -d '{"stock": 8}' | jq .
 
 # Actualizar precio y stock juntos (patch parcial)
 curl -s -X PATCH "http://localhost:3000/api/product-variants/<VARIANT_ID>" \
-  -H "Cookie: closy_session=<tu-session-cookie>" \
+  -H "Cookie: session_id=<tu-session-cookie>" \
   -H "Content-Type: application/json" \
   -d '{"price": 35000, "stock": 15}' | jq .
 ```
@@ -3700,7 +3694,7 @@ Errores: `400` validación (precio negativo, stock float) | `401` sin sesión | 
 
 ```bash
 curl -s -X PATCH "http://localhost:3000/api/products/<PRODUCT_ID>" \
-  -H "Cookie: closy_session=<tu-session-cookie>" \
+  -H "Cookie: session_id=<tu-session-cookie>" \
   -H "Content-Type: application/json" \
   -d '{"name": "Camiseta Premium Blanca"}' | jq .
 ```
@@ -3722,9 +3716,8 @@ Respuesta `200`: producto completo con `variants[]`. Errores: `400` | `401` | `4
 - ✅ **AC-11**: `EditableCell` — validación client-side: precio negativo, stock no entero, nombre vacío
 - ✅ **AC-12**: Optimistic update TanStack Query + rollback on error (catch → setTempValue(originalValue))
 
->>>>>>> 24b87af (feat(orders-ui): REQ-07..20 Torre de Control — orders page + sidebar badge + polling + docs)
-=======
->>>>>>> origin
+---
+
 ## Próximos Pasos
 
 Todos los flujos del MVP Core V1 están implementados. Ver `docs/plan/PR-STACK-core-v1.md` para el estado actualizado.
