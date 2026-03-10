@@ -335,6 +335,7 @@ graph TD
     subgraph "BLOQUE 5 — Dashboard UIs P1"
         PRFE01 --> PRFE03[PR-FE-03 Channels UI]
         PRFE01 --> PRFE04[PR-FE-04 Catalog UI]
+        PRFE04 --> PRFE041[PR-FE-04.1 Catalog Inline Edit]
         PRFE01 --> PRFE05[PR-FE-05 Settings UI]
         PRFE01 --> PRFE06[PR-FE-06 Orders UI]
         PR05 --> PRFE06
@@ -1115,6 +1116,61 @@ graph TD
 - **Incluye:** página `/dashboard/catalog`, drag & drop CSV upload, tabla productos, import stats.
 - **Excluye:** CRUD individual, editor variantes.
 
+##### PR-FE-04.1 — Dashboard: Catalog Inline Edit (productos + variantes) 🔵 READY
+- **Objetivo:** Permitir edición inline de productos y variantes (name, precio, stock) desde la tabla del catálogo, sin re-importar CSV.
+- **Scope:** MVP
+- **Depende de:** PR-FE-04 ✅.
+- **Incluye:**
+
+  **Backend (NestJS):**
+  - `UpdateVariantDto`: `price?: number (>=0)`, `stock?: number (>=0, integer)`, `isActive?: boolean`
+  - Endpoint `PATCH /api/product-variants/:id`:
+    - Valida ownership (`variant.product.merchantId === session.merchantId`)
+    - Actualiza solo campos enviados
+    - Retorna variante actualizada
+  - Repository: `ProductRepository.updateVariantById(id, data)` — nuevo método (no `upsertVariant` que usa SKU)
+  - Tests unit + e2e
+  - Actualizar `BACKEND-EXECUTION-GUIDE.md` con cURL example
+
+  **Frontend (Next.js + Tailwind):**
+  - `EditableCell` component genérico:
+    - Click → transforma a `<input>` con valor actual
+    - Blur → guarda (PATCH) si valor cambió, vuelve a solo lectura
+    - Props: `value`, `type: 'text' | 'number'`, `onSave()`, `maxLength?`, `min?`
+  - Integración en `products-table.tsx`:
+    - Columna "Producto" (name): editable → `PATCH /api/products/:id`
+    - Columna "Precio": editable → `PATCH /api/product-variants/:id` (primera variante)
+    - Columna "Stock": editable → `PATCH /api/product-variants/:id` (primera variante)
+  - Validación client-side:
+    - Name: string, 1-100 chars
+    - Precio: number >= 0
+    - Stock: integer >= 0
+  - UX:
+    - Signos ($ / u.) permanecen estáticos, solo edita el número
+    - Si valor no cambió → no PATCH
+    - Loading state mientras guarda
+    - Error toast si falla
+  - Tests: validación, no-op si mismo valor
+
+- **Excluye:** crear/eliminar productos desde UI, crear/eliminar variantes, editar categoría/SKU/descripción, batch edit.
+- **DoD específico:**
+  - Click en celda Name → input → blur → `PATCH /api/products/:id` si cambió
+  - Click en celda Precio → input → blur → `PATCH /api/product-variants/:id` si cambió
+  - Click en celda Stock → input → blur → `PATCH /api/product-variants/:id` si cambió
+  - Validación rechaza valores inválidos (toast error)
+  - No se hace refetch completo de productos después de cada edit
+  - cURL example funciona: `curl -X PATCH .../api/product-variants/xxx -d '{"price":15000}'`
+  - `pnpm lint`, `pnpm test`, `pnpm build` pasan
+- **Consumer experience:**
+  - UI: click en celda → edita directamente → blur guarda
+  - cURL: `curl -X PATCH -H "Cookie: ..." /api/product-variants/:id -d '{"stock":50}'`
+  - Auth: Session Cookie (consistente con otros endpoints dashboard)
+- **Tech notes:**
+  - `upsertVariant(productId, sku, data)` NO sirve — usa SKU como key (para import CSV). Nuevo: `updateVariantById(id, data)` por ID directo.
+  - Frontend: optimistic update con rollback on error (TanStack Query mutation)
+  - Backend: reusa `MerchantAuthGuard` (Session Cookie)
+  - Ownership check via JOIN: `variant → product → merchantId`
+
 ##### PR-FE-05 — Dashboard: Playbook Settings UI ✅ MERGED
 - **Depende de:** PR-FE-01, PR-15.
 - **Incluye:** página `/dashboard/settings`, form secciones (Profile, Messages, Rules, Guidelines).
@@ -1224,7 +1280,7 @@ graph TD
 | 2. Operación | P0 | PR-07, PR-05.2, PR-08 | Bloque 1 | Bloque 3 |
 | 3. Dashboard Base | P1 | PR-FE-00, PR-15, PR-16, PR-17, PR-FE-01 | Infra mergeada ✅ | Bloques 1-2 |
 | 4. Onboarding | P1 | PR-OB-01, PR-FE-OB, **PR-FE-OB-2**, **PR-GAP-3** | PR-04.5 + PR-FE-01 | — |
-| 5. Dashboard UIs | P1 | PR-FE-03, PR-FE-04, PR-FE-05, **PR-FE-06**, PR-FE-02 | PR-FE-01 + APIs backend | — |
+| 5. Dashboard UIs | P1 | PR-FE-03, PR-FE-04, **PR-FE-04.1**, PR-FE-05, **PR-FE-06**, PR-FE-02 | PR-FE-01 + APIs backend | — |
 | 6. Mejoras | P2 | PR-09, PR-10, PR-14.1 | Bloques 1-2 | — |
 | 7. Template Formalization | P2 | PR-20, PR-21, PR-22, PR-24, PR-25 | Bloques 1-2 | Bloque 6 |
 

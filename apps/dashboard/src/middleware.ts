@@ -4,7 +4,6 @@ import type { NextRequest } from 'next/server';
 // Paths that skip auth check completely (API rewrites + public assets)
 const PUBLIC_PATHS = [
   '/login',
-  '/api',
   '/_next',
   '/favicon.ico'
 ];
@@ -57,6 +56,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|auth|channels|onboarding/progress|onboarding/whatsapp/start).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|auth|channels|onboarding/progress|onboarding/whatsapp/start\api/).*)'],
 };
 
