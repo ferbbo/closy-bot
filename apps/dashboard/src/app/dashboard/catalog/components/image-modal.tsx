@@ -40,12 +40,12 @@ export function ImageModal({ product, open, onClose }: ImageModalProps) {
 
   async function handleUpload() {
     if (!pendingFile) return;
-    await uploadImage.mutateAsync({ productId: product.id, file: pendingFile });
+    await uploadImage.mutateAsync({ productId: product.id, file: pendingFile }).catch(() => {});
     handleClose();
   }
 
   async function handleDelete() {
-    await deleteImage.mutateAsync({ productId: product.id });
+    await deleteImage.mutateAsync({ productId: product.id }).catch(() => {});
     handleClose();
   }
 
