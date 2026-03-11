@@ -137,7 +137,25 @@ Las variables R2 son **opcionales** en Joi: la API arranca normalmente sin ellas
 
 ---
 
-## 7. Local Development — MinIO
+## 7. Local Development
+
+> **Opción recomendada: usa R2 directamente.** El bucket R2 funciona en desarrollo igual que en producción — no hay razón para no usarlo si tienes credenciales. MinIO es solo para casos específicos.
+
+### Opción A — R2 directo (recomendada)
+
+Si ya seguiste los pasos 1–6, ya tienes todo listo. Solo asegúrate de que las variables R2 estén en tu `.env` local y listo.
+
+**Úsala cuando:**
+- Tienes conexión a internet (casi siempre)
+- Quieres entorno idéntico a producción
+- Ya tienes credenciales Cloudflare
+
+### Opción B — MinIO local (solo si no puedes usar R2)
+
+Usa MinIO únicamente si:
+- Desarrollas **offline** (sin internet)
+- Eres un dev nuevo **sin acceso aún** a las credenciales R2 del equipo
+- Necesitas correr **tests de integración en CI** sin tocar infra real
 
 Para desarrollar PR-18 sin cuenta Cloudflare real, puedes usar **MinIO** como emulador S3-compatible local.
 
