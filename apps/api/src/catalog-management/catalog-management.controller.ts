@@ -12,6 +12,7 @@ import {
   UploadedFile,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   PayloadTooLargeException,
   Logger,
   HttpCode,
@@ -20,9 +21,11 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
+import { randomBytes } from 'crypto';
 import { Merchant } from '@prisma/client';
 import type { ProductVariant } from '@prisma/client';
 import { MerchantAuthGuard } from '../common/guards/merchant-auth.guard';
+import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
 import { CurrentMerchant } from '../common/decorators/merchant.decorator';
 import { ImportService } from '../services/import.service';
 import { CatalogService } from '../services/catalog.service';
@@ -37,8 +40,12 @@ import {
   ProductListQueryDto,
   ImportResponseDto,
   ImportCsvDto,
+  UploadImageResponseDto,
 } from './dto/catalog.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
+import { StorageService } from '../storage/storage.service';
+import { ImageProcessorService } from '../storage/image/image-processor.service';
+import { ImageValidatorService } from '../storage/image/image-validator.service';
 
 /**
  * CatalogManagementController handles merchant catalog operations
@@ -54,6 +61,9 @@ export class CatalogManagementController {
     private readonly catalogService: CatalogService,
     private readonly productRepository: ProductRepository,
     private readonly categoryRepository: CategoryRepository,
+    private readonly storageService: StorageService,
+    private readonly imageProcessorService: ImageProcessorService,
+    private readonly imageValidatorService: ImageValidatorService,
   ) {}
 
   /**
@@ -326,6 +336,106 @@ export class CatalogManagementController {
 
     this.logger.log(`Variant updated: ${updated.id}`);
     return updated;
+  }
+
+  // ─── Product Image Endpoints (PR-18) ────────────────────────────────────────
+
+  /**
+   * Upload / replace the primary image for a product.
+   * POST /api/products/:productId/image
+   *
+   * Auth: Session Cookie only (dashboard — not API key).
+   * Body: multipart/form-data, field name "image" (JPEG / PNG / WebP, ≤5 MB).
+   * Response: { imageKey, imageUrl }
+   *
+   * Security notes:
+   *  - @UseGuards(SessionAuthGuard) is listed BEFORE @UseInterceptors(FileInterceptor)
+   *    to make the guard order explicit (guards always execute before interceptors
+   *    in the NestJS lifecycle regardless of decorator order).
+   *  - Magic bytes validation prevents MIME-type spoofing (OWASP A03).
+   *  - Ownership check prevents cross-merchant access (OWASP A01).
+   */
+  @Post('products/:productId/image')
+  @UseGuards(SessionAuthGuard)
+  @UseInterceptors(FileInterceptor('image'))
+  async uploadProductImage(
+    @CurrentMerchant() merchant: Merchant,
+    @Param('productId') productId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<UploadImageResponseDto> {
+    if (!file) {
+      throw new BadRequestException('Image file is required (field name: image)');
+    }
+
+    // Ownership check (OWASP A01)
+    const product = await this.productRepository.findById(productId);
+    if (!product || product.merchantId !== merchant.id) {
+      throw new ForbiddenException('Product not found or access denied');
+    }
+
+    // Validate MIME + magic bytes + size (OWASP A03)
+    this.imageValidatorService.validateImageFile(
+      file.buffer,
+      file.mimetype,
+      file.size,
+    );
+
+    // Process: resize ≤1200px width, convert to WebP quality 80
+    const webpBuffer = await this.imageProcessorService.processProductImage(file.buffer);
+
+    // If product already has an image, delete the old one first (no accumulation)
+    if (product.imageKey) {
+      this.logger.debug(`Deleting previous image: ${product.imageKey}`);
+      await this.storageService.delete(product.imageKey);
+    }
+
+    // Build R2 key: {merchantId}/products/{productId}/{timestamp}-{hash}.webp
+    const hash = randomBytes(6).toString('hex');
+    const key = `${merchant.id}/products/${productId}/${Date.now()}-${hash}.webp`;
+
+    // Upload to R2
+    const imageUrl = await this.storageService.upload(key, webpBuffer, 'image/webp');
+
+    // Persist key + url to DB
+    await this.productRepository.update(productId, { imageKey: key, imageUrl });
+
+    this.logger.log(`Product image uploaded: productId=${productId}`);
+
+    return { imageKey: key, imageUrl };
+  }
+
+  /**
+   * Delete the primary image for a product.
+   * DELETE /api/products/:productId/image
+   *
+   * Auth: Session Cookie only (dashboard).
+   * Response: 204 No Content (silent if no image was set).
+   */
+  @Delete('products/:productId/image')
+  @UseGuards(SessionAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteProductImage(
+    @CurrentMerchant() merchant: Merchant,
+    @Param('productId') productId: string,
+  ): Promise<void> {
+    // Ownership check (OWASP A01)
+    const product = await this.productRepository.findById(productId);
+    if (!product || product.merchantId !== merchant.id) {
+      throw new ForbiddenException('Product not found or access denied');
+    }
+
+    // Silent 204 if no image: REQ-05 edge case
+    if (!product.imageKey) {
+      return;
+    }
+
+    // Delete from R2
+    await this.storageService.delete(product.imageKey);
+
+    // Clear fields in DB
+    await this.productRepository.update(productId, { imageKey: null, imageUrl: null });
+
+    this.logger.log(`Product image deleted: productId=${productId}`);
   }
 
   // ─── Private helpers ────────────────────────────────────────────────────────
