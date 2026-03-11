@@ -890,7 +890,7 @@ graph TD
   - Tests unit + e2e
   - Actualizar `BACKEND-EXECUTION-GUIDE.md`
 - **Excluye:** UI/frontend, historial de cambios.
-- **DoD específico:**
+- **DoD específico:**PR-18-product-images-r2
   - CRUD playbook funciona con deep merge
   - Sin auth → 401, validación fallida → 400
   - `pnpm lint`, `pnpm test` pasan
@@ -1277,9 +1277,11 @@ graph TD
   - Ownership check via JOIN: `variant → product → merchantId`
 
 ##### PR-FE-04.2 — Dashboard: Catalog Image Upload 🔵 READY
+- **Issue:** [#126](https://github.com/ferbbo/closy-bot/issues/126)
+- **Brief:** [`docs/plan/pr-briefs/PR-FE-04.2-catalog-image-upload.md`](../blob/main/docs/plan/pr-briefs/PR-FE-04.2-catalog-image-upload.md)
 - **Scope:** MVP
 - **Objetivo:** UI para upload, preview, y eliminación de imagen de producto en la tabla de catálogo.
-- **Depende de:** PR-FE-04 ✅ (Catalog UI), PR-18 (Product Images API).
+- **Depende de:** PR-FE-04 ✅ (Catalog UI), PR-18 ✅ (Product Images API).
 - **Incluye:**
 
   **A) Image Upload Component:**
