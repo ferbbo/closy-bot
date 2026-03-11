@@ -1221,7 +1221,7 @@ graph TD
 - **Incluye:** página `/dashboard/catalog`, drag & drop CSV upload, tabla productos, import stats.
 - **Excluye:** CRUD individual, editor variantes.
 
-##### PR-FE-04.1 — Dashboard: Catalog Inline Edit (productos + variantes) 🔵 READY
+##### PR-FE-04.1 — Dashboard: Catalog Inline Edit (productos + variantes) ✅ MERGED
 - **Objetivo:** Permitir edición inline de productos y variantes (name, precio, stock) desde la tabla del catálogo, sin re-importar CSV.
 - **Scope:** MVP
 - **Depende de:** PR-FE-04 ✅.
