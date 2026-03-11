@@ -13,8 +13,7 @@ const MAX_SIZE_BYTES = 5 * 1024 * 1024;
  */
 const MAGIC_BYTES = {
   jpeg: (b: Buffer) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
-  png: (b: Buffer) =>
-    b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
+  png: (b: Buffer) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
   webp: (b: Buffer) =>
     b[0] === 0x52 &&
     b[1] === 0x49 &&

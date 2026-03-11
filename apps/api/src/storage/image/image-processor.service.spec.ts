@@ -43,9 +43,9 @@ describe('ImageProcessorService', () => {
 
     it('should throw InternalServerErrorException when sharp processing fails', async () => {
       mockToBuffer.mockRejectedValueOnce(new Error('Corrupt image data'));
-      await expect(
-        service.processProductImage(Buffer.from('bad-data')),
-      ).rejects.toThrow(InternalServerErrorException);
+      await expect(service.processProductImage(Buffer.from('bad-data'))).rejects.toThrow(
+        InternalServerErrorException,
+      );
     });
   });
 });

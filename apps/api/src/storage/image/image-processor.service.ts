@@ -33,9 +33,7 @@ export class ImageProcessorService {
         .webp({ quality: WEBP_QUALITY })
         .toBuffer();
 
-      this.logger.debug(
-        `Image processed: ${buffer.length} bytes → ${result.length} bytes (WebP)`,
-      );
+      this.logger.debug(`Image processed: ${buffer.length} bytes → ${result.length} bytes (WebP)`);
 
       return result;
     } catch (err) {

@@ -374,11 +374,7 @@ export class CatalogManagementController {
     }
 
     // Validate MIME + magic bytes + size (OWASP A03)
-    this.imageValidatorService.validateImageFile(
-      file.buffer,
-      file.mimetype,
-      file.size,
-    );
+    this.imageValidatorService.validateImageFile(file.buffer, file.mimetype, file.size);
 
     // Process: resize ≤1200px width, convert to WebP quality 80
     const webpBuffer = await this.imageProcessorService.processProductImage(file.buffer);
@@ -454,29 +450,41 @@ export class CatalogManagementController {
 
     // 1. Null bytes → binary content
     if (sample.includes(0x00)) {
-      throw new BadRequestException('File does not appear to be a valid CSV (binary content detected).');
+      throw new BadRequestException(
+        'File does not appear to be a valid CSV (binary content detected).',
+      );
     }
 
     // 2. Magic-byte signatures
-    const isExeOrDll  = sample[0] === 0x4d && sample[1] === 0x5a;                                                         // MZ  → EXE/DLL
-    const isZip       = sample[0] === 0x50 && sample[1] === 0x4b && sample[2] === 0x03 && sample[3] === 0x04;              // PK  → ZIP/DOCX/XLSX
-    const isPdf       = sample[0] === 0x25 && sample[1] === 0x50 && sample[2] === 0x44 && sample[3] === 0x46;              // %PDF
-    const isPng       = sample[0] === 0x89 && sample[1] === 0x50 && sample[2] === 0x4e && sample[3] === 0x47;              // PNG
-    const isJpeg      = sample[0] === 0xff && sample[1] === 0xd8 && sample[2] === 0xff;                                    // JPEG
-    const isElf       = sample[0] === 0x7f && sample[1] === 0x45 && sample[2] === 0x4c && sample[3] === 0x46;              // ELF
-    const isGif       = sample[0] === 0x47 && sample[1] === 0x49 && sample[2] === 0x46;                                    // GIF
-    const isBmp       = sample[0] === 0x42 && sample[1] === 0x4d;                                                          // BMP
+    const isExeOrDll = sample[0] === 0x4d && sample[1] === 0x5a; // MZ  → EXE/DLL
+    const isZip =
+      sample[0] === 0x50 && sample[1] === 0x4b && sample[2] === 0x03 && sample[3] === 0x04; // PK  → ZIP/DOCX/XLSX
+    const isPdf =
+      sample[0] === 0x25 && sample[1] === 0x50 && sample[2] === 0x44 && sample[3] === 0x46; // %PDF
+    const isPng =
+      sample[0] === 0x89 && sample[1] === 0x50 && sample[2] === 0x4e && sample[3] === 0x47; // PNG
+    const isJpeg = sample[0] === 0xff && sample[1] === 0xd8 && sample[2] === 0xff; // JPEG
+    const isElf =
+      sample[0] === 0x7f && sample[1] === 0x45 && sample[2] === 0x4c && sample[3] === 0x46; // ELF
+    const isGif = sample[0] === 0x47 && sample[1] === 0x49 && sample[2] === 0x46; // GIF
+    const isBmp = sample[0] === 0x42 && sample[1] === 0x4d; // BMP
 
     if (isExeOrDll || isZip || isPdf || isPng || isJpeg || isElf || isGif || isBmp) {
-      throw new BadRequestException('File does not appear to be a valid CSV (binary format detected).');
+      throw new BadRequestException(
+        'File does not appear to be a valid CSV (binary format detected).',
+      );
     }
 
     // 3. JSON detection — text-based, no magic bytes.
     // Find first non-whitespace byte and check for { (0x7B) or [ (0x5B).
     // A valid CSV header can never start with these characters.
-    const firstSignificant = sample.find((b) => b !== 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0d);
+    const firstSignificant = sample.find(
+      (b) => b !== 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0d,
+    );
     if (firstSignificant === 0x7b || firstSignificant === 0x5b) {
-      throw new BadRequestException('File does not appear to be a valid CSV (JSON format detected).');
+      throw new BadRequestException(
+        'File does not appear to be a valid CSV (JSON format detected).',
+      );
     }
   }
 
@@ -498,7 +506,8 @@ export class CatalogManagementController {
       );
     }
 
-    const xssPattern = /<\s*(script|img|svg|iframe|object|embed|link|style|base|form|input|button|a)[^>]*>/i;
+    const xssPattern =
+      /<\s*(script|img|svg|iframe|object|embed|link|style|base|form|input|button|a)[^>]*>/i;
     if (xssPattern.test(csvContent)) {
       throw new BadRequestException(
         'CSV contains potentially dangerous content (HTML/script tags detected).',
