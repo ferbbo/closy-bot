@@ -176,6 +176,8 @@ export interface Product {
   description?: string;
   brand?: string;
   imageUrls: string[];
+  imageKey?: string;
+  imageUrl?: string;
   categoryId: string;
   category: {
     id: string;
@@ -185,6 +187,12 @@ export interface Product {
   variants: ProductVariant[];
   createdAt: string;
   updatedAt: string;
+}
+
+// PR-FE-04.2: Image upload response
+export interface UploadImageResponse {
+  imageKey: string;
+  imageUrl: string;
 }
 
 export interface ImportError {
@@ -274,6 +282,23 @@ export interface UpdateOrderStatusResponse {
   updatedAt: string;
 }
 
+async function apiFetchVoid(
+  path: string,
+  options?: RequestInit,
+): Promise<void> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(
+      res.status,
+      (body as { message?: string }).message ?? `API Error: ${res.status}`,
+    );
+  }
+}
+
 async function apiFetchMultipart<T>(
   path: string,
   formData: FormData,
@@ -338,6 +363,15 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
+
+  // Product image upload / delete (PR-FE-04.2)
+  uploadProductImage: (productId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    return apiFetchMultipart<UploadImageResponse>(`/api/products/${productId}/image`, formData);
+  },
+  deleteProductImage: (productId: string) =>
+    apiFetchVoid(`/api/products/${productId}/image`, { method: 'DELETE' }),
 
   // Payment methods config (PR-04.5)
   savePaymentConfig: (body: PaymentMethodsConfig) =>
