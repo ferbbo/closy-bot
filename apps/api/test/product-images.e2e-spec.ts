@@ -25,14 +25,17 @@ import { Merchant, Product } from '@prisma/client';
 // ─── Minimal valid JPEG magic bytes (3 bytes) ────────────────────────────────
 function makeJpegBuffer(extraBytes = 200): Buffer {
   const buf = Buffer.alloc(3 + extraBytes, 0x00);
-  buf[0] = 0xff; buf[1] = 0xd8; buf[2] = 0xff;
+  buf[0] = 0xff;
+  buf[1] = 0xd8;
+  buf[2] = 0xff;
   return buf;
 }
 
 // ─── EXE (MZ) header disguised as JPEG ───────────────────────────────────────
 function makeExeBuffer(extraBytes = 200): Buffer {
   const buf = Buffer.alloc(4 + extraBytes, 0x00);
-  buf[0] = 0x4d; buf[1] = 0x5a; // MZ
+  buf[0] = 0x4d;
+  buf[1] = 0x5a; // MZ
   return buf;
 }
 
@@ -48,7 +51,6 @@ describe('Product Images API (e2e) — PR-18', () => {
   let merchantA: Merchant;
   let merchantB: Merchant;
   let productA: Product;
-  let productB: Product;
   let sessionIdA: string;
   let sessionIdB: string;
 
@@ -69,9 +71,7 @@ describe('Product Images API (e2e) — PR-18', () => {
 
     app = moduleFixture.createNestApplication();
     app.use(cookieParser());
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, transform: true }),
-    );
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
     await app.init();
 
     prisma = app.get<PrismaService>(PrismaService);
@@ -125,7 +125,7 @@ describe('Product Images API (e2e) — PR-18', () => {
         categoryId: catA.id,
       },
     });
-    productB = await prisma.product.create({
+    await prisma.product.create({
       data: {
         name: 'Product B Image Test',
         merchantId: merchantB.id,
@@ -309,9 +309,7 @@ describe('Product Images API (e2e) — PR-18', () => {
     });
 
     it('should return 401 without session cookie', async () => {
-      await request(app.getHttpServer())
-        .delete(`/api/products/${productA.id}/image`)
-        .expect(401);
+      await request(app.getHttpServer()).delete(`/api/products/${productA.id}/image`).expect(401);
     });
   });
 });

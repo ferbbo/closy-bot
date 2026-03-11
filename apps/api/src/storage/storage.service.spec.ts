@@ -2,11 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { InternalServerErrorException } from '@nestjs/common';
 import { StorageService } from './storage.service';
-import {
-  S3Client,
-  PutObjectCommand,
-  DeleteObjectCommand,
-} from '@aws-sdk/client-s3';
+import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 // ─── Mock @aws-sdk/client-s3 ────────────────────────────────────────────────
 const mockSend = jest.fn();
@@ -35,10 +31,7 @@ describe('StorageService', () => {
   beforeEach(async () => {
     mockSend.mockReset();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        StorageService,
-        { provide: ConfigService, useValue: createConfigService() },
-      ],
+      providers: [StorageService, { provide: ConfigService, useValue: createConfigService() }],
     }).compile();
     service = module.get<StorageService>(StorageService);
   });
@@ -48,7 +41,11 @@ describe('StorageService', () => {
     it('should call PutObjectCommand with correct params and return public URL', async () => {
       mockSend.mockResolvedValueOnce({});
       const buffer = Buffer.from('fake-image-data');
-      const url = await service.upload('merchants/abc/products/xyz/1-abc.webp', buffer, 'image/webp');
+      const url = await service.upload(
+        'merchants/abc/products/xyz/1-abc.webp',
+        buffer,
+        'image/webp',
+      );
 
       expect(mockSend).toHaveBeenCalledTimes(1);
       const [cmd] = mockSend.mock.calls[0];
