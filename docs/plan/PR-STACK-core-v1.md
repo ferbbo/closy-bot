@@ -327,6 +327,8 @@ graph TD
         PR15[PR-15 Settings API]
         PR16[PR-16 Channel List]
         PR17[PR-17 File Upload]
+        PRINFRAR2[PR-INFRA-R2 R2 Setup] --> PR18[PR-18 Product Images API]
+        PR17 --> PR18
     end
     subgraph "BLOQUE 4 — Onboarding P1"
         PROB01[PR-OB-01 Wizard API] --> PRFEOB[PR-FE-OB Wizard UI]
@@ -336,6 +338,8 @@ graph TD
         PRFE01 --> PRFE03[PR-FE-03 Channels UI]
         PRFE01 --> PRFE04[PR-FE-04 Catalog UI]
         PRFE04 --> PRFE041[PR-FE-04.1 Catalog Inline Edit]
+        PRFE04 --> PRFE042[PR-FE-04.2 Catalog Image Upload]
+        PR18 --> PRFE042
         PRFE01 --> PRFE05[PR-FE-05 Settings UI]
         PRFE01 --> PRFE06[PR-FE-06 Orders UI]
         PR05 --> PRFE06
@@ -831,6 +835,41 @@ graph TD
 
 > Torre de control para el merchant. APIs backend pueden empezar en paralelo con Bloques 1-2.
 
+#### Fase 3.0 (infraestructura — paralelo)
+
+##### PR-INFRA-R2 — Cloudflare R2 Setup: Development & Production 🔵 READY
+- **Scope:** MVP
+- **Objetivo:** Documentación y configuración de Cloudflare R2 para almacenamiento de imágenes de productos.
+- **Depende de:** Ninguno (puede ejecutarse en paralelo).
+- **Incluye:**
+  - Documentación (`docs/setup/cloudflare-r2-setup.md`):
+    - Paso a paso para crear bucket R2
+    - Generación de API credentials (Access Key + Secret)
+    - Configuración de public access / custom domain
+    - CORS configuration para dashboard
+  - Local Development:
+    - Opción 1: Bucket R2 de desarrollo (separado de prod)
+    - Opción 2: LocalStack/MinIO para testing offline
+  - Environment Configuration:
+    - `.env.example` update con `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`
+    - `env.validation.ts` update con Joi schemas
+  - CDN Configuration:
+    - Custom domain setup (`cdn.closy.bot`)
+    - Cache rules recomendadas
+    - CORS headers para dashboard origin
+  - Security Best Practices:
+    - Bucket privado por default, public access solo via CDN
+    - Rotación de credentials
+- **Excluye:** Terraform/IaC automation, multi-region replication.
+- **DoD específico:**
+  - Developer puede seguir docs y tener R2 funcional en <30 min
+  - Variables de entorno documentadas y validadas
+  - CORS permite requests desde localhost:3001
+- **Tech notes:**
+  - R2 usa API S3-compatible (endpoint: `{accountId}.r2.cloudflarestorage.com`)
+  - Free tier: 10GB storage + 10M requests/month (suficiente para MVP)
+  - Public access via "R2.dev subdomain" o custom domain
+
 #### Fase 3.1 (paralelizable — APIs backend sin dependencias de Bloque 1-2)
 
 ##### PR-15 — Merchant Settings API: Playbook Config + Profile Update ✅ MERGED
@@ -884,6 +923,72 @@ graph TD
   - cURL funciona: `curl -F "file=@catalog.csv" ...`
   - `.csv` válido → 200 + stats; no-CSV → 400; >5MB → 413
   - `pnpm lint`, `pnpm test` pasan
+
+##### PR-18 — Product Images API: R2 Storage + Upload/Delete 🔵 READY
+- **Scope:** MVP
+- **Objetivo:** Endpoint para upload y delete de imagen de producto, con validación de seguridad, procesamiento con sharp, y storage en Cloudflare R2.
+- **Depende de:** PR-03.7 ✅ (Catalog Management API), PR-12 ✅ (Auth OIDC), PR-INFRA-R2.
+- **Incluye:**
+
+  **A) Storage Module (`apps/api/src/storage/`):**
+  - `StorageService` con métodos:
+    - `upload(key: string, buffer: Buffer, contentType: string): Promise<string>`
+    - `delete(key: string): Promise<void>`
+  - Usa `@aws-sdk/client-s3` para compatibilidad R2
+  - Config: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`
+
+  **B) Image Processing:**
+  - `ImageProcessorService` usando `sharp`:
+    - `processProductImage(buffer: Buffer): Promise<Buffer>`
+    - Resize max 1200px width, quality 80, output WebP
+  - Dependencia nueva: `sharp`
+
+  **C) Security Validation:**
+  - `ImageValidatorService`:
+    - `validateImageFile(buffer, mimeType, size)` throws si inválido
+    - MIME whitelist: `image/jpeg`, `image/png`, `image/webp`
+    - Magic bytes check (file signature verification)
+    - Size ≤5MB
+
+  **D) API Endpoints:**
+  - `POST /api/products/:productId/image` — upload/replace
+  - `DELETE /api/products/:productId/image` — delete
+  - Guard: `SessionAuthGuard` (Session Cookie)
+  - Ownership check: `product.merchantId === session.merchantId`
+
+  **E) Schema Update (migración Prisma):**
+  - Agregar `imageKey` y `imageUrl` a `Product`
+  - `imageUrls[]` marcado como deprecated (sin borrar)
+
+  **F) Tests:**
+  - Unit: ImageValidatorService (valid/invalid files, magic bytes)
+  - Unit: ImageProcessorService (resize/compress)
+  - E2E: Upload happy path, ownership check, invalid file
+  - E2E: Delete happy path, not found
+
+  - Actualizar `BACKEND-EXECUTION-GUIDE.md`
+  - Actualizar `.env.example` con R2 env vars
+  - Actualizar `env.validation.ts`
+
+- **Excluye:** múltiples imágenes por producto, upload a ProductVariant, presigned URLs, image transformations on-the-fly.
+- **DoD específico:**
+  - cURL upload funciona: `curl -F "image=@photo.jpg" .../api/products/:id/image`
+  - JPEG 3MB → WebP optimizado ~300KB
+  - Archivo .exe renombrado a .jpg → 400 Bad Request
+  - Producto de otro merchant → 403 Forbidden
+  - `imageKey` + `imageUrl` se persisten en DB
+  - Imagen vieja se elimina de R2 al reemplazar
+  - `pnpm lint`, `pnpm test`, `npx tsc --noEmit` pasan
+- **Consumer experience:**
+  - cURL: `curl -X POST -F "image=@product.jpg" http://localhost:3000/api/products/{id}/image -H "Cookie: session=..."`
+  - Auth: Session Cookie (consistente con dashboard endpoints)
+  - Response: `{ imageKey, imageUrl }` para uso inmediato
+- **Tech notes:**
+  - `@aws-sdk/client-s3` porque R2 es S3-compatible
+  - `sharp` es la lib estándar Node para image processing
+  - WebP output: ~30% menor que JPEG equivalente, soportado por WhatsApp
+  - Bucket structure: `{merchantId}/products/{productId}/{timestamp}-{hash}.webp`
+  - El timestamp en filename evita cache stale al reemplazar
 
 #### Fase 3.2
 
@@ -1170,6 +1275,61 @@ graph TD
   - Frontend: optimistic update con rollback on error (TanStack Query mutation)
   - Backend: reusa `MerchantAuthGuard` (Session Cookie)
   - Ownership check via JOIN: `variant → product → merchantId`
+
+##### PR-FE-04.2 — Dashboard: Catalog Image Upload 🔵 READY
+- **Scope:** MVP
+- **Objetivo:** UI para upload, preview, y eliminación de imagen de producto en la tabla de catálogo.
+- **Depende de:** PR-FE-04 ✅ (Catalog UI), PR-18 (Product Images API).
+- **Incluye:**
+
+  **A) Image Upload Component:**
+  - `ProductImageUpload` component:
+    - Click para abrir file picker
+    - Drag & drop support
+    - Preview de imagen seleccionada antes de upload
+    - Progress indicator durante upload
+    - Error states con mensajes claros
+
+  **B) Tabla de Catálogo:**
+  - Nueva columna "Imagen" en `products-table.tsx`
+  - Thumbnail 48x48 si tiene imagen, placeholder si no
+  - Click en thumbnail abre modal de imagen
+  - Botón "Cambiar" / "Subir" según estado
+
+  **C) Modal de Imagen:**
+  - Preview a tamaño completo
+  - Botón "Subir nueva imagen"
+  - Botón "Eliminar imagen" (con confirmación)
+  - Validación client-side: extensión, tamaño ~5MB
+
+  **D) Integración API:**
+  - `useProductImage()` hook con TanStack Query mutations
+  - `uploadImage(productId, file)` → `POST /api/products/:id/image`
+  - `deleteImage(productId)` → `DELETE /api/products/:id/image`
+  - Invalidación de product list después de operación
+
+  **E) UX:**
+  - Toast de éxito/error
+  - Loading skeleton mientras carga thumbnail
+  - Placeholder para productos sin imagen
+  - Responsive (móvil-friendly)
+
+- **Excluye:** crop/rotate, múltiples imágenes, reordering.
+- **DoD específico:**
+  - Click "Subir imagen" → file picker → preview → upload → thumbnail aparece
+  - Drag & drop funciona en zona de upload
+  - Imagen >5MB → error claro sin submit
+  - Delete con confirmación funciona
+  - Loading states visibles
+  - `pnpm lint`, `pnpm build` pasan
+- **Consumer experience:**
+  - UI: drag & drop o click → preview → confirm → imagen visible en tabla
+  - Errores: mensajes en español, actionables
+- **Tech notes:**
+  - File input `accept="image/jpeg,image/png,image/webp"`
+  - Preview usa `URL.createObjectURL()` para instant feedback
+  - Upload via FormData con fetch (no necesita lib extra)
+  - No optimistic update (esperar respuesta con URL real)
 
 ##### PR-FE-05 — Dashboard: Playbook Settings UI ✅ MERGED
 - **Depende de:** PR-FE-01, PR-15.
