@@ -1,10 +1,13 @@
 'use client';
 
+import React, { useState } from 'react';
+import { ImageIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { EditableCell } from '@/components/ui/editable-cell';
 import { cn } from '@/lib/utils';
 import type { Product } from '@/lib/api';
 import { useUpdateProduct, useUpdateVariant } from '@/hooks/use-catalog-mutations';
+import { ImageModal } from './image-modal';
 
 interface ProductsTableProps {
   products: Product[];
@@ -21,6 +24,8 @@ const formatPrice = (value: string | number) =>
 export function ProductsTable({ products }: ProductsTableProps) {
   const updateProduct = useUpdateProduct();
   const updateVariant = useUpdateVariant();
+  // AC-08: track which product's ImageModal is open
+  const [openImageModalId, setOpenImageModalId] = useState<string | null>(null);
 
   return (
     <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
@@ -29,6 +34,10 @@ export function ProductsTable({ products }: ProductsTableProps) {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
+              {/* AC-08: Image column — desktop only */}
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                Imagen
+              </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Producto
               </th>
@@ -61,6 +70,34 @@ export function ProductsTable({ products }: ProductsTableProps) {
 
               return (
                 <tr key={product.id} className="hover:bg-gray-50 transition-colors">
+                  {/* AC-08: Image thumbnail / placeholder — click opens ImageModal */}
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => setOpenImageModalId(product.id)}
+                      className="focus:outline-none focus:ring-2 focus:ring-primary rounded"
+                      aria-label={product.imageUrl ? 'Ver imagen del producto' : 'Subir imagen del producto'}
+                    >
+                      {product.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          className="w-12 h-12 object-cover rounded border border-gray-200"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 bg-gray-100 rounded border border-dashed border-gray-300 flex items-center justify-center">
+                          <ImageIcon className="h-5 w-5 text-gray-400" />
+                        </div>
+                      )}
+                    </button>
+                    {openImageModalId === product.id && (
+                      <ImageModal
+                        product={product}
+                        open={true}
+                        onClose={() => setOpenImageModalId(null)}
+                      />
+                    )}
+                  </td>
                   {/* AC-07: Name — editable → PATCH /api/products/:id */}
                   <td className="px-4 py-3">
                     <div>
