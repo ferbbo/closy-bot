@@ -56,8 +56,27 @@ INTENT_CONFIDENCE_THRESHOLD_LOW=2    # Score >= 2 -> MED, < 2 -> LOW
 ### 2. Setup Base de Datos
 
 ```bash
-# Levantar PostgreSQL (docker)
-docker-compose up -d postgres
+# Solo postgres
+docker compose up -d postgres
+
+# Solo api (levantará postgres automáticamente por depends_on)
+docker compose up -d api
+
+# Solo dashboard (levantará api y postgres por depends_on)
+docker compose up -d dashboard
+
+## Comandos utiles
+# Ver logs de un servicio específico
+docker compose logs -f postgres
+
+# Detener solo uno
+docker compose stop api
+
+# Reiniciar uno
+docker compose restart dashboard
+
+# Ver estado
+docker compose ps
 
 # Aplicar migraciones
 pnpm db:migrate
