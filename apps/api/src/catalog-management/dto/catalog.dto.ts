@@ -123,3 +123,11 @@ export class ImportCsvDto {
   @IsNotEmpty()
   csv!: string;
 }
+
+/**
+ * Response DTO for product image upload (PR-18)
+ */
+export class UploadImageResponseDto {
+  imageKey!: string;
+  imageUrl!: string;
+}

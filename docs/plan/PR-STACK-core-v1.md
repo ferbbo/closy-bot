@@ -837,7 +837,7 @@ graph TD
 
 #### Fase 3.0 (infraestructura — paralelo)
 
-##### PR-INFRA-R2 — Cloudflare R2 Setup: Development & Production 🔵 READY
+##### PR-INFRA-R2 — Cloudflare R2 Setup: Development & Production ✅ MERGED
 - **Scope:** MVP
 - **Objetivo:** Documentación y configuración de Cloudflare R2 para almacenamiento de imágenes de productos.
 - **Depende de:** Ninguno (puede ejecutarse en paralelo).
@@ -924,7 +924,7 @@ graph TD
   - `.csv` válido → 200 + stats; no-CSV → 400; >5MB → 413
   - `pnpm lint`, `pnpm test` pasan
 
-##### PR-18 — Product Images API: R2 Storage + Upload/Delete 🔵 READY
+##### PR-18 — Product Images API: R2 Storage + Upload/Delete ✅ MERGED
 - **Scope:** MVP
 - **Objetivo:** Endpoint para upload y delete de imagen de producto, con validación de seguridad, procesamiento con sharp, y storage en Cloudflare R2.
 - **Depende de:** PR-03.7 ✅ (Catalog Management API), PR-12 ✅ (Auth OIDC), PR-INFRA-R2.

@@ -12,6 +12,7 @@ import {
   UploadedFile,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   PayloadTooLargeException,
   Logger,
   HttpCode,
@@ -20,9 +21,11 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
+import { randomBytes } from 'crypto';
 import { Merchant } from '@prisma/client';
 import type { ProductVariant } from '@prisma/client';
 import { MerchantAuthGuard } from '../common/guards/merchant-auth.guard';
+import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
 import { CurrentMerchant } from '../common/decorators/merchant.decorator';
 import { ImportService } from '../services/import.service';
 import { CatalogService } from '../services/catalog.service';
@@ -37,8 +40,12 @@ import {
   ProductListQueryDto,
   ImportResponseDto,
   ImportCsvDto,
+  UploadImageResponseDto,
 } from './dto/catalog.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
+import { StorageService } from '../storage/storage.service';
+import { ImageProcessorService } from '../storage/image/image-processor.service';
+import { ImageValidatorService } from '../storage/image/image-validator.service';
 
 /**
  * CatalogManagementController handles merchant catalog operations
@@ -54,6 +61,9 @@ export class CatalogManagementController {
     private readonly catalogService: CatalogService,
     private readonly productRepository: ProductRepository,
     private readonly categoryRepository: CategoryRepository,
+    private readonly storageService: StorageService,
+    private readonly imageProcessorService: ImageProcessorService,
+    private readonly imageValidatorService: ImageValidatorService,
   ) {}
 
   /**
@@ -328,6 +338,102 @@ export class CatalogManagementController {
     return updated;
   }
 
+  // ─── Product Image Endpoints (PR-18) ────────────────────────────────────────
+
+  /**
+   * Upload / replace the primary image for a product.
+   * POST /api/products/:productId/image
+   *
+   * Auth: Session Cookie only (dashboard — not API key).
+   * Body: multipart/form-data, field name "image" (JPEG / PNG / WebP, ≤5 MB).
+   * Response: { imageKey, imageUrl }
+   *
+   * Security notes:
+   *  - @UseGuards(SessionAuthGuard) is listed BEFORE @UseInterceptors(FileInterceptor)
+   *    to make the guard order explicit (guards always execute before interceptors
+   *    in the NestJS lifecycle regardless of decorator order).
+   *  - Magic bytes validation prevents MIME-type spoofing (OWASP A03).
+   *  - Ownership check prevents cross-merchant access (OWASP A01).
+   */
+  @Post('products/:productId/image')
+  @UseGuards(SessionAuthGuard)
+  @UseInterceptors(FileInterceptor('image'))
+  async uploadProductImage(
+    @CurrentMerchant() merchant: Merchant,
+    @Param('productId') productId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<UploadImageResponseDto> {
+    if (!file) {
+      throw new BadRequestException('Image file is required (field name: image)');
+    }
+
+    // Ownership check (OWASP A01)
+    const product = await this.productRepository.findById(productId);
+    if (!product || product.merchantId !== merchant.id) {
+      throw new ForbiddenException('Product not found or access denied');
+    }
+
+    // Validate MIME + magic bytes + size (OWASP A03)
+    this.imageValidatorService.validateImageFile(file.buffer, file.mimetype, file.size);
+
+    // Process: resize ≤1200px width, convert to WebP quality 80
+    const webpBuffer = await this.imageProcessorService.processProductImage(file.buffer);
+
+    // If product already has an image, delete the old one first (no accumulation)
+    if (product.imageKey) {
+      this.logger.debug(`Deleting previous image: ${product.imageKey}`);
+      await this.storageService.delete(product.imageKey);
+    }
+
+    // Build R2 key: {merchantId}/products/{productId}/{timestamp}-{hash}.webp
+    const hash = randomBytes(6).toString('hex');
+    const key = `${merchant.id}/products/${productId}/${Date.now()}-${hash}.webp`;
+
+    // Upload to R2
+    const imageUrl = await this.storageService.upload(key, webpBuffer, 'image/webp');
+
+    // Persist key + url to DB
+    await this.productRepository.update(productId, { imageKey: key, imageUrl });
+
+    this.logger.log(`Product image uploaded: productId=${productId}`);
+
+    return { imageKey: key, imageUrl };
+  }
+
+  /**
+   * Delete the primary image for a product.
+   * DELETE /api/products/:productId/image
+   *
+   * Auth: Session Cookie only (dashboard).
+   * Response: 204 No Content (silent if no image was set).
+   */
+  @Delete('products/:productId/image')
+  @UseGuards(SessionAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteProductImage(
+    @CurrentMerchant() merchant: Merchant,
+    @Param('productId') productId: string,
+  ): Promise<void> {
+    // Ownership check (OWASP A01)
+    const product = await this.productRepository.findById(productId);
+    if (!product || product.merchantId !== merchant.id) {
+      throw new ForbiddenException('Product not found or access denied');
+    }
+
+    // Silent 204 if no image: REQ-05 edge case
+    if (!product.imageKey) {
+      return;
+    }
+
+    // Delete from R2
+    await this.storageService.delete(product.imageKey);
+
+    // Clear fields in DB
+    await this.productRepository.update(productId, { imageKey: null, imageUrl: null });
+
+    this.logger.log(`Product image deleted: productId=${productId}`);
+  }
+
   // ─── Private helpers ────────────────────────────────────────────────────────
 
   /**
@@ -344,29 +450,41 @@ export class CatalogManagementController {
 
     // 1. Null bytes → binary content
     if (sample.includes(0x00)) {
-      throw new BadRequestException('File does not appear to be a valid CSV (binary content detected).');
+      throw new BadRequestException(
+        'File does not appear to be a valid CSV (binary content detected).',
+      );
     }
 
     // 2. Magic-byte signatures
-    const isExeOrDll  = sample[0] === 0x4d && sample[1] === 0x5a;                                                         // MZ  → EXE/DLL
-    const isZip       = sample[0] === 0x50 && sample[1] === 0x4b && sample[2] === 0x03 && sample[3] === 0x04;              // PK  → ZIP/DOCX/XLSX
-    const isPdf       = sample[0] === 0x25 && sample[1] === 0x50 && sample[2] === 0x44 && sample[3] === 0x46;              // %PDF
-    const isPng       = sample[0] === 0x89 && sample[1] === 0x50 && sample[2] === 0x4e && sample[3] === 0x47;              // PNG
-    const isJpeg      = sample[0] === 0xff && sample[1] === 0xd8 && sample[2] === 0xff;                                    // JPEG
-    const isElf       = sample[0] === 0x7f && sample[1] === 0x45 && sample[2] === 0x4c && sample[3] === 0x46;              // ELF
-    const isGif       = sample[0] === 0x47 && sample[1] === 0x49 && sample[2] === 0x46;                                    // GIF
-    const isBmp       = sample[0] === 0x42 && sample[1] === 0x4d;                                                          // BMP
+    const isExeOrDll = sample[0] === 0x4d && sample[1] === 0x5a; // MZ  → EXE/DLL
+    const isZip =
+      sample[0] === 0x50 && sample[1] === 0x4b && sample[2] === 0x03 && sample[3] === 0x04; // PK  → ZIP/DOCX/XLSX
+    const isPdf =
+      sample[0] === 0x25 && sample[1] === 0x50 && sample[2] === 0x44 && sample[3] === 0x46; // %PDF
+    const isPng =
+      sample[0] === 0x89 && sample[1] === 0x50 && sample[2] === 0x4e && sample[3] === 0x47; // PNG
+    const isJpeg = sample[0] === 0xff && sample[1] === 0xd8 && sample[2] === 0xff; // JPEG
+    const isElf =
+      sample[0] === 0x7f && sample[1] === 0x45 && sample[2] === 0x4c && sample[3] === 0x46; // ELF
+    const isGif = sample[0] === 0x47 && sample[1] === 0x49 && sample[2] === 0x46; // GIF
+    const isBmp = sample[0] === 0x42 && sample[1] === 0x4d; // BMP
 
     if (isExeOrDll || isZip || isPdf || isPng || isJpeg || isElf || isGif || isBmp) {
-      throw new BadRequestException('File does not appear to be a valid CSV (binary format detected).');
+      throw new BadRequestException(
+        'File does not appear to be a valid CSV (binary format detected).',
+      );
     }
 
     // 3. JSON detection — text-based, no magic bytes.
     // Find first non-whitespace byte and check for { (0x7B) or [ (0x5B).
     // A valid CSV header can never start with these characters.
-    const firstSignificant = sample.find((b) => b !== 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0d);
+    const firstSignificant = sample.find(
+      (b) => b !== 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0d,
+    );
     if (firstSignificant === 0x7b || firstSignificant === 0x5b) {
-      throw new BadRequestException('File does not appear to be a valid CSV (JSON format detected).');
+      throw new BadRequestException(
+        'File does not appear to be a valid CSV (JSON format detected).',
+      );
     }
   }
 
@@ -388,7 +506,8 @@ export class CatalogManagementController {
       );
     }
 
-    const xssPattern = /<\s*(script|img|svg|iframe|object|embed|link|style|base|form|input|button|a)[^>]*>/i;
+    const xssPattern =
+      /<\s*(script|img|svg|iframe|object|embed|link|style|base|form|input|button|a)[^>]*>/i;
     if (xssPattern.test(csvContent)) {
       throw new BadRequestException(
         'CSV contains potentially dangerous content (HTML/script tags detected).',

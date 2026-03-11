@@ -118,7 +118,9 @@ export class SearchCatalogFlow {
     const products = await this.catalogService.searchProducts(merchantId, sanitizedQuery, 5);
 
     if (products.length === 0) {
-      return this.playbookService.getMessage(merchant, 'searchNoResults', { query: sanitizedQuery });
+      return this.playbookService.getMessage(merchant, 'searchNoResults', {
+        query: sanitizedQuery,
+      });
     }
 
     return this.formatResults(merchant, sanitizedQuery, products);

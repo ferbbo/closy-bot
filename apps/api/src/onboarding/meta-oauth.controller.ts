@@ -82,7 +82,10 @@ export class MetaOAuthController {
     @Res() res: Response,
   ): Promise<void> {
     const merchantId = req.merchant.id;
-    const dashboardUrl = this.configService.get<string>('NEXT_PUBLIC_API_URL', 'http://localhost:3001');
+    const dashboardUrl = this.configService.get<string>(
+      'NEXT_PUBLIC_API_URL',
+      'http://localhost:3001',
+    );
 
     // Validate state (CSRF protection)
     const cookieState = req.cookies[this.cookieName] as string | undefined;

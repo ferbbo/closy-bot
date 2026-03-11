@@ -3737,6 +3737,98 @@ Respuesta `200`: producto completo con `variants[]`. Errores: `400` | `401` | `4
 
 ---
 
+## PR-18: Product Images API — R2 Storage
+
+### Prerequisitos
+
+1. Crear bucket R2 y obtener API Keys (ver `docs/setup/cloudflare-r2-setup.md`)
+2. Configurar en `.env`:
+   ```
+   R2_ACCOUNT_ID=<tu-account-id>
+   R2_ACCESS_KEY_ID=<access-key>
+   R2_SECRET_ACCESS_KEY=<secret-key>
+   R2_BUCKET_NAME=closy-bot-products
+   R2_PUBLIC_URL=https://pub-<hash>.r2.dev
+   ```
+3. Obtener `session_id` cookie válida (endpoint: `GET /auth/login/google`)
+
+### POST /api/products/:productId/image — Upload imagen principal
+
+**Auth**: Session Cookie (dashboard)  
+**Body**: `multipart/form-data`, campo `image` (JPEG / PNG / WebP, ≤5 MB)  
+**Response**: `{ imageKey: string, imageUrl: string }`
+
+```bash
+# Subir imagen a un producto (reemplaza imagen anterior si existe)
+curl -X POST http://localhost:3000/api/products/<PRODUCT_ID>/image \
+  -H "Cookie: session_id=<SESSION_ID>" \
+  -F "image=@/ruta/a/imagen.jpg;type=image/jpeg"
+```
+
+**Respuesta exitosa** (201 Created):
+```json
+{
+  "imageKey": "<merchantId>/products/<productId>/1741234567890-a1b2c3.webp",
+  "imageUrl": "https://pub-<hash>.r2.dev/<merchantId>/products/<productId>/1741234567890-a1b2c3.webp"
+}
+```
+
+**Errores**:
+- `400 Bad Request` — archivo ausente, MIME no permitido, magic bytes mismatch (ej: EXE como JPG), >5 MB
+- `401 Unauthorized` — sin sesión o sesión expirada
+- `403 Forbidden` — producto pertenece a otro merchant
+- `500 Internal Server Error` — R2 no configurado o error de red
+
+### DELETE /api/products/:productId/image — Eliminar imagen
+
+**Auth**: Session Cookie (dashboard)  
+**Response**: `204 No Content` (silencioso si el producto no tiene imagen)
+
+```bash
+# Eliminar imagen de un producto
+curl -X DELETE http://localhost:3000/api/products/<PRODUCT_ID>/image \
+  -H "Cookie: session_id=<SESSION_ID>"
+```
+
+**Notas**:
+- Elimina el objeto de R2 y limpia `imageKey` / `imageUrl` en la DB
+- Si el producto no tenía imagen: retorna 204 sin error (idempotente)
+- Ownership check: solo el merchant dueño del producto puede eliminarlo
+
+### Validaciones de seguridad (OWASP)
+
+| Check | Comportamiento |
+|-------|---------------|
+| MIME whitelist | Solo `image/jpeg`, `image/png`, `image/webp` — rechaza GIF, PDF, SVG |
+| Magic bytes (OWASP A03) | Verifica header del archivo: EXE/ZIP/PDF renombrados como `.jpg` → 400 |
+| Size limit | >5 MB → 400 Bad Request |
+| Ownership (OWASP A01) | `product.merchantId !== session.merchantId` → 403 Forbidden |
+
+### Formato de key R2
+
+```
+{merchantId}/products/{productId}/{timestamp_ms}-{6-byte-hex}.webp
+```
+
+Ejemplo: `clv1abc123/products/clv1xyz456/1741234567890-a1b2c3d4e5f6.webp`
+
+### Evidence por AC — PR-18
+
+- ✅ **AC-01**: `StorageService.upload()` ejecuta `PutObjectCommand` y retorna URL pública (unit test)
+- ✅ **AC-02**: `processProductImage()` llama `sharp.resize(1200).webp(80)` (unit test con mock)
+- ✅ **AC-03**: `validateImageFile()` acepta JPEG, PNG, WebP válidos (unit test)
+- ✅ **AC-04**: `validateImageFile()` rechaza EXE renombrado como JPG (unit test + E2E)
+- ✅ **AC-05**: `POST /api/products/:id/image` con JPEG → 201 `{ imageKey, imageUrl }` (E2E)
+- ✅ **AC-06**: `Product.imageKey` + `imageUrl` persisten en DB tras upload (E2E: query Prisma)
+- ✅ **AC-07**: `DELETE /api/products/:id/image` → 204, campos null, `StorageService.delete` llamado (E2E)
+- ✅ **AC-08**: `POST`/`DELETE` con producto de otro merchant → 403 (E2E)
+- ✅ **AC-09**: Doble `POST` → `delete` llamado con key anterior antes del upload (E2E)
+- ✅ **AC-10**: `prisma/schema.prisma` tiene `imageKey` + `imageUrl`; migración aplicada sin error
+- ✅ **AC-11**: `env.validation.ts` vars R2 definidas como `Joi.string().optional()` (existían desde PR-INFRA-R2)
+- ✅ **AC-12**: Ejemplos cURL en esta sección (esta página)
+
+---
+
 ## Próximos Pasos
 
 Todos los flujos del MVP Core V1 están implementados. Ver `docs/plan/PR-STACK-core-v1.md` para el estado actualizado.

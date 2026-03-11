@@ -236,15 +236,46 @@ export class ProductRepository {
   // Spanish stopwords that should not be used for trigram matching
   private readonly TRIGRAM_STOPWORDS = new Set([
     // Prepositions
-    'desde', 'hasta', 'para', 'con', 'sin', 'por', 'entre', 'sobre', 'bajo',
+    'desde',
+    'hasta',
+    'para',
+    'con',
+    'sin',
+    'por',
+    'entre',
+    'sobre',
+    'bajo',
     // Articles
-    'los', 'las', 'del', 'una', 'uno', 'unos', 'unas',
+    'los',
+    'las',
+    'del',
+    'una',
+    'uno',
+    'unos',
+    'unas',
     // Common verbs/intent words (already handled by sanitization)
-    'busco', 'quiero', 'necesito', 'tienes', 'tienen', 'tendras', 'hay',
+    'busco',
+    'quiero',
+    'necesito',
+    'tienes',
+    'tienen',
+    'tendras',
+    'hay',
     // Courtesy
-    'favor', 'gracias', 'porfa', 'porfavor', 'please', 'plis',
+    'favor',
+    'gracias',
+    'porfa',
+    'porfavor',
+    'please',
+    'plis',
     // Filler
-    'muy', 'mas', 'más', 'algo', 'como', 'que', 'cual',
+    'muy',
+    'mas',
+    'más',
+    'algo',
+    'como',
+    'que',
+    'cual',
   ]);
 
   /**
@@ -302,9 +333,7 @@ export class ProductRepository {
     }
 
     // Sort by best similarity and return top N
-    const sorted = Array.from(allResults.values()).sort(
-      (a, b) => b.similarity - a.similarity,
-    );
+    const sorted = Array.from(allResults.values()).sort((a, b) => b.similarity - a.similarity);
 
     this.logger.debug(
       `Trigram search for "${query}" found ${sorted.length} products (words: ${words.join(', ')})`,
