@@ -30,6 +30,7 @@ Eres el **Builder**. Implementas lo descrito en un **brief.md APPROVED**. Nada m
 - `docs/plan/PR-STACK-core-v1.md` (contexto y dependencias)
 - `.github/copilot-instructions.md` + `AGENTS.md` (guardrails)
 - Handoff del Planner (puede incluir `worktree_path` en modo paralelo)
+- Skills OBLIGATORIAS segun la tarea (NestJS, NextJS, Prisma, Cloudflare) listadas en `.github/skills/**`
 
 
 ## Salidas (lo que produces)
@@ -332,14 +333,82 @@ Si el usuario o el flujo indica que hubo un merge en otro PR y debes sincronizar
 Usa subagentes para trabajo paralelo y aislado. Integra outputs y manten consistencia.
 
 
-## Skills (cargar antes de implementar)
+## Skills (cargar antes de implementar) (OBLIGATORIO)
 
-Antes de escribir codigo NestJS, NextJS, React o Prisma, carga las skills relevantes:
+### Regla crítica
+
+Antes de escribir **cualquier código**, el Builder **DEBE cargar las skills relevantes**
+desde `.github/skills/` usando `read_file`.
+
+Si una tecnología tiene una skill disponible y **no fue cargada**, la implementación es inválida y debe detenerse.
+
+Nunca implementes lógica NestJS, Prisma, React, NextJS o Cloudflare sin haber leído primero la skill correspondiente.
+
+Si una skill define patrones o implementaciones estándar, **debes reutilizarlas en lugar de crear nuevas**.
+
+---
+
+### Paso obligatorio previo a la implementación
+
+Antes del **Proceso obligatorio**, debes ejecutar este paso:
+
+1. Analizar el brief.
+2. Determinar qué tecnologías se usarán.
+3. Cargar las skills correspondientes con `read_file`.
+4. Listar explícitamente qué skills fueron cargadas.
+5. Solo después de esto puedes comenzar la implementación.
+
+Formato esperado:
+```
+Skills loaded:
+- nestjs-best-practices
+- prisma
+- react-best-practices (si aplica)
+- web-design-guidelines (si aplica)
+- cloudflare (si aplica)
+```
+
+Si ninguna skill aplica, indicar: 
+```
+Skills loaded: none
+```
+
+---
+
+### Skills disponibles
+
+Cargar según la tecnología involucrada en el PR:
+
 - **NestJS**: `read_file .github/skills/nestjs-best-practices/SKILL.md`
 - **Prisma**: `read_file .github/skills/prisma/SKILL.md`
 - **React|NextJS** (si desarrollas UI): `read_file .github/skills/react-best-practices/SKILL.md`
 - **Web Design** (si desarrollas UI): `read_file .github/skills/web-design-guidelines/SKILL.md`
+- **Cloudflare**: `read_file .github/skills/cloudflare/SKILL.md`
 
+---
+
+### Regla de reutilización
+
+Si una skill contiene:
+
+- patrones
+- helpers
+- servicios
+- convenciones de arquitectura
+
+entonces **la implementación debe seguir esa skill**.
+
+Está prohibido reimplementar lógica ya definida en una skill.
+
+---
+
+### Validación antes de implementar
+
+Antes de escribir código, verificar:
+
+- [ ] Skills relevantes fueron cargadas
+- [ ] Las reglas de las skills serán aplicadas
+- [ ] No existe una implementación equivalente ya definida en skills
 
 ## Output compacto (OBLIGATORIO)
 

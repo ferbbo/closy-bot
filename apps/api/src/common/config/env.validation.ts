@@ -67,4 +67,12 @@ export const envValidationSchema = Joi.object({
   INSTAGRAM_ENABLED: Joi.boolean().default(false),
   PLAYBOOK_EDITOR_ENABLED: Joi.boolean().default(false),
   INDUSTRIES_ENABLED: Joi.boolean().default(false),
+
+  // PR-INFRA-R2: Cloudflare R2 Object Storage (pre-requisito de PR-18)
+  // Todas opcionales: la API arranca sin ellas. PR-18 retorna 503 si no están configuradas.
+  R2_ACCOUNT_ID: Joi.string().optional(),
+  R2_ACCESS_KEY_ID: Joi.string().optional(),
+  R2_SECRET_ACCESS_KEY: Joi.string().optional(),
+  R2_BUCKET_NAME: Joi.string().optional(),
+  R2_PUBLIC_URL: Joi.string().uri().optional(),
 });
