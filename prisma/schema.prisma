@@ -242,6 +242,7 @@ model Product {
   /// @deprecated Use imageKey + imageUrl (PR-18). Kept for backwards compat.
   imageUrls   String[] @map("image_urls")
   searchText  String?  @map("search_text") // PR-03.5.2: Derived field for FTS (auto-generated)
+  searchTextWeighted Unsupported("tsvector")? @map("search_text_weighted") // PR-03.5.2.1: Weighted tsvector (A=name, B=brand, C=tags, D=description); maintained by DB trigger
   // PR-18: Single primary image stored in R2
   imageKey    String?  @map("image_key")
   imageUrl    String?  @map("image_url")
