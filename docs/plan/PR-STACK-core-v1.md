@@ -555,6 +555,8 @@ graph TD
 - **Scope:** MVP
 - **Objetivo:** Mejorar relevancia de búsqueda FTS ponderando `name` (peso A) sobre `description` (peso D) usando PostgreSQL `setweight()`.
 - **Depende de:** PR-03.5.2 ✅ (FTS base).
+- **Issue:** [#129](https://github.com/ferbbo/closy-bot/issues/129)
+- **Brief:** `docs/plan/pr-briefs/PR-03.5.2.1-fts-weighted-ranking.md` (APPROVED)
 - **Incluye:**
 
   **A) Migración: columna `search_text_weighted`:**
