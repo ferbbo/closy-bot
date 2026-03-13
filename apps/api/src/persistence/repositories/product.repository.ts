@@ -212,6 +212,8 @@ export class ProductRepository {
 
   /**
    * Execute FTS query and return raw Product results
+   * Uses search_text_weighted (tsvector) for ranking: A=name, B=brand, C=tags, D=description
+   * Matches in name (weight A) rank higher than matches in description (weight D) — AC-03, REQ-03
    */
   private async executeFtsQuery(
     merchantId: string,
@@ -221,13 +223,13 @@ export class ProductRepository {
     return this.prisma.$queryRaw<Product[]>`
       SELECT p.*,
              ts_rank(
-               to_tsvector('simple', COALESCE(p.search_text, '')),
+               p.search_text_weighted,
                plainto_tsquery('simple', ${ftsQuery})
              ) AS rank
       FROM products p
       WHERE p.merchant_id = ${merchantId}
         AND p.is_active = true
-        AND to_tsvector('simple', COALESCE(p.search_text, '')) @@ plainto_tsquery('simple', ${ftsQuery})
+        AND p.search_text_weighted @@ plainto_tsquery('simple', ${ftsQuery})
       ORDER BY rank DESC
       LIMIT ${limit}
     `;
