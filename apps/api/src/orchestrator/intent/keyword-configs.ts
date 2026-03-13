@@ -206,6 +206,33 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
   AMBIGUOUS: [], // REQ-05: No keywords, assigned when collision detected
 };
 
+/**
+ * PR-03.5.1.1: Post-search selection phrase patterns
+ * When lastIntent=SEARCH_PRODUCT and message matches one of these patterns,
+ * ADD_TO_CART is forced to HIGH confidence (overrides context-bonus collision).
+ *
+ * Patterns match on NORMALIZED text (lowercase, no accents, trimmed).
+ * Examples: "ese", "el 1", "quiero", "me gusta", "lo quiero"
+ */
+export const POST_SEARCH_SELECTION_PATTERNS: RegExp[] = [
+  /^quiero$/, // "quiero" alone (no product noun follows)
+  /^quiero\s+(ese|esa|eso|esos|esas)(\s|$)/i, // "quiero ese" / "quiero eso"
+  /^(ese|esa|eso|esos|esas)(\s|$)/i, // deictic pronoun at start
+  /^el\s+\d+(\s|$)/i, // "el 1", "el 2"
+  /^la\s+\d+(\s|$)/i, // "la 1", "la 2"
+  /^\d+$/, // just a number "1", "2", "3"
+  /^el\s+primer[oa]?(\s|$)/i, // "el primero", "el primera"
+  /^la\s+primer[oa]?(\s|$)/i, // "la primera"
+  /^el\s+segund[oa]?(\s|$)/i, // "el segundo"
+  /^la\s+segund[oa]?(\s|$)/i, // "la segunda"
+  /^el\s+tercer[oa]?(\s|$)/i, // "el tercero"
+  /^me\s+gusta(\s|$)/i, // "me gusta", "me gusta ese"
+  /^lo\s+quiero(\s|$)/i, // "lo quiero"
+  /^la\s+quiero(\s|$)/i, // "la quiero"
+  /^me\s+lo\s+llevo(\s|$)/i, // "me lo llevo"
+  /^me\s+la\s+llevo(\s|$)/i, // "me la llevo"
+];
+
 // REQ-04: Context bonuses for intent scoring (context-aware)
 export const CONTEXT_BONUSES: Partial<Record<IntentKey, Partial<Record<IntentKey, number>>>> = {
   // After SEARCH_PRODUCT, boost transactional intents AND search continuations

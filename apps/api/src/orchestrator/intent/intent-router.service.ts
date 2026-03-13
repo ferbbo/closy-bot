@@ -6,7 +6,7 @@ import type {
   IntentContext,
   ConfidenceLevel,
 } from '../types/intent.types';
-import { INTENT_KEYWORDS, CONTEXT_BONUSES, type KeywordConfig } from './keyword-configs';
+import { INTENT_KEYWORDS, CONTEXT_BONUSES, POST_SEARCH_SELECTION_PATTERNS, type KeywordConfig } from './keyword-configs';
 
 /**
  * IntentRouterService V2
@@ -216,9 +216,24 @@ export class IntentRouterService {
       if (conjunctionPattern.test(normalized)) {
         const currentScore = scores.get('SEARCH_PRODUCT') || 0;
         // Give it enough score to trigger SEARCH_PRODUCT (threshold is 2)
-        scores.set('SEARCH_PRODUCT', Math.max(currentScore, 3));
+        // Boosted to 5 to ensure it clearly wins over ADD_TO_CART context bonus
+        scores.set('SEARCH_PRODUCT', Math.max(currentScore, 5));
         this.logger.debug(
-          `Conjunction continuation detected: "${normalized}" → SEARCH_PRODUCT boosted to 3`,
+          `Conjunction continuation detected: "${normalized}" → SEARCH_PRODUCT boosted to 5`,
+        );
+      }
+    }
+
+    // PR-03.5.1.1: Post-search selection phrase detection
+    // When lastIntent=SEARCH_PRODUCT and message matches a selection/deictic pattern,
+    // force ADD_TO_CART to HIGH confidence — user is selecting from displayed results.
+    // This runs BEFORE context bonuses to override any SEARCH_PRODUCT self-continuation scoring.
+    if (context?.lastIntent === 'SEARCH_PRODUCT') {
+      const isSelection = POST_SEARCH_SELECTION_PATTERNS.some((pattern) => pattern.test(normalized));
+      if (isSelection) {
+        scores.set('ADD_TO_CART', 6); // HIGH confidence (> threshold_high=5), will win
+        this.logger.debug(
+          `Post-search selection phrase detected: "${normalized}" → ADD_TO_CART forced to 6`,
         );
       }
     }
