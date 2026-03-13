@@ -7,7 +7,7 @@ import { RouteDecisionService } from './route-decision.service'; // PR-03.5.1
 import { CustomerService } from '../services/customer.service';
 import { ConversationService } from '../services/conversation.service';
 import { MerchantResolverService } from '../services/merchant-resolver.service';
-import type { MerchantPlaybookData } from '../services/playbook.service';
+import { PlaybookService, type MerchantPlaybookData } from '../services/playbook.service';
 import { SearchCatalogFlow } from './flows/search-catalog.flow';
 import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
@@ -96,6 +96,7 @@ export class ConversationOrchestrator {
     private readonly llmService: LlmService,
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
     private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
+    private readonly playbookService: PlaybookService, // Fix: para usar unknownIntent del playbook
   ) {
     // PR-03.5.1, REQ-08, AC-08: Removed `this.llmEnabled` binary toggle
   }
@@ -419,14 +420,14 @@ export class ConversationOrchestrator {
         break;
 
       case 'GENERIC':
-        // REQ-12, AC-12: Generic fallback (hardcoded message)
-        response = this.getGenericFallbackMessage();
+        // REQ-12, AC-12: Generic fallback using playbook unknownIntent
+        response = this.getUnknownIntentMessage(merchantPlaybookData);
         break;
 
       default:
         // Type safety: should never reach here
         this.logger.warn(`Unknown route type: ${(routeDecision as { route: string }).route}`);
-        response = this.getGenericFallbackMessage();
+        response = this.getUnknownIntentMessage(merchantPlaybookData);
         break;
     }
 
@@ -543,7 +544,8 @@ export class ConversationOrchestrator {
       case 'QUERY_FAQ':
         // PR-GAP-2 REQ-05, AC-05: Keyword-based FAQ matching (no LLM)
         return (
-          this.faqFlow.handle(merchantPlaybook, originalText) ?? this.getGenericFallbackMessage()
+          this.faqFlow.handle(merchantPlaybook, originalText) ??
+          this.getUnknownIntentMessage(merchantPlaybook)
         );
 
       case 'CHECKOUT':
@@ -557,7 +559,7 @@ export class ConversationOrchestrator {
             originalText,
           );
         }
-        return this.getGenericFallbackMessage();
+        return this.getUnknownIntentMessage(merchantPlaybook);
 
       case 'CONFIRM_PAYMENT':
         // PR-06: Delegate to PaymentFallbackFlow (template-first, no LLM)
@@ -570,7 +572,7 @@ export class ConversationOrchestrator {
             originalText,
           );
         }
-        return this.getGenericFallbackMessage();
+        return this.getUnknownIntentMessage(merchantPlaybook);
 
       case 'ORDER_STATUS':
         // PR-07: Delegate to PostSaleFlow.handleOrderStatus (template-first, no LLM)
@@ -583,7 +585,7 @@ export class ConversationOrchestrator {
             originalText,
           );
         }
-        return this.getGenericFallbackMessage();
+        return this.getUnknownIntentMessage(merchantPlaybook);
 
       case 'CREATE_TICKET':
         // PR-07: Delegate to PostSaleFlow.handleCreateTicket (template-first, no LLM)
@@ -596,7 +598,7 @@ export class ConversationOrchestrator {
             originalText,
           );
         }
-        return this.getGenericFallbackMessage();
+        return this.getUnknownIntentMessage(merchantPlaybook);
 
       case 'HANDOFF':
         // PR-08 REQ-09, AC-11: Delegate to HandoffFlow (explicit user request)
@@ -609,10 +611,10 @@ export class ConversationOrchestrator {
             'user_request',
           );
         }
-        return this.getGenericFallbackMessage();
+        return this.getUnknownIntentMessage(merchantPlaybook);
 
       case 'AMBIGUOUS':
-        return this.getGenericFallbackMessage();
+        return this.getUnknownIntentMessage(merchantPlaybook);
 
       case 'UNKNOWN':
       default:
@@ -623,10 +625,11 @@ export class ConversationOrchestrator {
   }
 
   /**
-   * REQ-12, AC-12: Generic fallback message (no LLM)
+   * Get unknownIntent message from merchant's playbook
+   * Falls back to generic default if not configured
    */
-  private getGenericFallbackMessage(): string {
-    return "No entendí, escribe 'ayuda'";
+  private getUnknownIntentMessage(merchantPlaybook: MerchantPlaybookData): string {
+    return this.playbookService.getMessage(merchantPlaybook, 'unknownIntent');
   }
 
   /**

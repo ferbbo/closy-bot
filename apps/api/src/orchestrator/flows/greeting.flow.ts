@@ -36,16 +36,7 @@ export class GreetingFlow {
       greeting = customerName ? `¡Hola ${customerName}!` : '¡Hola!';
     }
 
-    const message = `${greeting} 👋
-
-Bienvenido/a a nuestra tienda. ¿En qué puedo ayudarte hoy?
-
-🔍 Para buscar productos, escribe lo que necesitas
-   Ejemplo: "busco zapatillas running"
-
-❓ Escribe "ayuda" para ver más opciones
-
-¿Qué te gustaría hacer?`;
+    const message = greeting;
 
     this.logger.debug('Generated greeting response');
     return message;
