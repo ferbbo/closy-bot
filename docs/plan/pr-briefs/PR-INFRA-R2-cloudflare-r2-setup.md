@@ -34,11 +34,19 @@ Habilitar almacenamiento de imágenes de productos en Cloudflare R2 mediante doc
 
 | ID | Requisito | Issue | AC |
 |--------|-----------|-------|------|
+<<<<<<< HEAD
 | REQ-01 | Crear `docs/setup/cloudflare-r2-setup.md` con pasos para crear bucket, generar API credentials (Access Key + Secret), configurar public access y custom domain, y configurar CORS para `localhost:3001` | [#122](https://github.com/ferbbo/closy-bot/issues/122) | AC-01, AC-02 |
 | REQ-02 | Agregar sección `# Cloudflare R2` en `apps/api/.env.example` con las 5 variables requeridas y comentarios descriptivos | [#122](https://github.com/ferbbo/closy-bot/issues/122) | AC-03 |
 | REQ-03 | Agregar Joi schemas para las 5 variables R2 en `env.validation.ts` con tipos correctos (`Joi.string().optional()`) | [#122](https://github.com/ferbbo/closy-bot/issues/122) | AC-04 |
 | REQ-04 | Incluir en la guía una sección "Local Development" con opción MinIO (docker-compose snippet) como alternativa offline a bucket R2 real | [#122](https://github.com/ferbbo/closy-bot/issues/122) | AC-05 |
 | REQ-05 | Incluir en la guía sección "Security Best Practices" (bucket privado por default, public access via CDN únicamente, instrucciones de rotación de credentials) | [#122](https://github.com/ferbbo/closy-bot/issues/122) | AC-06 |
+=======
+| REQ-01 | Crear `docs/setup/cloudflare-r2-setup.md` con pasos para crear bucket, generar API credentials (Access Key + Secret), configurar public access y custom domain, y configurar CORS para `localhost:3001` | pendiente | AC-01, AC-02 |
+| REQ-02 | Agregar sección `# Cloudflare R2` en `apps/api/.env.example` con las 5 variables requeridas y comentarios descriptivos | pendiente | AC-03 |
+| REQ-03 | Agregar Joi schemas para las 5 variables R2 en `env.validation.ts` con tipos correctos (`Joi.string().optional()`) | pendiente | AC-04 |
+| REQ-04 | Incluir en la guía una sección "Local Development" con opción MinIO (docker-compose snippet) como alternativa offline a bucket R2 real | pendiente | AC-05 |
+| REQ-05 | Incluir en la guía sección "Security Best Practices" (bucket privado por default, public access via CDN únicamente, instrucciones de rotación de credentials) | pendiente | AC-06 |
+>>>>>>> d28c9ff (feat: skills)
 
 ## Paths a tocar (concretos)
 
