@@ -331,10 +331,10 @@ describe('Catalog FTS E2E - AC-03, AC-09, AC-10', () => {
       const explainOutput = await prisma.$queryRawUnsafe<{ 'QUERY PLAN': string }[]>(
         `
         EXPLAIN ANALYZE
-        SELECT id, name, ts_rank(to_tsvector('simple', COALESCE(search_text, '')), plainto_tsquery('simple', $1)) AS rank
-        FROM "products"
+        SELECT id, name, ts_rank(p.search_text_weighted, plainto_tsquery('simple', $1)) AS rank
+        FROM "products" p
         WHERE merchant_id = $2
-          AND to_tsvector('simple', COALESCE(search_text, '')) @@ plainto_tsquery('simple', $1)
+          AND p.search_text_weighted @@ plainto_tsquery('simple', $1)
         ORDER BY rank DESC
         LIMIT 10;
       `,
@@ -346,7 +346,90 @@ describe('Catalog FTS E2E - AC-03, AC-09, AC-10', () => {
 
       // Verify GIN index is used (not Sequential Scan)
       expect(planText).toContain('Bitmap Index Scan');
-      expect(planText).toContain('idx_product_search_fts');
+      expect(planText).toContain('idx_product_search_text_weighted');
+    });
+  });
+
+  describe('AC-04: Weighted ranking — name match ranks above description-only match', () => {
+    let rankingMerchantId: string;
+    let rankingCategoryId: string;
+
+    beforeAll(async () => {
+      // Isolated merchant so ranking is deterministic
+      const merchant = await prisma.merchant.create({
+        data: {
+          name: 'Test Merchant Ranking AC04',
+          whatsappNumber: '+573009999001',
+          apiKey: 'test-ranking-ac04-key',
+        },
+      });
+      rankingMerchantId = merchant.id;
+
+      const category = await prisma.category.create({
+        data: { name: 'Fragancias', merchantId: rankingMerchantId },
+      });
+      rankingCategoryId = category.id;
+
+      // P1: term "frambuesa" in NAME → weight A
+      await prisma.product.create({
+        data: {
+          name: 'Perfume Frambuesa',
+          description: 'Fragancia floral elegante para toda ocasión',
+          brand: 'Floralia',
+          tags: ['perfume', 'fragancia'],
+          categoryId: rankingCategoryId,
+          merchantId: rankingMerchantId,
+          searchText:
+            'Perfume Frambuesa Floralia Fragancia floral elegante para toda ocasión perfume fragancia',
+          variants: {
+            create: {
+              sku: 'FRAM-NAME-001',
+              name: '50ml',
+              price: new Decimal(39.99),
+              stock: 20,
+            },
+          },
+        },
+      });
+
+      // P2: term "frambuesa" only in DESCRIPTION → weight D
+      await prisma.product.create({
+        data: {
+          name: 'Perfume Floral',
+          description: 'Fragancia con notas de frambuesa y vainilla',
+          brand: 'Floralia',
+          tags: ['perfume', 'fragancia'],
+          categoryId: rankingCategoryId,
+          merchantId: rankingMerchantId,
+          searchText:
+            'Perfume Floral Floralia Fragancia con notas de frambuesa y vainilla perfume fragancia',
+          variants: {
+            create: {
+              sku: 'FRAM-DESC-001',
+              name: '50ml',
+              price: new Decimal(34.99),
+              stock: 15,
+            },
+          },
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await prisma.product.deleteMany({ where: { merchantId: rankingMerchantId } });
+      await prisma.category.deleteMany({ where: { merchantId: rankingMerchantId } });
+      await prisma.merchant.delete({ where: { id: rankingMerchantId } });
+    });
+
+    it('AC-04: product with term in name ranks above product with term only in description', async () => {
+      const results = await catalogService.searchProducts(rankingMerchantId, 'frambuesa', 10);
+
+      expect(results.length).toBe(2);
+
+      // P1 "Perfume Frambuesa" (name match, weight A) must be first
+      expect(results[0].name).toBe('Perfume Frambuesa');
+      // P2 "Perfume Floral" (description match, weight D) must be second
+      expect(results[1].name).toBe('Perfume Floral');
     });
   });
 });
