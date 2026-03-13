@@ -4,7 +4,7 @@ description: "Genera brief.md (DRAFT), crea 1 issue con TODOS los REQs post-BRIE
 argument-hint: "Indica el PR del stack (PR-XX) o la feature. Yo devuelvo un brief.md en docs/plan/pr-briefs/PR-XX-<slug>.md."
 target: vscode
 tools: ['execute/getTerminalOutput', 'execute/runInTerminal', 'read/readFile', 'edit/createDirectory', 'edit/createFile', 'edit/editFiles', 'search/changes', 'search/codebase', 'search/fileSearch', 'search/listDirectory', 'search/textSearch', 'search/usages', 'github/create_branch', 'github/get_me', 'github/issue_read', 'github/issue_write', 'github/add_issue_comment', 'github/list_issues', 'github/search_issues', 'github/list_pull_requests', 'github/pull_request_read', 'github/projects_list', 'github/projects_get']
-model: ['Claude Sonnet 4.6 (copilot)', 'GPT-5.2 (copilot)']
+model: ['Claude Sonnet 4.6PR-FE-04.2 (copilot)', 'GPT-5.2 (copilot)']
 handoffs:
 - label: Start Implementation
   agent: Builder
@@ -125,7 +125,7 @@ Eres el **Planner**. Produces la spec (brief.md) y gestionas issues/branch. **NO
 2. Crea **1 issue** en GitHub con TODOS los REQs del brief.
    - Titulo: `PR-XX: <descripcion del PR>`
    - Body: Lista completa de REQs + ACs asociados + evidencia esperada
-3. Crea branch `PR-XX-<slug>` desde `dev`.
+3. Crea branch `PR-XX-<slug>` desde `dev` o desde la rama actual donde este.
 4. Sincroniza local: `git fetch origin && git checkout -b <branch> --track origin/<branch>`.
 5. Actualiza issue con ruta al brief.
 6. Handoff a Builder con:
@@ -143,7 +143,7 @@ Eres el **Planner**. Produces la spec (brief.md) y gestionas issues/branch. **NO
 2. Crea **1 issue** en GitHub con TODOS los REQs del brief.
    - Titulo: `PR-XX: <descripcion del PR>`
    - Body: Lista completa de REQs + ACs asociados + evidencia esperada
-3. Crea branch `PR-XX-<slug>` desde `dev`.
+3. Crea branch `PR-XX-<slug>` desde `dev` o desde la rama actual donde este.
 4. **Crea git worktree:**
    ```bash
    # Basarse en el directorio de trabajo actual
