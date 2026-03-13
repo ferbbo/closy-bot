@@ -148,6 +148,57 @@ describe('IntentRouterService V2 (PR-03.5.1)', () => {
       // Context bonus should make VIEW_CART score higher
       expect(decision.intent).toBe('VIEW_CART');
     });
+
+    // PR-03.5.1.1: Post-search selection phrase detection
+    it('should route "ese" to ADD_TO_CART when lastIntent=SEARCH_PRODUCT', () => {
+      const context: IntentContext = { lastIntent: 'SEARCH_PRODUCT' };
+      const decision = service.classify('ese', context);
+      expect(decision.intent).toBe('ADD_TO_CART');
+      expect(decision.confidence).toBe('HIGH');
+    });
+
+    it('should route "esa" to ADD_TO_CART when lastIntent=SEARCH_PRODUCT', () => {
+      const context: IntentContext = { lastIntent: 'SEARCH_PRODUCT' };
+      expect(service.classify('esa', context).intent).toBe('ADD_TO_CART');
+    });
+
+    it('should route "el 1" to ADD_TO_CART when lastIntent=SEARCH_PRODUCT', () => {
+      const context: IntentContext = { lastIntent: 'SEARCH_PRODUCT' };
+      expect(service.classify('el 1', context).intent).toBe('ADD_TO_CART');
+    });
+
+    it('should route "el primero" to ADD_TO_CART when lastIntent=SEARCH_PRODUCT', () => {
+      const context: IntentContext = { lastIntent: 'SEARCH_PRODUCT' };
+      expect(service.classify('el primero', context).intent).toBe('ADD_TO_CART');
+    });
+
+    it('should route "me gusta" to ADD_TO_CART when lastIntent=SEARCH_PRODUCT', () => {
+      const context: IntentContext = { lastIntent: 'SEARCH_PRODUCT' };
+      expect(service.classify('me gusta', context).intent).toBe('ADD_TO_CART');
+    });
+
+    it('should route "lo quiero" to ADD_TO_CART when lastIntent=SEARCH_PRODUCT', () => {
+      const context: IntentContext = { lastIntent: 'SEARCH_PRODUCT' };
+      expect(service.classify('lo quiero', context).intent).toBe('ADD_TO_CART');
+    });
+
+    it('should route "1" (number alone) to ADD_TO_CART when lastIntent=SEARCH_PRODUCT', () => {
+      const context: IntentContext = { lastIntent: 'SEARCH_PRODUCT' };
+      expect(service.classify('1', context).intent).toBe('ADD_TO_CART');
+    });
+
+    it('should still route "busco jeans" to SEARCH_PRODUCT even with lastIntent=SEARCH_PRODUCT', () => {
+      // Continuation search with explicit search keywords must NOT be treated as selection
+      const context: IntentContext = { lastIntent: 'SEARCH_PRODUCT' };
+      const decision = service.classify('busco jeans', context);
+      expect(decision.intent).toBe('SEARCH_PRODUCT');
+    });
+
+    it('should still route "y camiseta" to SEARCH_PRODUCT (conjunction continuation)', () => {
+      const context: IntentContext = { lastIntent: 'SEARCH_PRODUCT' };
+      const decision = service.classify('y camiseta', context);
+      expect(decision.intent).toBe('SEARCH_PRODUCT');
+    });
   });
 
   // REQ-05, AC-05: AMBIGUOUS intent when collision detected
