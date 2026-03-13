@@ -18,20 +18,19 @@ interface AuthMeBody {
 /** AC-10: Middleware redirect — onboarding → /onboarding, active → /dashboard */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-      console.log({pathname})
   // Skip checking for public paths
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+
     return NextResponse.next();
   }
 
   try {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
     const cookie = request.cookies.get('session_id');
-
     const res = await fetch(`${apiUrl}/auth/me`, {
       headers: cookie ? { Cookie: `session_id=${cookie.value}` } : {},
     });
-
+  
     if (!res.ok) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
@@ -56,6 +55,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|auth|channels|onboarding/progress|onboarding/whatsapp/start\api/).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|auth|channels|onboarding/progress|onboarding/whatsapp/start\|api/|merchants/).*)'],
 };
 
