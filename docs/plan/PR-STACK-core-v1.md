@@ -309,8 +309,13 @@ graph TD
     subgraph "BLOQUE 1 — Pedidos P0"
         PR04[PR-04 Cart] --> PR0351[PR-03.5.1 Router V2 + Template-First]
         PR04 --> PRGAP1[PR-GAP-1 Flows + botPersonality]
+        PR0351 --> PR03511[PR-03.5.1.1 Selection Phrases]
         PR0351 --> PR0352[PR-03.5.2 Catálogo FTS]
+        PR0352 --> PR03521[PR-03.5.2.1 FTS Weighted Ranking]
         PR0351 --> PRGAP2[PR-GAP-2 FAQ Flow]
+        PR04 --> PR041[PR-04.1 Guided Add-to-Cart]
+        PR03511 --> PR041
+        PRGAP1 --> PR041
         PR045[PR-04.5 MerchantConfig] --> PR05[PR-05 Checkout]
         PR0351 --> PR05
         PRGAP1 --> PR05
@@ -471,6 +476,48 @@ graph TD
   - Los flows son los "templates" de V1 — en Bloque 7 (P2) se migran a Handlebars/DB
   - Modelo de costos: de ~100 LLM calls/100 msgs → ~15-20 (solo UNKNOWN), reducción 80-100%
 
+##### PR-03.5.1.1 — IntentRouter V2 Fix: Post-Search Selection Phrases 🔵 PENDIENTE
+- **Scope:** MVP
+- **Objetivo:** Corregir bug donde frases de selección post-búsqueda ("lo quiero", "ese", "el primero") se clasifican como SEARCH_PRODUCT en vez de ADD_TO_CART.
+- **Depende de:** PR-03.5.1 ✅ (IntentRouter V2).
+- **Incluye:**
+
+  **A) Nuevas keywords en `ADD_TO_CART` (keyword-configs.ts):**
+  | Frase | Peso | Justificación |
+  |-------|------|---------------|
+  | `lo quiero` | 5 | Supera "quiero"(2) + SEARCH_PRODUCT bonus(3) |
+  | `eso` | 4 | Selección deíctica post-resultados |
+  | `ese` / `esa` | 4 | Selección deíctica |
+  | `el primero` / `la primera` | 5 | Referencia ordinal |
+  | `el segundo` / `la segunda` | 5 | Referencia ordinal |
+  | `el tercero` / `la tercera` | 5 | Referencia ordinal |
+  | `el 1` / `el 2` / `el 3` | 5 | Referencia numérica |
+  | `me interesa` | 4 | Intención de compra explícita |
+  | `perfecto` | 3 | Confirmación |
+  | `me gusta` | 3 | Confirmación positiva |
+
+  **B) Test cases nuevos:**
+  - "lo quiero" después de SEARCH_PRODUCT → ADD_TO_CART (no SEARCH_PRODUCT)
+  - "y también vestido" después de SEARCH_PRODUCT → SEARCH_PRODUCT (no ADD_TO_CART)
+  - "el primero" después de SEARCH_PRODUCT → ADD_TO_CART
+  - "eso" después de SEARCH_PRODUCT → ADD_TO_CART
+
+- **Excluye:** Cambios a CONTEXT_BONUSES (los valores actuales son correctos).
+- **DoD específico:**
+  - "lo quiero" post-búsqueda → ADD_TO_CART con confidence HIGH
+  - "y también vestido" post-búsqueda → SEARCH_PRODUCT (continuación funciona)
+  - Tests unitarios para discriminación selección vs continuación
+  - `pnpm lint`, `pnpm test`, `npx tsc --noEmit` pasan
+- **Consumer experience:**
+  - Cliente puede seleccionar producto mostrado con lenguaje natural ("lo quiero", "ese")
+  - Continuación de búsqueda sigue funcionando ("y también un pantalón")
+- **Tech notes:**
+  - Bug root cause: `"quiero"` tiene peso 2 en SEARCH_PRODUCT vs 1 en ADD_TO_CART
+  - CONTEXT_BONUSES actual: SEARCH_PRODUCT→SEARCH_PRODUCT=3, SEARCH_PRODUCT→ADD_TO_CART=2
+  - Con "lo quiero"(5) + bonus(2) = 7, gana a "quiero"(2) + bonus(3) = 5
+  - Discriminación: frases de selección no contienen nombres de producto; búsquedas sí
+  - NO modificar bonuses (bajar SEARCH_PRODUCT→SEARCH_PRODUCT rompe "y también [producto]")
+
 ##### PR-03.5.2 — Catálogo FTS: search_text + tsvector + ranking ✅ MERGED
 - **Objetivo:** Mejorar búsqueda de catálogo con Full-Text Search español sin romper search actual.
 - **Depende de:** PR-03 ✅ (catálogo).
@@ -503,6 +550,47 @@ graph TD
   - Índice: `CREATE INDEX idx_product_search ON products USING GIN (to_tsvector('spanish', search_text))`
   - Config `'spanish'` para stemming español (`camisetas` → `camiseta`)
 - **Paralelizable con:** PR-03.5.1, PR-GAP-1
+
+##### PR-03.5.2.1 — FTS Weighted Ranking: Priorizar name sobre description 🔵 PENDIENTE
+- **Scope:** MVP
+- **Objetivo:** Mejorar relevancia de búsqueda FTS ponderando `name` (peso A) sobre `description` (peso D) usando PostgreSQL `setweight()`.
+- **Depende de:** PR-03.5.2 ✅ (FTS base).
+- **Incluye:**
+
+  **A) Migración: columna `search_text_weighted`:**
+  - Nueva columna `search_text_weighted` de tipo `tsvector` (materializada)
+  - Construida con pesos:
+    ```sql
+    setweight(to_tsvector('simple', COALESCE(name, '')), 'A') ||
+    setweight(to_tsvector('simple', COALESCE(brand, '')), 'B') ||
+    setweight(to_tsvector('simple', COALESCE(description, '')), 'D') ||
+    setweight(to_tsvector('simple', array_to_string(tags, ' ')), 'C')
+    ```
+  - Índice GIN sobre `search_text_weighted`
+  - Trigger para actualizar en INSERT/UPDATE
+
+  **B) Cambio en `ProductRepository.executeFtsQuery()`:**
+  - Usar `ts_rank(search_text_weighted, ...)` en lugar de `ts_rank(to_tsvector('simple', search_text), ...)`
+  - Eliminar uso de `search_text` string column (mantener para backward compat por 1 sprint)
+
+  **C) Test cases:**
+  - "camiseta blanca" con productos: Camiseta (name="Camiseta Blanca"), Arroz (desc="harina blanca") → Camiseta primero
+  - "crema" con productos: Crema Facial (name), Café (desc="textura crema") → Crema Facial primero
+
+- **Excluye:** Sinónimos, pg_trgm improvements, embeddings.
+- **DoD específico:**
+  - Match en `name` rankea 4x más que match en `description`
+  - "camiseta blanca" no retorna productos donde "blanca" solo está en description
+  - Tests e2e con ranking verificado
+  - Migración up/down funcional
+  - `pnpm lint`, `pnpm test`, `pnpm db:migrate`, `npx tsc --noEmit` pasan
+- **Consumer experience:**
+  - Cliente busca por WhatsApp y recibe productos relevantes (no false positives)
+  - Sin cambios en API contract
+- **Tech notes:**
+  - PostgreSQL weights: A=1.0, B=0.4, C=0.2, D=0.1
+  - Trigger SQL para mantener `search_text_weighted` actualizado
+  - Prisma middleware no soporta triggers, usar SQL migration raw
 
 ##### PR-GAP-1 — Flows leen PlaybookConfig.messages + botPersonality ✅ MERGED
 - **Objetivo:** Eliminar copy hardcoded de flows para que todos los mensajes vengan de PlaybookConfig (personalizable por merchant). Agregar selector `botPersonality.style` de alto nivel.
@@ -641,6 +729,90 @@ graph TD
   - Patrón similar a PlaybookConfig pero como tabla separada (no JSON en Merchant)
   - JSON fields validados con DTOs `class-validator`
   - Presets se aplican en `getConfigWithDefaults()` si campo es null
+
+##### PR-04.1 — Guided Add-to-Cart Flow: Selección por número + cantidad + continuar 🔵 PENDIENTE
+- **Scope:** MVP
+- **Objetivo:** Transformar el flujo de agregar al carrito de "repetir nombre exacto" a flujo guiado con selección por número, prompt de cantidad, y opción de continuar comprando.
+- **Depende de:** PR-04 ✅ (Cart), PR-03.5.1.1 (selection phrases), PR-GAP-1 ✅ (PlaybookService).
+- **Incluye:**
+
+  **A) Almacenamiento de resultados de búsqueda:**
+  - `SearchCatalogFlow.handle()` guarda en `Conversation.metadata.lastSearchResults`:
+    ```json
+    { "products": [{ "id": "xxx", "name": "Camiseta Azul", "price": 50000, "stock": 10 }], "timestamp": "..." }
+    ```
+  - TTL: 10 minutos (ignorar si `timestamp` > 10 min)
+  - Máximo 5 productos almacenados
+
+  **B) Nuevo mensaje en resultados de búsqueda:**
+  - `searchResultsFooter` modificado: `"Responde con el número (1-5) del producto que quieres agregar"`
+  - Ejemplo output:
+    ```
+    Encontré 3 productos:
+    1️⃣ Camiseta Azul - $50,000
+    2️⃣ Camiseta Roja - $50,000
+    3️⃣ Vestido Negro - $80,000
+    
+    Responde con el número del producto que quieres agregar
+    ```
+
+  **C) Intent detection para selección numérica:**
+  - `IntentRouter` detecta "1", "2", "3", "el 1", "la 2" como ADD_TO_CART cuando `lastIntent === SEARCH_PRODUCT`
+  - Nueva función `extractProductSelection(text, lastSearchResults)` → `{ product, isValid }`
+
+  **D) Flujo de cantidad guiado:**
+  - Nuevo state en `Conversation.metadata`: `pendingCartAdd: { productId, awaitingQuantity: true }`
+  - Tras selección válida → bot pregunta cantidad:
+    - Nuevo key `askQuantity`: `"¿Cuántas unidades de {productName}? (1-{stock})"`
+  - Usuario responde número → validación:
+    - Si válido (1 ≤ qty ≤ stock) → agregar al carrito
+    - Si inválido → `quantityInvalid` modificado: `"Cantidad inválida. Elige entre 1 y {stock}"`
+
+  **E) Prompt de continuar comprando:**
+  - Tras `addToCartConfirm` → nuevo mensaje:
+    - Nuevo key `continueShoppingPrompt`: `"¿Deseas agregar algo más? Escribe el producto o 'ver carrito'"`
+  - NO es un intent nuevo, solo un mensaje informativo
+
+  **F) Manejo de errores:**
+  - Usuario escribe número sin búsqueda previa → `genericError`: `"No hay búsqueda activa. Escribe el nombre del producto que buscas."`
+  - Número fuera de rango → `invalidProductSelection`: `"Selección inválida. Elige un número del 1 al {count}"`
+  - Stock 0 → `outOfStock` existente
+
+  **G) Nuevos PlaybookMessages keys (non-editable V1):**
+  | Key | Default | Editable |
+  |-----|---------|----------|
+  | `askQuantity` | `"¿Cuántas unidades de {productName}? (1-{stock})"` | No |
+  | `continueShoppingPrompt` | `"¿Deseas agregar algo más? Escribe el producto o 'ver carrito'"` | No |
+  | `invalidProductSelection` | `"Selección inválida. Elige un número del 1 al {count}"` | No |
+  | `searchResultsFooter` | `"Responde con el número (1-{count}) del producto que quieres"` | Sí (existente) |
+  | `quantityInvalid` | `"Cantidad inválida. Elige entre 1 y {stock}"` | Sí (modificado) |
+
+  **H) Modificaciones a archivos existentes:**
+  - `search-catalog.flow.ts`: guardar productos en metadata, agregar footer
+  - `add-to-cart.flow.ts`: leer selección numérica, prompt cantidad, estado `awaitingQuantity`
+  - `keyword-configs.ts`: patrones numéricos para ADD_TO_CART
+  - `playbook-defaults.ts`: nuevos keys con defaults
+  - `conversation.service.ts`: helper para leer/escribir metadata
+
+- **Excluye:** Selección de variantes complejas, botones interactivos WhatsApp, UI para editar mensajes guiados.
+- **DoD específico:**
+  - Cliente busca "camiseta" → ve lista numerada → responde "2" → bot pregunta cantidad → responde "3" → agregado al carrito con confirmación
+  - Número inválido → mensaje de error claro con rango
+  - Cantidad > stock → mensaje con stock disponible
+  - Búsqueda expirada (>10 min) → mensaje de error pidiendo nueva búsqueda
+  - Flujo old-style (nombre exacto) sigue funcionando como fallback
+  - Tests e2e para flujo completo numerico
+  - `pnpm lint`, `pnpm test`, `npx tsc --noEmit` pasan
+- **Consumer experience:**
+  - Cliente ve lista numerada clara
+  - Selecciona con un solo dígito
+  - Bot guía paso a paso (cantidad, confirmación, continuar)
+  - Reduce fricción y abandono
+- **Tech notes:**
+  - `metadata.lastSearchResults` tiene TTL de 10 min (comparar timestamps)
+  - Estado `awaitingQuantity` es transitorio, se limpia tras add o timeout
+  - Si hay variantes, el flow las muestra antes de preguntar cantidad (ya existe este código)
+  - Backward compat: "agregar camiseta azul" sigue funcionando (sin número)
 
 #### Fase 1.2
 
