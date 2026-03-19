@@ -82,6 +82,36 @@ export const RopaPlaybookDefaults: PlaybookConfig = {
     ticketCreatedConfirm:
       '✅ Tu reclamo fue registrado. El merchant fue notificado y responderá pronto 👗',
     ticketDescriptionPrompt: 'Describe brevemente el problema:',
+    // ── PR-04.0: Search + Cart management ────────────────────────────────
+    askQuantity: '¿Cuántas unidades de {productName}? (máx {stock}) 👗',
+    invalidProductSelection: 'Selección inválida. Elige un número del 1 al {count}',
+    cartListWithActions:
+      '{lista}\n\nPara eliminar: *eliminar [N]*\nPara modificar cantidad: *modificar [N]*',
+    cartActionConfirmPrompt:
+      'Seleccionaste: *{productName}* 👗\n1. Confirmar eliminación\n2. Modificar cantidad\n3. Cancelar',
+    cartActionCancelled: 'Carrito sin cambios. Escribe *modificar carrito* para continuar.',
+    cartManagementHint: 'Para seguir modificando tu carrito, escribe *modificar carrito*',
+    cartModifyAskQuantity:
+      '{productName} - tienes {quantity}.\n¿Cuántas quieres? (máx {stock})',
+    cartModifySuccess: '✅ Actualizado: {productName} x{newQuantity}',
+    cartRemoveSuccess: '✅ Eliminado: {productName} del carrito 👗',
+    cartItemNotFound: 'No encontré ese producto en tu carrito',
+    noActiveSearch: 'No hay búsqueda activa. Escribe *buscar [nombre de la prenda]*',
+    searchExpired: 'La búsqueda expiró. Escribe *buscar [nombre de la prenda]*',
+    searchAskKeyword:
+      '🔍 ¿Qué prenda quieres buscar?\nEjemplo: *camiseta*, *vestido azul*, *jeans*',
+    searchResults:
+      '📦 Prendas encontradas:\n{lista}\n\nSelecciona digitando su número.\nPara buscar otra: *buscar [nombre]*{nextHint}',
+    searchActionMenu:
+      '✅ Seleccionaste: {productName} — ${price} 👗\n\n1️⃣ Agregar al carrito\n2️⃣ Ver detalles\n3️⃣ Cancelar',
+    searchNotFound:
+      '⚠️ Prenda no encontrada. Intenta con otra palabra o revisa la lista.',
+    searchCancelled:
+      '❌ Operación cancelada.\nPara buscar otra prenda, escribe *buscar [nombre]*',
+    searchViewDetails:
+      '📋 {productName}\n\n{description}\n\nStock: {stock} disponibles\nPrecio: ${price}\n\n1️⃣ Agregar al carrito\n2️⃣ Cancelar',
+    searchNextHint: '\nPara ver más: *siguiente*',
+    searchNoMorePages: 'No hay más prendas. Estos son todos los resultados.',
   },
   rules: {
     askSizeBeforeCart: true,
