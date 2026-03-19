@@ -313,9 +313,12 @@ graph TD
         PR0351 --> PR0352[PR-03.5.2 Catálogo FTS]
         PR0352 --> PR03521[PR-03.5.2.1 FTS Weighted Ranking]
         PR0351 --> PRGAP2[PR-GAP-2 FAQ Flow]
-        PR04 --> PR041[PR-04.1 Guided Add-to-Cart]
+        PR04 --> PR040[PR-04.0 Expecting Layer]
+        PRGAP1 --> PR040
+        PR040 --> PR041[PR-04.1 Guided Add-to-Cart]
         PR03511 --> PR041
-        PRGAP1 --> PR041
+        PR040 --> PR042[PR-04.2 Cart Modify/Remove]
+        PR041 --> PR042
         PR045[PR-04.5 MerchantConfig] --> PR05[PR-05 Checkout]
         PR0351 --> PR05
         PRGAP1 --> PR05
@@ -732,89 +735,302 @@ graph TD
   - JSON fields validados con DTOs `class-validator`
   - Presets se aplican en `getConfigWithDefaults()` si campo es null
 
-##### PR-04.1 — Guided Add-to-Cart Flow: Selección por número + cantidad + continuar 🔵 PENDIENTE
-- **Scope:** MVP
-- **Objetivo:** Transformar el flujo de agregar al carrito de "repetir nombre exacto" a flujo guiado con selección por número, prompt de cantidad, y opción de continuar comprando.
-- **Depende de:** PR-04 ✅ (Cart), PR-03.5.1.1 (selection phrases), PR-GAP-1 ✅ (PlaybookService).
+##### PR-04.0 — Expecting State Layer + PlaybookMessages Unificados 🔵 PENDIENTE
+- **Scope:** MVP (infraestructura)
+- **Objetivo:** Crear capa unificada de estado `expecting` para flujos multi-paso y extender PlaybookMessages con todas las keys necesarias para guiar al usuario.
+- **Depende de:** PR-04 ✅ (Cart), PR-GAP-1 ✅ (PlaybookService).
 - **Incluye:**
 
-  **A) Almacenamiento de resultados de búsqueda:**
-  - `SearchCatalogFlow.handle()` guarda en `Conversation.metadata.lastSearchResults`:
-    ```json
-    { "products": [{ "id": "xxx", "name": "Camiseta Azul", "price": 50000, "stock": 10 }], "timestamp": "..." }
-    ```
-  - TTL: 10 minutos (ignorar si `timestamp` > 10 min)
-  - Máximo 5 productos almacenados
+  **A) Estructura `expecting` en `Conversation.metadata`:**
+  ```typescript
+  interface ExpectingState {
+    flow: 'search_selection' | 'add_to_cart' | 'update_cart' | 'remove_cart' | 'checkout';
+    type: 'select_product' | 'select_quantity' | 'select_item' | 'confirm' | 'input_address' | 'input_name';
+    data: {
+      products?: ProductSelection[];    // lista mostrada al usuario
+      selectedProduct?: ProductRef;      // producto seleccionado
+      cartItems?: CartItemRef[];         // items del carrito mostrados
+      maxStock?: number;                 // stock máximo disponible
+    };
+    expiresAt: string;                   // ISO timestamp, TTL 10 min
+  }
+  ```
 
-  **B) Nuevo mensaje en resultados de búsqueda:**
-  - `searchResultsFooter` modificado: `"Responde con el número (1-5) del producto que quieres agregar"`
-  - Ejemplo output:
-    ```
-    Encontré 3 productos:
-    1️⃣ Camiseta Azul - $50,000
-    2️⃣ Camiseta Roja - $50,000
-    3️⃣ Vestido Negro - $80,000
-    
-    Responde con el número del producto que quieres agregar
-    ```
+  **B) `ExpectingService` (nuevo):**
+  - `setExpecting(conversationId, state: ExpectingState)` → guarda en metadata
+  - `getExpecting(conversationId)` → retorna state o null si expirado
+  - `clearExpecting(conversationId)` → limpia state
+  - `isExpecting(conversationId, flow?, type?)` → boolean check
 
-  **C) Intent detection para selección numérica:**
-  - `IntentRouter` detecta "1", "2", "3", "el 1", "la 2" como ADD_TO_CART cuando `lastIntent === SEARCH_PRODUCT`
-  - Nueva función `extractProductSelection(text, lastSearchResults)` → `{ product, isValid }`
+  **C) Integración con `RouteDecisionService`:**
+  - Si hay `expecting` activo → el intent se resuelve en contexto del expecting
+  - Ej: expecting `select_product` + input "2" → selección numérica (no SEARCH_PRODUCT)
+  - Ej: expecting `select_quantity` + input "3" → cantidad (no otro intent)
 
-  **D) Flujo de cantidad guiado:**
-  - Nuevo state en `Conversation.metadata`: `pendingCartAdd: { productId, awaitingQuantity: true }`
-  - Tras selección válida → bot pregunta cantidad:
-    - Nuevo key `askQuantity`: `"¿Cuántas unidades de {productName}? (1-{stock})"`
-  - Usuario responde número → validación:
-    - Si válido (1 ≤ qty ≤ stock) → agregar al carrito
-    - Si inválido → `quantityInvalid` modificado: `"Cantidad inválida. Elige entre 1 y {stock}"`
+  **D) Nuevos PlaybookMessages keys:**
+  | Key | Default | Uso |
+  |-----|---------|-----|
+  | `searchResultsFooter` | `"Responde con el número (1-{count}) para agregar al carrito"` | Post-búsqueda |
+  | `askQuantity` | `"¿Cuántas unidades de {productName}? (máx {stock})"` | Add-to-cart |
+  | `quantityInvalid` | `"Cantidad inválida. Elige entre 1 y {stock}"` | Error cantidad |
+  | `invalidProductSelection` | `"Selección inválida. Elige un número del 1 al {count}"` | Error selección |
+  | `continueShoppingPrompt` | `"¿Algo más? Escribe el producto o 'ver carrito'"` | Post-add |
+  | `cartSelectItemToModify` | `"¿Cuál quieres modificar? Responde con el número (1-{count})"` | Pre-modify |
+  | `cartSelectItemToRemove` | `"¿Cuál quieres eliminar? Responde con el número (1-{count})"` | Pre-remove |
+  | `cartModifyAskQuantity` | `"{productName} ({variantName}) - tienes {quantity}.\n¿Cuántas quieres? (máx {stock})"` | Modify flow |
+  | `cartModifySuccess` | `"✅ Actualizado: {productName} x{newQuantity}"` | Confirm modify |
+  | `cartRemoveSuccess` | `"✅ Eliminado: {productName} del carrito"` | Confirm remove |
+  | `cartItemNotFound` | `"No encontré ese producto en tu carrito"` | Error lookup |
+  | `noActiveSearch` | `"No hay búsqueda activa. Escribe el producto que buscas"` | Error |
+  | `searchExpired` | `"La búsqueda expiró. Escribe el producto que buscas"` | Error TTL |
 
-  **E) Prompt de continuar comprando:**
-  - Tras `addToCartConfirm` → nuevo mensaje:
-    - Nuevo key `continueShoppingPrompt`: `"¿Deseas agregar algo más? Escribe el producto o 'ver carrito'"`
-  - NO es un intent nuevo, solo un mensaje informativo
+  **E) Actualización de industry presets:**
+  - Agregar todos los keys nuevos a `generic.config.ts` (defaults)
+  - Copiar a `ropa.config.ts`, `belleza.config.ts`, `minimarket.config.ts` con personalización de tono
 
-  **F) Manejo de errores:**
-  - Usuario escribe número sin búsqueda previa → `genericError`: `"No hay búsqueda activa. Escribe el nombre del producto que buscas."`
-  - Número fuera de rango → `invalidProductSelection`: `"Selección inválida. Elige un número del 1 al {count}"`
-  - Stock 0 → `outOfStock` existente
+  **F) Helper functions:**
+  - `formatNumberedList(items, template)` → genera lista con emojis numéricos (1️⃣, 2️⃣...)
+  - `parseNumericSelection(text, maxOptions)` → extrae número de selección del texto
 
-  **G) Nuevos PlaybookMessages keys (non-editable V1):**
-  | Key | Default | Editable |
-  |-----|---------|----------|
-  | `askQuantity` | `"¿Cuántas unidades de {productName}? (1-{stock})"` | No |
-  | `continueShoppingPrompt` | `"¿Deseas agregar algo más? Escribe el producto o 'ver carrito'"` | No |
-  | `invalidProductSelection` | `"Selección inválida. Elige un número del 1 al {count}"` | No |
-  | `searchResultsFooter` | `"Responde con el número (1-{count}) del producto que quieres"` | Sí (existente) |
-  | `quantityInvalid` | `"Cantidad inválida. Elige entre 1 y {stock}"` | Sí (modificado) |
-
-  **H) Modificaciones a archivos existentes:**
-  - `search-catalog.flow.ts`: guardar productos en metadata, agregar footer
-  - `add-to-cart.flow.ts`: leer selección numérica, prompt cantidad, estado `awaitingQuantity`
-  - `keyword-configs.ts`: patrones numéricos para ADD_TO_CART
-  - `playbook-defaults.ts`: nuevos keys con defaults
-  - `conversation.service.ts`: helper para leer/escribir metadata
-
-- **Excluye:** Selección de variantes complejas, botones interactivos WhatsApp, UI para editar mensajes guiados.
+- **Excluye:** Implementación de flujos específicos (eso va en PR-04.1 y PR-04.2), UI de edición de mensajes.
 - **DoD específico:**
-  - Cliente busca "camiseta" → ve lista numerada → responde "2" → bot pregunta cantidad → responde "3" → agregado al carrito con confirmación
-  - Número inválido → mensaje de error claro con rango
-  - Cantidad > stock → mensaje con stock disponible
-  - Búsqueda expirada (>10 min) → mensaje de error pidiendo nueva búsqueda
-  - Flujo old-style (nombre exacto) sigue funcionando como fallback
-  - Tests e2e para flujo completo numerico
+  - `ExpectingService` funcional con set/get/clear/isExpecting
+  - TTL de 10 minutos implementado
+  - `RouteDecisionService` consulta expecting antes de clasificar intent
+  - Todos los PlaybookMessages keys definidos en interface y presets
+  - `formatNumberedList` genera output: `1️⃣ Producto A - $X\n2️⃣ Producto B - $Y`
+  - `parseNumericSelection("el 2", 5)` → 2, `parseNumericSelection("quiero el tercero", 5)` → 3
+  - Tests unitarios para ExpectingService y helpers
   - `pnpm lint`, `pnpm test`, `npx tsc --noEmit` pasan
 - **Consumer experience:**
-  - Cliente ve lista numerada clara
-  - Selecciona con un solo dígito
-  - Bot guía paso a paso (cantidad, confirmación, continuar)
-  - Reduce fricción y abandono
+  - Sin cambio visible (infraestructura)
 - **Tech notes:**
-  - `metadata.lastSearchResults` tiene TTL de 10 min (comparar timestamps)
-  - Estado `awaitingQuantity` es transitorio, se limpia tras add o timeout
+  - `expecting` persiste en `Conversation.metadata` (JSON field existente)
+  - TTL calculado con `Date.now()` vs `expiresAt`
+  - Pattern: flujos setean expecting → próximo mensaje lo lee → flujo continúa
+  - Backward compat: si no hay expecting, comportamiento legacy funciona
+
+##### PR-04.1 — Guided Search & Add-to-Cart Flow: Selección + Opciones + Paginación 🔵 PENDIENTE
+- **Scope:** MVP
+- **Objetivo:** Flujo completo de búsqueda → selección → menú de opciones → agregar al carrito, con paginación y "ver detalles".
+- **Depende de:** PR-04.0 (Expecting Layer), PR-03.5.1.1 (selection phrases).
+- **Incluye:**
+
+  **A) Trigger de búsqueda:**
+  - Usuario: `"buscar camiseta"` → búsqueda con query
+  - Usuario: `"buscar"` (sin query) → bot pregunta qué buscar (expecting: `ask_search_query`)
+
+  **B) Mostrar resultados con paginación:**
+  - Máximo 5 productos por página
+  - Output ejemplo:
+    ```
+    📦 Productos encontrados:
+    
+    1️⃣ Camiseta roja - Talla M - $50,000
+    2️⃣ Camiseta azul - Talla L - $50,000
+    3️⃣ Camiseta negra - Talla M - $50,000
+    
+    Opciones:
+    - Selecciona un producto digitando su número
+    - Para buscar otro: "buscar [nombre]"
+    - Para ver más: "siguiente"
+    ```
+  - `expecting: { flow:'search_selection', type:'select_product', data:{ products, page:1, totalPages } }`
+
+  **C) Paginación "siguiente":**
+  - Usuario: `"siguiente"` → muestra página 2 de resultados
+  - Keyword detectado en expecting `select_product`
+  - Si no hay más páginas → `"No hay más productos. Estos son todos los resultados."`
+
+  **D) Selección de producto → Menú de opciones:**
+  - Usuario: `"2"` → bot confirma selección y muestra menú:
+    ```
+    ✅ Seleccionaste: Camiseta azul - Talla L - $50,000
+    
+    ¿Qué deseas hacer?
+    1️⃣ Agregar al carrito
+    2️⃣ Ver detalles
+    3️⃣ Cancelar
+    ```
+  - `expecting: { flow:'search_selection', type:'product_options', data:{ selectedProduct } }`
+
+  **E) Opción 1: Agregar al carrito:**
+  - Usuario: `"1"` → agrega 1 unidad al carrito
+  - Confirmación:
+    ```
+    🛒 Camiseta azul - Talla L agregada al carrito.
+    Total carrito: $50,000
+    
+    Para buscar otro producto: "buscar [nombre]"
+    Para modificar tu carrito: "modificar carrito"
+    ```
+  - `clearExpecting()`
+  - **Nota:** Cantidad implícita = 1 (sin prompt de cantidad para simplificar UX)
+
+  **F) Opción 2: Ver detalles:**
+  - Usuario: `"2"` → bot muestra descripción, stock, fotos, precio
+  - Luego menú reducido:
+    ```
+    1️⃣ Agregar al carrito
+    2️⃣ Cancelar
+    ```
+  - `expecting: { flow:'search_selection', type:'view_details', data:{ selectedProduct } }`
+
+  **G) Opción 3: Cancelar:**
+  - Usuario: `"3"` → cancela selección
+  - Mensaje: `"❌ Operación cancelada.\nPara buscar otro producto: 'buscar [nombre]'"`
+  - `clearExpecting()`
+
+  **H) Fallbacks:**
+  - Número fuera de rango → `"⚠️ Selección inválida. Elige un número del 1 al {count}"`
+  - Input no numérico en expecting → `"⚠️ Ingresa un número válido según la lista"`
+  - Producto no encontrado → `"⚠️ Producto no encontrado. Intenta con otra palabra"`
+
+  **I) Archivos modificados:**
+  - `search-catalog.flow.ts`: paginación, guardar expecting, footer con instrucciones
+  - `add-to-cart.flow.ts`: leer expecting, menú opciones, agregar directo (qty=1)
+  - `keyword-configs.ts`: agregar `siguiente` como keyword en contexto SEARCH_PRODUCT
+
+- **Excluye:** Selección de variantes (usa variante default), prompt de cantidad (qty=1 siempre), botones interactivos WhatsApp.
+- **DoD específico:**
+  - `"buscar"` sin query → bot pregunta qué buscar
+  - `"buscar camiseta"` → lista numerada con máx 5 productos
+  - `"siguiente"` → página siguiente de resultados
+  - `"2"` → menú de opciones (agregar/detalles/cancelar)
+  - `"1"` en menú → agrega al carrito con confirmación + total
+  - `"2"` en menú → muestra detalles + opciones reducidas
+  - `"3"` en menú → cancela con hint de búsqueda
+  - Número inválido → mensaje de error claro
+  - Tests e2e para flujo completo
+  - `pnpm lint`, `pnpm test`, `npx tsc --noEmit` pasan
+- **Consumer experience:**
+  - Flujo claro: buscar → seleccionar → confirmar → agregar
+  - Sin fricción de cantidad (1 unidad por defecto)
+  - Paginación para catálogos grandes
+  - Ver detalles antes de decidir
+- **Tech notes:**
+  - `expecting.data.page` para tracking de paginación
+  - Cantidad implícita = 1 (simplifica UX WhatsApp)
+  - Si producto tiene variantes, usa primera variante activa con stock
+  - Keyword `siguiente` solo activo cuando hay expecting `select_product`
+- **Tech notes:**
+  - Usa `ExpectingService` de PR-04.0 para estados (`select_product`, `select_quantity`)
+  - TTL de expecting (10 min) maneja expiración
   - Si hay variantes, el flow las muestra antes de preguntar cantidad (ya existe este código)
   - Backward compat: "agregar camiseta azul" sigue funcionando (sin número)
+
+##### PR-04.2 — Cart Management Flow: Keywords + Confirmación + Modificación 🔵 PENDIENTE
+- **Scope:** MVP
+- **Objetivo:** Flujo de gestión de carrito por keywords (`modificar carrito`, `eliminar N`, `modificar N`) con confirmaciones ligeras y carrito actualizado.
+- **Depende de:** PR-04.0 (Expecting Layer), PR-04.1 (patrón consistente de selección numérica).
+- **Incluye:**
+
+  **A) Trigger: Listar carrito**
+  - Keywords: `"listar carrito"`, `"modificar carrito"`, `"ver carrito"`
+  - Bot muestra carrito numerado con instrucciones:
+    ```
+    🛒 Tu carrito:
+    
+    1️⃣ Camiseta roja (M) x2 - $100,000
+    2️⃣ Pantalón negro (L) x1 - $80,000
+    
+    Total: $180,000
+    
+    Para eliminar: *eliminar [N]*
+    Para modificar cantidad: *modificar [N]*
+    ```
+  - `expecting: { flow:'cart_management', type:'select_action', data:{ cartItems } }`
+
+  **B) Trigger: Seleccionar acción directa**
+  - Usuario: `"eliminar 2"` o `"modificar 1"`
+  - Bot confirma selección y muestra menú de confirmación:
+    ```
+    Seleccionaste: *Pantalón negro (L)*
+    
+    1️⃣ Confirmar eliminación
+    2️⃣ Modificar cantidad
+    3️⃣ Cancelar
+    ```
+  - `expecting: { flow:'cart_management', type:'confirm_action', data:{ cartItems, selectedItemIndex, pendingAction } }`
+
+  **C) Opción 1: Confirmar eliminación**
+  - Usuario: `"1"` → elimina producto
+  - Bot muestra carrito actualizado + total + hint:
+    ```
+    ✅ Pantalón negro eliminado del carrito.
+    
+    🛒 Tu carrito:
+    1️⃣ Camiseta roja (M) x2 - $100,000
+    
+    Total: $100,000
+    
+    Para seguir modificando: "modificar carrito"
+    ```
+  - `clearExpecting()`
+
+  **D) Opción 2: Modificar cantidad**
+  - Usuario: `"2"` → bot pregunta nueva cantidad:
+    ```
+    Pantalón negro (L) - tienes 1 unidad.
+    ¿Cuántas quieres? (máx 5 disponibles)
+    ```
+  - `expecting: { flow:'cart_management', type:'select_quantity', data:{ selectedProduct, maxStock } }`
+  - Usuario responde número → validar stock → actualizar
+  - Confirmación:
+    ```
+    ✅ Actualizado: Pantalón negro x3
+    
+    🛒 Tu carrito:
+    1️⃣ Camiseta roja (M) x2 - $100,000
+    2️⃣ Pantalón negro (L) x3 - $240,000
+    
+    Total: $340,000
+    
+    Para seguir modificando: "modificar carrito"
+    ```
+
+  **E) Opción 3: Cancelar**
+  - Usuario: `"3"` → cancela operación
+  - Mensaje: `"Carrito sin cambios. Para seguir modificando: 'modificar carrito'"`
+  - `clearExpecting()`
+
+  **F) Fallbacks:**
+  - `"eliminar"` sin número → mostrar carrito con instrucciones
+  - Número fuera de rango → `"Número inválido. Ingresa un número válido según la lista de productos"`
+  - Cantidad > stock → `"Solo hay {stock} unidades disponibles"`
+  - Carrito vacío → `"Tu carrito está vacío. Para buscar productos: 'buscar [nombre]'"`
+
+  **G) Keywords en `keyword-configs.ts`:**
+  - `MANAGE_CART`: `listar carrito`, `modificar carrito`, `ver carrito`
+  - Regex patterns: `eliminar \d+`, `modificar \d+`, `quitar \d+`, `sacar \d+`
+
+  **H) Archivos modificados:**
+  - `view-cart.flow.ts`: mostrar lista numerada con instrucciones, setear expecting
+  - `update-cart-item.flow.ts`: reescribir con flujo de confirmación + cantidad
+  - `remove-from-cart.flow.ts`: reescribir con flujo de confirmación
+  - `keyword-configs.ts`: agregar MANAGE_CART intent y regex patterns
+
+- **Excluye:** Cambio de variante (debe eliminar y re-agregar), bulk operations (`eliminar todo`), botones interactivos.
+- **DoD específico:**
+  - `"modificar carrito"` → lista numerada con instrucciones
+  - `"eliminar 2"` → menú de confirmación → `"1"` → elimina + carrito actualizado
+  - `"modificar 1"` → menú → `"2"` → pregunta cantidad → actualiza + carrito
+  - `"3"` en menú → cancela sin cambios
+  - Número inválido → mensaje de error claro
+  - Cantidad > stock → mensaje con stock disponible
+  - Carrito vacío → mensaje con hint de búsqueda
+  - Tests e2e para flujos eliminar y modificar
+  - `pnpm lint`, `pnpm test`, `npx tsc --noEmit` pasan
+- **Consumer experience:**
+  - Operaciones rápidas con keywords: `"eliminar 2"`, `"modificar 1"`
+  - Confirmación obligatoria previene errores
+  - Carrito actualizado después de cada acción
+  - Hints claros para continuar
+- **Tech notes:**
+  - Reutiliza `ExpectingService` y helpers de PR-04.0
+  - Regex extrae número: `"eliminar 2"` → `{ action:'remove', index:2 }`
+  - Cambio de variante fuera de scope → mensaje: `"Para cambiar talla/color, elimina el producto y agrégalo de nuevo"`
+  - Paginación de carrito si >7 items (mismo patrón que búsqueda)
 
 #### Fase 1.2
 
