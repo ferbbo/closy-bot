@@ -226,6 +226,25 @@ export class RouteDecisionService {
   }
 
   /**
+   * PR-04.2 REQ-02: Extract cart action from text using regex.
+   * Matches: "eliminar N", "quitar N", "sacar N" → { action: 'remove', index: N }
+   * Matches: "modificar N" → { action: 'modify', index: N }
+   *
+   * @returns { action, index } or null if no match
+   */
+  extractCartAction(text: string): { action: 'remove' | 'modify'; index: number } | null {
+    const removeMatch = text.match(/(eliminar|quitar|sacar)\s+(\d+)/i);
+    if (removeMatch) {
+      return { action: 'remove', index: parseInt(removeMatch[2], 10) };
+    }
+    const modifyMatch = text.match(/modificar\s+(\d+)/i);
+    if (modifyMatch) {
+      return { action: 'modify', index: parseInt(modifyMatch[1], 10) };
+    }
+    return null;
+  }
+
+  /**
    * Build short prompt for LLM intent assist
    * Includes lastIntent context and few-shot examples
    */
