@@ -112,6 +112,8 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
     { phrase: 'otra', weight: 1 },
     { phrase: 'otros', weight: 1 },
     { phrase: 'otras', weight: 1 },
+    // PR-04.1 REQ-12: Pagination keyword — only meaningful under select_product expecting
+    { phrase: 'siguiente', weight: 1 },
   ],
 
   CHECKOUT: [
