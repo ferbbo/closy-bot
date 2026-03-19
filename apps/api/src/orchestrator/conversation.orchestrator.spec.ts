@@ -659,7 +659,9 @@ describe('ConversationOrchestrator', () => {
           data: { cartItems },
           expiresAt: futureExpiry,
         });
-        jest.spyOn(removeFromCartFlow, 'handleSelectAction').mockResolvedValue('menu de confirmación');
+        jest
+          .spyOn(removeFromCartFlow, 'handleSelectAction')
+          .mockResolvedValue('menu de confirmación');
 
         const result = await orchestrator.process({
           ...baseInput,
@@ -683,7 +685,9 @@ describe('ConversationOrchestrator', () => {
           },
           expiresAt: futureExpiry,
         });
-        jest.spyOn(removeFromCartFlow, 'handleConfirmRemove').mockResolvedValue('Camiseta eliminada');
+        jest
+          .spyOn(removeFromCartFlow, 'handleConfirmRemove')
+          .mockResolvedValue('Camiseta eliminada');
 
         const result = await orchestrator.process({
           ...baseInput,
@@ -729,7 +733,9 @@ describe('ConversationOrchestrator', () => {
           expiresAt: futureExpiry,
         });
         jest.spyOn(removeFromCartFlow, 'handleCancel').mockResolvedValue('Acción cancelada');
-        jest.spyOn(removeFromCartFlow, 'handleConfirmRemove').mockResolvedValue('should not be called');
+        jest
+          .spyOn(removeFromCartFlow, 'handleConfirmRemove')
+          .mockResolvedValue('should not be called');
 
         const result = await orchestrator.process({
           ...baseInput,
@@ -751,7 +757,9 @@ describe('ConversationOrchestrator', () => {
           },
           expiresAt: futureExpiry,
         });
-        jest.spyOn(updateCartItemFlow, 'handleSelectQuantity').mockResolvedValue('Cantidad actualizada');
+        jest
+          .spyOn(updateCartItemFlow, 'handleSelectQuantity')
+          .mockResolvedValue('Cantidad actualizada');
 
         const result = await orchestrator.process({
           ...baseInput,
