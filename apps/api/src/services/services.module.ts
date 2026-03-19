@@ -7,6 +7,7 @@ import { MerchantResolverService } from './merchant-resolver.service';
 import { PlaybookService } from './playbook.service';
 import { CartService } from './cart.service';
 import { CheckoutService } from './checkout.service'; // PR-05
+import { ExpectingService } from './expecting.service'; // PR-04.0
 import { MerchantNotificationService } from './merchant-notification.service'; // PR-05
 import { MerchantCommandParserService } from './merchant-command-parser.service'; // PR-05.1
 import { MerchantCommandService } from './merchant-command.service'; // PR-05.1
@@ -45,6 +46,7 @@ import { PersistenceModule } from '../persistence/persistence.module';
     MerchantResolverService,
     PlaybookService,
     CartService,
+    ExpectingService, // PR-04.0
     CheckoutService, // PR-05
     MerchantNotificationService, // PR-05
     MerchantCommandParserService, // PR-05.1
@@ -61,6 +63,7 @@ import { PersistenceModule } from '../persistence/persistence.module';
     MerchantResolverService,
     PlaybookService,
     CartService,
+    ExpectingService, // PR-04.0
     CheckoutService, // PR-05
     MerchantNotificationService, // PR-05
     MerchantCommandParserService, // PR-05.1

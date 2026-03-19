@@ -2,15 +2,24 @@ import { Injectable, Logger } from '@nestjs/common';
 import { CartStatus, OrderStatus, Prisma } from '@prisma/client';
 import { CartRepository } from '../persistence/repositories/cart.repository';
 import { OrderRepository } from '../persistence/repositories/order.repository';
-import { ConversationRepository } from '../persistence/repositories/conversation.repository';
 import { PrismaService } from '../persistence/prisma/prisma.service';
 import { PaymentMethodConfig } from '../domain/entities/merchant-config.interface';
+import { ExpectingService } from './expecting.service';
+import type { ExpectingState, ExpectingType } from '../orchestrator/types/expecting.types';
 
 // ---------------------------------------------------------------------------
-// CheckoutState — persisted in Conversation.metadata.checkout
-// AC-05, REQ-05
+// CheckoutState — internal type. Persisted via ExpectingService (PR-04.0).
+// AC-05, REQ-05 / REQ-11
 // ---------------------------------------------------------------------------
 export type CheckoutStep = 'ASK_NAME' | 'ASK_ADDRESS' | 'SELECT_PAYMENT' | 'CONFIRM' | 'COMPLETED';
+
+/** Map CheckoutStep → ExpectingType for persistence */
+const STEP_TO_TYPE: Record<Exclude<CheckoutStep, 'COMPLETED'>, ExpectingType> = {
+  ASK_NAME: 'input_name',
+  ASK_ADDRESS: 'input_address',
+  SELECT_PAYMENT: 'select_payment',
+  CONFIRM: 'confirm_order',
+};
 
 export interface CheckoutState {
   step: CheckoutStep;
@@ -44,7 +53,7 @@ export interface CreateOrderInput {
  * PR-05: Checkout Order Creation
  *
  * REQ-04: startCheckout(), captureField(), createOrder(), getCheckoutState()
- * REQ-05: State persisted in Conversation.metadata.checkout
+ * REQ-05: State persisted via ExpectingService (PR-04.0 — REQ-11)
  * REQ-03: generateOrderCode() sequential per merchant
  * REQ-09: OrderItems snapshot price + name from CartItem
  * REQ-12: Validates cart not empty before start
@@ -56,7 +65,7 @@ export class CheckoutService {
   constructor(
     private readonly cartRepository: CartRepository,
     private readonly orderRepository: OrderRepository,
-    private readonly conversationRepository: ConversationRepository,
+    private readonly expectingService: ExpectingService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -104,16 +113,12 @@ export class CheckoutService {
   }
 
   // ---------------------------------------------------------------------------
-  // AC-05 / REQ-05: getCheckoutState — read from conversation metadata
+  // AC-05 / REQ-05 / REQ-11: getCheckoutState — reads from ExpectingService
   // ---------------------------------------------------------------------------
   async getCheckoutState(conversationId: string): Promise<CheckoutState | null> {
-    const conversation = await this.conversationRepository.findById(conversationId);
-    if (!conversation) return null;
-
-    const meta = conversation.metadata as Record<string, unknown> | null;
-    if (!meta?.checkout) return null;
-
-    return meta.checkout as CheckoutState;
+    const state = await this.expectingService.getExpecting(conversationId);
+    if (!state || state.flow !== 'checkout') return null;
+    return this.fromExpectingState(state);
   }
 
   // ---------------------------------------------------------------------------
@@ -159,17 +164,10 @@ export class CheckoutService {
 
   // ---------------------------------------------------------------------------
   // resetCheckoutState — clear checkout state (for cancelled/abandoned flows)
+  // REQ-11: delegates to ExpectingService
   // ---------------------------------------------------------------------------
   async resetCheckoutState(conversationId: string): Promise<void> {
-    const conversation = await this.conversationRepository.findById(conversationId);
-    if (!conversation) return;
-
-    const meta = (conversation.metadata as Record<string, unknown> | null) ?? {};
-    delete meta['checkout'];
-
-    await this.conversationRepository.update(conversationId, {
-      metadata: meta as Prisma.InputJsonValue,
-    });
+    await this.expectingService.clearExpecting(conversationId);
   }
 
   // ---------------------------------------------------------------------------
@@ -314,31 +312,68 @@ export class CheckoutService {
   }
 
   // ---------------------------------------------------------------------------
-  // markCompleted — set step = COMPLETED in state
+  // markCompleted — COMPLETED maps to clearExpecting() (REQ-11)
   // ---------------------------------------------------------------------------
   async markCompleted(conversationId: string): Promise<void> {
-    const state = await this.getCheckoutState(conversationId);
-    if (!state) return;
-
-    state.step = 'COMPLETED';
-    await this.persistState(conversationId, state);
+    await this.expectingService.clearExpecting(conversationId);
   }
 
   // ---------------------------------------------------------------------------
-  // Private helpers
+  // Private helpers — conversion between CheckoutState and ExpectingState
+  // REQ-11: no direct metadata access here
   // ---------------------------------------------------------------------------
 
   private async persistState(conversationId: string, state: CheckoutState): Promise<void> {
-    const conversation = await this.conversationRepository.findById(conversationId);
-    if (!conversation) {
-      throw new Error(`Conversation ${conversationId} not found`);
-    }
+    const expectingState = this.toExpectingState(state);
+    await this.expectingService.setExpecting(conversationId, expectingState);
+  }
 
-    const existingMeta = (conversation.metadata as Record<string, unknown> | null) ?? {};
-    const updatedMeta = { ...existingMeta, checkout: state };
+  /** Convert CheckoutState (internal) → ExpectingState for persistence */
+  private toExpectingState(state: CheckoutState): ExpectingState {
+    const type: ExpectingType = state.step === 'COMPLETED' ? 'confirm_order' : STEP_TO_TYPE[state.step];
+    return {
+      flow: 'checkout',
+      type,
+      data: {
+        cartId: state.cartId,
+        checkoutName: state.data.name,
+        checkoutAddress: state.data.address,
+        checkoutPaymentMethod: state.data.paymentMethod,
+        checkoutPaymentMethodLabel: state.data.paymentMethodLabel,
+        invalidAttempts: state.invalidAttempts,
+        startedAt: state.startedAt,
+      },
+      expiresAt: ExpectingService.checkoutExpiresAt(),
+    };
+  }
 
-    await this.conversationRepository.update(conversationId, {
-      metadata: updatedMeta as unknown as Prisma.InputJsonValue,
-    });
+  /** Convert ExpectingState → CheckoutState (internal) for callers */
+  private fromExpectingState(state: ExpectingState): CheckoutState {
+    const TYPE_TO_STEP: Record<ExpectingType, CheckoutStep> = {
+      input_name: 'ASK_NAME',
+      input_address: 'ASK_ADDRESS',
+      select_payment: 'SELECT_PAYMENT',
+      confirm_order: 'CONFIRM',
+      // Non-checkout types default to ASK_NAME (should not occur)
+      ask_search_query: 'ASK_NAME',
+      select_product: 'ASK_NAME',
+      product_options: 'ASK_NAME',
+      view_details: 'ASK_NAME',
+      select_action: 'ASK_NAME',
+      confirm_action: 'ASK_NAME',
+      select_quantity: 'ASK_NAME',
+    };
+    return {
+      step: TYPE_TO_STEP[state.type] ?? 'ASK_NAME',
+      data: {
+        name: state.data.checkoutName,
+        address: state.data.checkoutAddress,
+        paymentMethod: state.data.checkoutPaymentMethod,
+        paymentMethodLabel: state.data.checkoutPaymentMethodLabel,
+      },
+      startedAt: state.data.startedAt ?? new Date().toISOString(),
+      cartId: state.data.cartId ?? '',
+      invalidAttempts: state.data.invalidAttempts ?? 0,
+    };
   }
 }
