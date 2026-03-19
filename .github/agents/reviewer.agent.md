@@ -114,6 +114,12 @@ Eres el **Reviewer**. Validas el codigo **contra el brief.md** y sus AC/DoD.
 |-------|-------------|-----------|-----|
 | AC-01 | si/no       | test name | si/no |
 
+**Skills Verification**:
+| Skill | Regla | Builder declaró | Reviewer validó |
+|-------|-------|-----------------|------------------|
+| nestjs-best-practices | test-use-testing-module | ✅/❌ | ✅/❌ |
+| prisma | validations.md (N+1) | ✅/❌ | ✅/❌ |
+
 **API Consumer-First**:
 | Check | OK |
 |-------|-----|
@@ -132,6 +138,31 @@ Eres el **Reviewer**. Validas el codigo **contra el brief.md** y sus AC/DoD.
 **DoD**: OK / [items faltantes]
 **Scope creep**: Ninguno / [detalles]
 ```
+
+
+## Skills Verification (OBLIGATORIO)
+
+El Reviewer DEBE verificar que el Builder aplicó las skills relevantes:
+
+### Checklist por tipo de PR:
+
+**PR que toca NestJS (modules/services/controllers)**:
+- [ ] Tests usan `Test.createTestingModule()` (`test-use-testing-module.md`)
+- [ ] Servicios externos mockeados (`test-mock-external-services.md`)
+- [ ] Sin circular deps (`arch-avoid-circular-deps.md`)
+- [ ] Errores manejados con exception filters (`error-use-exception-filters.md`)
+
+**PR que toca Prisma (queries/schema)**:
+- [ ] Sin N+1 en loops (`validations.md` - loop-with-await)
+- [ ] PrismaClient singleton (`validations.md` - new-client-per-request)
+- [ ] FKs tienen índice (`validations.md` - missing-index-foreign-key)
+- [ ] Queries con error handling (`validations.md` - no-error-handling)
+
+**PR que toca webhooks (inbound/payment)**:
+- [ ] Idempotencia por `message_id` / `payment_intent_id`
+- [ ] Tests de duplicados (`test-e2e-supertest.md`)
+
+**Anti-patrón**: Si Builder no incluyó **Skills Applied** en su handoff → P1 bloqueante automático.
 
 ## Flujo obligatorio:
 

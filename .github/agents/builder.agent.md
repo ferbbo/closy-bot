@@ -160,6 +160,30 @@ Si el PR usa raw SQL:
 - [ ] `nest-cli.json` tiene `"deleteOutDir": false` si `tsconfig` usa `"incremental": true`
 - [ ] Si es primera compilación local: borrar `tsconfig.build.tsbuildinfo` antes del build
 
+
+## Skills Applied (OBLIGATORIO en output)
+
+Antes de hacer handoff al Reviewer, declara qué skills consultaste y qué validaciones aplicaste:
+
+```markdown
+**Skills Applied**:
+| Skill | Regla/Validación | Aplicado |
+|-------|------------------|----------|
+| nestjs-best-practices | test-use-testing-module.md | ✅ Tests usan TestingModule |
+| nestjs-best-practices | test-mock-external-services.md | ✅ WhatsApp/Payment mockeados |
+| prisma | validations.md (N+1 check) | ✅ Sin loops con await |
+| prisma | validations.md (singleton) | ✅ PrismaClient singleton |
+```
+
+**Reglas de aplicación**:
+- Si el PR toca **NestJS modules/services/controllers** → aplicar `nestjs-best-practices`
+- Si el PR toca **Prisma queries/schema** → aplicar `prisma`
+- Si el PR toca **Cloudflare Workers/KV/R2** → aplicar `cloudflare`
+- Si el PR toca **React/Next.js UI** → aplicar `react-best-practices`
+
+**Anti-patrón**: Decir "Skills Applied: ninguno" sin justificación. Todo PR debe validar al menos TypeScript correctness del skill NestJS.
+
+
 ### Comando de verificación completa (copiar-pegar):
 ```bash
 cd apps/api && \
