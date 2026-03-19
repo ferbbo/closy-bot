@@ -377,4 +377,24 @@ export class CartService {
 
     return expiredCarts.length;
   }
+
+  /**
+   * PR-04.2: Get current stock for a cart item's variant.
+   * Used to display maxStock in the "ask quantity" prompt.
+   */
+  async getVariantStockForItem(itemId: string): Promise<number> {
+    const item = await this.cartItemRepository.findById(itemId);
+    if (!item) {
+      throw new NotFoundException(`Cart item ${itemId} not found`);
+    }
+    const product = await this.productRepository.findByVariantId(item.variantId);
+    if (!product) {
+      throw new NotFoundException(`Product for variant ${item.variantId} not found`);
+    }
+    const variant = product.variants.find((v) => v.id === item.variantId);
+    if (!variant) {
+      throw new NotFoundException(`Variant ${item.variantId} not found`);
+    }
+    return variant.stock;
+  }
 }
