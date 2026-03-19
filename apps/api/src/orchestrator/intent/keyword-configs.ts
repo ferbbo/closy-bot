@@ -58,13 +58,16 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
   ],
 
   MANAGE_CART: [
-    { phrase: 'listar carrito', weight: 5 },
-    { phrase: 'modificar carrito', weight: 5 },
-    { phrase: 'eliminar carrito', weight: 5 },
-    { phrase: 'ver carrito', weight: 5 },
-    { phrase: 'gestionar carrito', weight: 4 },
-    { phrase: 'editar carrito', weight: 4 },
-    { phrase: 'quitar carrito', weight: 4 },
+    // AC-01 (PR-04.2): compound phrases use weight 8 to beat VIEW_CART "carrito" (5) +
+    // REMOVE_FROM_CART "eliminar" (5) / UPDATE_CART "modificar" (4) combinations.
+    // diff = 8 - 5 = 3 ≥ 2 (collision threshold) → clear MANAGE_CART win, no AMBIGUOUS.
+    { phrase: 'listar carrito', weight: 8 },
+    { phrase: 'modificar carrito', weight: 8 },
+    { phrase: 'eliminar carrito', weight: 8 },
+    { phrase: 'ver carrito', weight: 5 }, // VIEW_CART scores 8 (carrito+ver carrito) → VIEW_CART wins, acceptable
+    { phrase: 'gestionar carrito', weight: 7 }, // beats VIEW_CART "carrito"(5) by 2 → MANAGE_CART wins
+    { phrase: 'editar carrito', weight: 7 },
+    { phrase: 'quitar carrito', weight: 7 },
   ],
 
   ADD_TO_CART: [

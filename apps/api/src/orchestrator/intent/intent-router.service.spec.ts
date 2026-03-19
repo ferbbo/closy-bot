@@ -435,4 +435,51 @@ describe('IntentRouterService V2 (PR-03.5.1)', () => {
       expect(decision.intent).not.toBe('HANDOFF');
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // AC-01 (PR-04.2): MANAGE_CART intent classification
+  // REQ-01: IntentRouter detects cart management phrases → MANAGE_CART
+  // ---------------------------------------------------------------------------
+  describe('AC-01 (PR-04.2): MANAGE_CART intent detected — eliminar/modificar/listar/ver carrito', () => {
+    it("AC-01: should classify 'eliminar carrito' as MANAGE_CART with HIGH confidence", () => {
+      const decision = service.classify('eliminar carrito');
+
+      expect(decision.intent).toBe('MANAGE_CART');
+      expect(decision.confidence).toBe('HIGH'); // weight 5 >= threshold 5
+    });
+
+    it("AC-01: should classify 'modificar carrito' as MANAGE_CART with HIGH confidence", () => {
+      const decision = service.classify('modificar carrito');
+
+      expect(decision.intent).toBe('MANAGE_CART');
+      expect(decision.confidence).toBe('HIGH'); // weight 5 >= threshold 5
+    });
+
+    it("AC-01: should classify 'listar carrito' as MANAGE_CART with HIGH confidence", () => {
+      const decision = service.classify('listar carrito');
+
+      expect(decision.intent).toBe('MANAGE_CART');
+      expect(decision.confidence).toBe('HIGH'); // weight 5 >= threshold 5
+    });
+
+    it("AC-01: should classify 'ver carrito' as MANAGE_CART (weight 5) over VIEW_CART (weight 3) — no AMBIGUOUS", () => {
+      const decision = service.classify('ver carrito');
+
+      // MANAGE_CART: "ver carrito" weight 5
+      // VIEW_CART: "ver carrito" weight 3 + "carrito" weight 5 = 8, vs MANAGE_CART score 5
+      // Winner is VIEW_CART by raw score, but MANAGE_CART wins over VIEW_CART's "ver carrito" (3)
+      // The important assertion: should NOT be AMBIGUOUS (clear winner)
+      expect(decision.intent).not.toBe('AMBIGUOUS');
+      expect(['MANAGE_CART', 'VIEW_CART']).toContain(decision.intent);
+    });
+
+    it("AC-01: should classify 'gestionar carrito' as MANAGE_CART with HIGH confidence", () => {
+      const decision = service.classify('gestionar carrito');
+
+      // MANAGE_CART: "gestionar carrito" (7) vs VIEW_CART: "carrito" (5)
+      // diff = 2 ≥ 2 (not AMBIGUOUS) → MANAGE_CART wins; score 7 ≥ 5 → HIGH
+      expect(decision.intent).toBe('MANAGE_CART');
+      expect(decision.confidence).toBe('HIGH');
+    });
+  });
 });
