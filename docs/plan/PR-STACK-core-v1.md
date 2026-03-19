@@ -735,7 +735,7 @@ graph TD
   - JSON fields validados con DTOs `class-validator`
   - Presets se aplican en `getConfigWithDefaults()` si campo es null
 
-##### PR-04.0 — Expecting State Layer + PlaybookMessages Unificados 🔵 PENDIENTE
+##### PR-04.0 — Expecting State Layer + PlaybookMessages Unificados ✅ MERGED
 - **Scope:** MVP (infraestructura)
 - **Objetivo:** Crear capa unificada de estado `expecting` para flujos multi-paso y extender PlaybookMessages con todas las keys necesarias para guiar al usuario.
 - **Depende de:** PR-04 ✅ (Cart), PR-GAP-1 ✅ (PlaybookService).
@@ -1784,6 +1784,17 @@ graph TD
 - **Depende de:** PR-14 ✅.
 - **Incluye:** Custom `ThrottlerGuard` por merchant ID, .envtests.
 - **Prioridad:** BAJA — solo relevante si múltiples merchants comparten IP.
+
+##### PR-REFACTOR-01 — Centralizar keyword sanitization: unificar `INTENT_KEYWORDS` del flow con `keyword-configs.ts` 🟢
+- **Depende de:** PR-04.1 ✅ (una vez mergeado).
+- **Objetivo:** Eliminar drift entre las dos listas de keywords (routing en `keyword-configs.ts` vs sanitización en `search-catalog.flow.ts`). Actualmente se mantienen manualmente y pueden desincronizarse.
+- **Incluye:**
+  - Helper centralizado `getIntentPhrases(intent: IntentKey): string[]` en `keyword-helpers.ts`
+  - `SearchCatalogFlow.INTENT_KEYWORDS` derivado de `INTENT_KEYWORDS['SEARCH_PRODUCT']` vía helper
+  - Tests unitarios del helper
+- **Excluye:** Cambios de comportamiento, nuevas keywords, refactor de otros flows.
+- **Prioridad:** BAJA — el fix puntual de PR-04.1 (`'buscar'` en array del flow) elimina el síntoma inmediato.
+- **Origen:** Deuda técnica detectada durante análisis de PR-04.1 (2026-03-19).
 
 ---
 
