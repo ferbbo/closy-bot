@@ -8,6 +8,7 @@ import { CustomerService } from '../services/customer.service';
 import { ConversationService } from '../services/conversation.service';
 import { MerchantResolverService } from '../services/merchant-resolver.service';
 import { PlaybookService, type MerchantPlaybookData } from '../services/playbook.service';
+import { ExpectingService } from '../services/expecting.service'; // PR-04.1
 import { SearchCatalogFlow } from './flows/search-catalog.flow';
 import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
@@ -97,6 +98,7 @@ export class ConversationOrchestrator {
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
     private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
     private readonly playbookService: PlaybookService, // Fix: para usar unknownIntent del playbook
+    private readonly expectingService: ExpectingService, // PR-04.1: search_selection pre-check
   ) {
     // PR-03.5.1, REQ-08, AC-08: Removed `this.llmEnabled` binary toggle
   }
@@ -317,6 +319,83 @@ export class ConversationOrchestrator {
         merchantId: merchant.id,
         intent,
       };
+    }
+
+    // PR-04.1: Check for active search_selection expecting state BEFORE intent routing.
+    // This handles: ask_search_query, select_product, product_options, view_details.
+    const searchSelectionState = await this.expectingService.getExpecting(conversation.id);
+    if (searchSelectionState?.flow === 'search_selection') {
+      this.logger.log(
+        `Active search_selection state (type=${searchSelectionState.type}), routing accordingly`,
+      );
+
+      const merchantPlaybookData: MerchantPlaybookData = {
+        id: merchant.id,
+        name: merchant.name,
+        industry: merchant.industry ?? undefined,
+        playbookConfig: merchant.playbookConfig as unknown as Record<string, unknown> | null,
+      };
+
+      // ask_search_query: any message → treat as search query (REQ-11)
+      if (searchSelectionState.type === 'ask_search_query') {
+        const response = await this.searchCatalogFlow.handleAskSearchQueryReply(
+          merchantPlaybookData,
+          merchant.id,
+          input.text,
+          conversation.id,
+        );
+        await this.conversationService.updateLastIntent(conversation.id, 'SEARCH_PRODUCT');
+        return {
+          response,
+          shouldSend: true,
+          conversationId: conversation.id,
+          merchantId: merchant.id,
+          intent: 'SEARCH_PRODUCT',
+        };
+      }
+
+      // select_product + "siguiente": pagination (REQ-03)
+      const normalizedText = input.text
+        .toLowerCase()
+        .trim()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      if (searchSelectionState.type === 'select_product' && normalizedText === 'siguiente') {
+        const response = await this.searchCatalogFlow.handleNextPage(
+          merchantPlaybookData,
+          merchant.id,
+          conversation.id,
+        );
+        await this.conversationService.updateLastIntent(conversation.id, 'SEARCH_PRODUCT');
+        return {
+          response,
+          shouldSend: true,
+          conversationId: conversation.id,
+          merchantId: merchant.id,
+          intent: 'SEARCH_PRODUCT',
+        };
+      }
+
+      // select_product / product_options / view_details: delegate to AddToCartFlow (REQ-04..10)
+      if (
+        ['select_product', 'product_options', 'view_details'].includes(searchSelectionState.type)
+      ) {
+        const response = await this.addToCartFlow.handleExpecting(
+          merchantPlaybookData,
+          customer.id,
+          merchant.id,
+          conversation.id,
+          input.text,
+        );
+        await this.conversationService.updateLastIntent(conversation.id, 'ADD_TO_CART');
+        return {
+          response,
+          shouldSend: true,
+          conversationId: conversation.id,
+          merchantId: merchant.id,
+          intent: 'ADD_TO_CART',
+        };
+      }
     }
 
     // 6. PR-03.5.1: Classify and route (REQ-07, AC-07)
