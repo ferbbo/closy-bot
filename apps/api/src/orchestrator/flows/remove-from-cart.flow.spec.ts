@@ -1,9 +1,11 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
 import { RemoveFromCartFlow } from './remove-from-cart.flow';
 import { CartService } from '../../services/cart.service';
 import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.service';
+import { ExpectingService } from '../../services/expecting.service';
 import { PlaybookMessages } from '../../domain/entities/playbook-config.interface';
 import { GenericPlaybookDefaults } from '../../domain/entities/playbook-defaults/generic.config';
+import type { ExpectingState } from '../types/expecting.types';
 
 function buildMockGetMessage() {
   return jest
@@ -27,170 +29,218 @@ function buildMockGetMessage() {
 
 const mockMerchant: MerchantPlaybookData = { id: 'merchant-1', name: 'TestMerchant' };
 
-/**
- * RemoveFromCartFlow Unit Tests
- * AC-10: Test remove from cart conversational flow
- * PR-04: Cart CRUD conversational
- * PR-GAP-1 AC-03: Verifica que RemoveFromCartFlow usa PlaybookService.getMessage() sin hardcode
- */
-describe('AC-10: RemoveFromCartFlow', () => {
+const mockCartItems = [
+  { id: 'item-1', name: 'Camiseta', qty: 2 },
+  { id: 'item-2', name: 'Pantalón', qty: 1 },
+];
+
+function makeExpectingState(type: string, extra: Record<string, unknown> = {}): ExpectingState {
+  return {
+    flow: 'cart_management',
+    type: type as 'select_action' | 'confirm_action' | 'select_quantity',
+    data: { cartItems: mockCartItems, ...extra },
+    expiresAt: new Date(Date.now() + 600000).toISOString(),
+  };
+}
+
+function makeModule() {
+  return Test.createTestingModule({
+    providers: [
+      RemoveFromCartFlow,
+      {
+        provide: CartService,
+        useValue: {
+          createOrGetActiveCart: jest.fn(),
+          getCartSummary: jest.fn(),
+          removeItem: jest.fn(),
+        },
+      },
+      {
+        provide: PlaybookService,
+        useValue: { getMessage: buildMockGetMessage() },
+      },
+      {
+        provide: ExpectingService,
+        useValue: { setExpecting: jest.fn(), clearExpecting: jest.fn() },
+      },
+    ],
+  }).compile();
+}
+
+describe('AC-05: RemoveFromCartFlow — handleSelectAction', () => {
+  let flow: RemoveFromCartFlow;
+  let playbookService: jest.Mocked<PlaybookService>;
+  let expectingService: jest.Mocked<ExpectingService>;
+
+  beforeEach(async () => {
+    const module = await makeModule();
+    flow = module.get(RemoveFromCartFlow);
+    playbookService = module.get(PlaybookService);
+    expectingService = module.get(ExpectingService);
+  });
+
+  it('AC-05: "eliminar 2" → confirm action menu for Pantalón', async () => {
+    const expecting = makeExpectingState('select_action');
+    await flow.handleSelectAction(
+      mockMerchant,
+      'cust-1',
+      'merch-1',
+      'conv-1',
+      'eliminar 2',
+      expecting,
+    );
+
+    expect(playbookService.getMessage).toHaveBeenCalledWith(
+      mockMerchant,
+      'cartActionConfirmPrompt',
+      expect.objectContaining({ productName: 'Pantalón' }),
+    );
+    expect(expectingService.setExpecting).toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({
+        flow: 'cart_management',
+        type: 'confirm_action',
+        data: expect.objectContaining({ pendingAction: 'remove', selectedItemIndex: 2 }),
+      }),
+    );
+  });
+
+  it('AC-05: "modificar 1" → confirm action menu with modify pending', async () => {
+    const expecting = makeExpectingState('select_action');
+    await flow.handleSelectAction(
+      mockMerchant,
+      'cust-1',
+      'merch-1',
+      'conv-1',
+      'modificar 1',
+      expecting,
+    );
+
+    expect(expectingService.setExpecting).toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({
+        data: expect.objectContaining({ pendingAction: 'modify', selectedItemIndex: 1 }),
+      }),
+    );
+  });
+
+  it('AC-05: bare number "1" → confirm action with item 1', async () => {
+    const expecting = makeExpectingState('select_action');
+    await flow.handleSelectAction(mockMerchant, 'cust-1', 'merch-1', 'conv-1', '1', expecting);
+
+    expect(expectingService.setExpecting).toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({
+        data: expect.objectContaining({ selectedItemIndex: 1 }),
+      }),
+    );
+  });
+
+  it('AC-10: index out of range → cartItemNotFound, no state change', async () => {
+    const expecting = makeExpectingState('select_action');
+    await flow.handleSelectAction(
+      mockMerchant,
+      'cust-1',
+      'merch-1',
+      'conv-1',
+      'eliminar 99',
+      expecting,
+    );
+
+    expect(playbookService.getMessage).toHaveBeenCalledWith(mockMerchant, 'cartItemNotFound');
+    expect(expectingService.setExpecting).not.toHaveBeenCalled();
+  });
+});
+
+describe('AC-06: RemoveFromCartFlow — handleConfirmRemove', () => {
   let flow: RemoveFromCartFlow;
   let cartService: jest.Mocked<CartService>;
   let playbookService: jest.Mocked<PlaybookService>;
+  let expectingService: jest.Mocked<ExpectingService>;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        RemoveFromCartFlow,
-        {
-          provide: CartService,
-          useValue: {
-            createOrGetActiveCart: jest.fn(),
-            getCartSummary: jest.fn(),
-            removeItem: jest.fn(),
-          },
-        },
-        {
-          provide: PlaybookService,
-          useValue: {
-            getMessage: buildMockGetMessage(),
-          },
-        },
-      ],
-    }).compile();
-
-    flow = module.get<RemoveFromCartFlow>(RemoveFromCartFlow);
+    const module = await makeModule();
+    flow = module.get(RemoveFromCartFlow);
     cartService = module.get(CartService);
     playbookService = module.get(PlaybookService);
+    expectingService = module.get(ExpectingService);
   });
 
-  it('AC-10: should remove item', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cartService.createOrGetActiveCart.mockResolvedValue({ id: 'cart-1' } as any);
-    cartService.getCartSummary
-      .mockResolvedValueOnce({
-        items: [
-          {
-            id: 'item-1',
-            productName: 'Camiseta',
-            variantName: 'Talla M',
-            quantity: 1,
-            priceSnapshot: 25,
-            subtotal: 25,
-          },
-        ],
-        total: 25,
-        itemCount: 1,
-      })
-      .mockResolvedValueOnce({
-        items: [],
-        total: 0,
-        itemCount: 0,
-      });
-
-    const response = await flow.execute(mockMerchant, 'customer-1', 'merchant-1', 'camiseta');
-
-    expect(response).toContain('removido');
-    expect(cartService.removeItem).toHaveBeenCalled();
-    // AC-03: getMessage is called for removeConfirm, no hardcode
-    expect(playbookService.getMessage).toHaveBeenCalledWith(
-      mockMerchant,
-      'removeConfirm',
-      expect.any(Object),
-    );
-  });
-
-  it('AC-03: should call getMessage(cartEmptyNoAction) for empty cart (no hardcode)', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cartService.createOrGetActiveCart.mockResolvedValue({ id: 'cart-1' } as any);
-    cartService.getCartSummary.mockResolvedValue({
-      items: [],
-      total: 0,
-      itemCount: 0,
-    });
-
-    const response = await flow.execute(mockMerchant, 'customer-1', 'merchant-1', 'camiseta');
-
-    expect(response).toContain('carrito está vacío');
-    expect(playbookService.getMessage).toHaveBeenCalledWith(
-      mockMerchant,
-      'cartEmptyNoAction',
-      expect.any(Object),
-    );
-  });
-
-  it('AC-03: should call getMessage(itemNotInCart) when item not found (no hardcode)', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cartService.createOrGetActiveCart.mockResolvedValue({ id: 'cart-1' } as any);
+  it('AC-06: removes item, calls clearExpecting, shows updated cart', async () => {
+    cartService.createOrGetActiveCart.mockResolvedValue({ id: 'cart-1' });
+    cartService.removeItem.mockResolvedValue({});
     cartService.getCartSummary.mockResolvedValue({
       items: [
         {
           id: 'item-1',
-          productName: 'Pantalón',
-          variantName: 'Talla L',
-          quantity: 1,
-          priceSnapshot: 35,
-          subtotal: 35,
+          productName: 'Camiseta',
+          variantName: 'M',
+          quantity: 2,
+          priceSnapshot: 25,
+          subtotal: 50,
         },
       ],
-      total: 35,
-      itemCount: 1,
+      total: 50,
+      itemCount: 2,
     });
 
-    const response = await flow.execute(mockMerchant, 'customer-1', 'merchant-1', 'camiseta');
+    const response = await flow.handleConfirmRemove(
+      mockMerchant,
+      'cust-1',
+      'merch-1',
+      'conv-1',
+      'item-2',
+      'Pantalón',
+    );
 
-    expect(response).toContain('No encontré');
+    expect(cartService.removeItem).toHaveBeenCalledWith('cart-1', 'item-2');
+    expect(expectingService.clearExpecting).toHaveBeenCalledWith('conv-1');
     expect(playbookService.getMessage).toHaveBeenCalledWith(
       mockMerchant,
-      'itemNotInCart',
-      expect.any(Object),
+      'cartRemoveSuccess',
+      expect.objectContaining({ productName: 'Pantalón' }),
     );
+    expect(response).toBeTruthy();
   });
 
-  it('should show updated total after removal', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cartService.createOrGetActiveCart.mockResolvedValue({ id: 'cart-1' } as any);
-    cartService.getCartSummary
-      .mockResolvedValueOnce({
-        items: [
-          {
-            id: 'item-1',
-            productName: 'Camiseta',
-            variantName: 'Talla M',
-            quantity: 1,
-            priceSnapshot: 25,
-            subtotal: 25,
-          },
-          {
-            id: 'item-2',
-            productName: 'Pantalón',
-            variantName: 'Talla L',
-            quantity: 1,
-            priceSnapshot: 35,
-            subtotal: 35,
-          },
-        ],
-        total: 60,
-        itemCount: 2,
-      })
-      .mockResolvedValueOnce({
-        items: [
-          {
-            id: 'item-2',
-            productName: 'Pantalón',
-            variantName: 'Talla L',
-            quantity: 1,
-            priceSnapshot: 35,
-            subtotal: 35,
-          },
-        ],
-        total: 35,
-        itemCount: 1,
-      });
+  it('AC-06: empty cart after removal → shows cartEmpty message', async () => {
+    cartService.createOrGetActiveCart.mockResolvedValue({ id: 'cart-1' });
+    cartService.removeItem.mockResolvedValue({});
+    cartService.getCartSummary.mockResolvedValue({ items: [], total: 0, itemCount: 0 });
 
-    const response = await flow.execute(mockMerchant, 'customer-1', 'merchant-1', 'camiseta');
+    const response = await flow.handleConfirmRemove(
+      mockMerchant,
+      'cust-1',
+      'merch-1',
+      'conv-1',
+      'item-1',
+      'Camiseta',
+    );
 
-    expect(response).toContain('removido');
-    expect(response).toContain('$35');
+    expect(playbookService.getMessage).toHaveBeenCalledWith(mockMerchant, 'cartEmpty');
+    expect(response).toContain('Camiseta');
+  });
+});
+
+describe('AC-08: RemoveFromCartFlow — handleCancel', () => {
+  let flow: RemoveFromCartFlow;
+  let cartService: jest.Mocked<CartService>;
+  let playbookService: jest.Mocked<PlaybookService>;
+  let expectingService: jest.Mocked<ExpectingService>;
+
+  beforeEach(async () => {
+    const module = await makeModule();
+    flow = module.get(RemoveFromCartFlow);
+    cartService = module.get(CartService);
+    playbookService = module.get(PlaybookService);
+    expectingService = module.get(ExpectingService);
+  });
+
+  it('AC-08: cancel clears expecting and returns cartActionCancelled', async () => {
+    await flow.handleCancel(mockMerchant, 'conv-1');
+
+    expect(expectingService.clearExpecting).toHaveBeenCalledWith('conv-1');
+    expect(cartService.removeItem).not.toHaveBeenCalled();
+    expect(playbookService.getMessage).toHaveBeenCalledWith(mockMerchant, 'cartActionCancelled');
   });
 });

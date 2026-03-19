@@ -26,6 +26,11 @@ import { LlmService } from '../llm/llm.service';
 import { Customer, Merchant, Conversation, ConversationType, MerchantStatus } from '@prisma/client';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10
+import { PlaybookService, MerchantPlaybookData } from '../services/playbook.service'; // PR-04.2
+import { ExpectingService } from '../services/expecting.service'; // PR-04.2
+import { CartService } from '../services/cart.service'; // PR-04.2
+import { PlaybookMessages } from '../domain/entities/playbook-config.interface'; // PR-04.2
+import { GenericPlaybookDefaults } from '../domain/entities/playbook-defaults/generic.config'; // PR-04.2
 
 describe('ConversationOrchestrator', () => {
   let orchestrator: ConversationOrchestrator;
@@ -121,6 +126,7 @@ describe('ConversationOrchestrator', () => {
               confidence: 'HIGH',
               signals: ['hola'],
             }),
+            extractCartAction: jest.fn().mockReturnValue(null), // PR-04.2
           },
         },
         {
@@ -157,12 +163,18 @@ describe('ConversationOrchestrator', () => {
           provide: UpdateCartItemFlow,
           useValue: {
             execute: jest.fn().mockResolvedValue('Quantity updated'),
+            handleAskQuantity: jest.fn().mockResolvedValue('Ask quantity'),
+            handleSelectQuantity: jest.fn().mockResolvedValue('Quantity updated'),
           },
         },
         {
           provide: RemoveFromCartFlow,
           useValue: {
             execute: jest.fn().mockResolvedValue('Item removed'),
+            handleSelectAction: jest.fn().mockResolvedValue('Select action'),
+            handleDirectAction: jest.fn().mockResolvedValue('Direct action'),
+            handleConfirmRemove: jest.fn().mockResolvedValue('Item removed'),
+            handleCancel: jest.fn().mockResolvedValue('Cancelled'),
           },
         },
         {
@@ -251,6 +263,40 @@ describe('ConversationOrchestrator', () => {
           useValue: {
             relayCustomerMessageToMerchant: jest.fn().mockResolvedValue(undefined),
           },
+        },
+        {
+          provide: PlaybookService, // PR-04.2
+          useValue: {
+            getMessage: jest
+              .fn()
+              .mockImplementation(
+                (
+                  merchant: MerchantPlaybookData,
+                  key: keyof PlaybookMessages,
+                  placeholders?: Record<string, string | number>,
+                ) => {
+                  let template: string = GenericPlaybookDefaults.messages[key] ?? String(key);
+                  if (placeholders) {
+                    for (const [k, v] of Object.entries(placeholders)) {
+                      template = template.replace(`{${k}}`, String(v));
+                    }
+                  }
+                  return template;
+                },
+              ),
+          },
+        },
+        {
+          provide: ExpectingService, // PR-04.2
+          useValue: {
+            getExpecting: jest.fn().mockResolvedValue(null),
+            setExpecting: jest.fn().mockResolvedValue(undefined),
+            clearExpecting: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: CartService, // PR-04.2
+          useValue: { getVariantStockForItem: jest.fn().mockResolvedValue(10) },
         },
       ],
     }).compile();
@@ -368,7 +414,7 @@ describe('ConversationOrchestrator', () => {
       // V2: GENERIC route returns hardcoded message, no searchCatalogFlow call
       expect(searchCatalogFlow.handle).not.toHaveBeenCalled();
       // AC-12: Exact message from brief
-      expect(result.response).toBe("No entendí, escribe 'ayuda'");
+      expect(result.response).toBe('No entendí tu mensaje. Escribe "ayuda" para ver opciones.');
     });
 
     it('should resolve merchant, customer, and conversation', async () => {
