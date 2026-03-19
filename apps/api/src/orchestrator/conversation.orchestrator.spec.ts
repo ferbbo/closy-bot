@@ -102,6 +102,7 @@ describe('ConversationOrchestrator', () => {
           provide: ConversationService,
           useValue: {
             getOrCreateConversation: jest.fn().mockResolvedValue(mockConversation),
+            updateLastIntent: jest.fn().mockResolvedValue(undefined),
           },
         },
         {

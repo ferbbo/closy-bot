@@ -507,6 +507,8 @@ export class ConversationOrchestrator {
 
       case 'SEARCH_PRODUCT':
         return await this.searchCatalogFlow.handle(merchantPlaybook, merchantId, originalText, conversationId);
+
+      case 'ADD_TO_CART':
         return await this.addToCartFlow.execute(
           merchantPlaybook,
           customerId,
