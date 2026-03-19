@@ -37,6 +37,8 @@ export interface ExpectingStateData {
   selectedItemIndex?: number;
   /** Maximum stock available for selected product */
   maxStock?: number;
+  /** Original search query used for pagination (re-search on next page) */
+  searchQuery?: string;
   /** Current page in paginated search (1-based) */
   page?: number;
   /** Whether there are more search results on the next page */
