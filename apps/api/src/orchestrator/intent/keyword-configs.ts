@@ -34,7 +34,7 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
 
   VIEW_CART: [
     { phrase: 'carrito', weight: 5 },
-    { phrase: 'ver carrito', weight: 5 },
+    { phrase: 'ver carrito', weight: 3 }, // weight 3 to avoid AMBIGUOUS tie with MANAGE_CART
     { phrase: 'mostrar carrito', weight: 5 },
     { phrase: 'que tengo', weight: 4 },
     { phrase: 'mi carrito', weight: 5 },

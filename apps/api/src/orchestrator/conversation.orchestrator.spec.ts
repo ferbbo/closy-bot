@@ -631,6 +631,138 @@ describe('ConversationOrchestrator', () => {
       });
     });
 
+    // -------------------------------------------------------------------------
+    // PR-04.2: Cart management expecting pre-check
+    // AC-06: confirm_action → handleConfirmRemove
+    // AC-09: select_action/confirm_action/select_quantity dispatching
+    // -------------------------------------------------------------------------
+    describe('PR-04.2: cart_management expecting pre-check', () => {
+      let expectingService: ExpectingService;
+      let removeFromCartFlow: RemoveFromCartFlow;
+      let updateCartItemFlow: UpdateCartItemFlow;
+      let cartService: CartService;
+
+      beforeEach(() => {
+        expectingService = orchestrator['expectingService'] as ExpectingService;
+        removeFromCartFlow = orchestrator['removeFromCartFlow'] as RemoveFromCartFlow;
+        updateCartItemFlow = orchestrator['updateCartItemFlow'] as UpdateCartItemFlow;
+        cartService = orchestrator['cartService'] as CartService;
+      });
+
+      const cartItems = [{ id: 'item-1', name: 'Camiseta', qty: 1 }];
+      const futureExpiry = new Date(Date.now() + 600000).toISOString();
+
+      it('AC-09: cart_management expecting active → routes to handleCartManagementExpecting (not intent router)', async () => {
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'cart_management',
+          type: 'select_action',
+          data: { cartItems },
+          expiresAt: futureExpiry,
+        });
+        jest.spyOn(removeFromCartFlow, 'handleSelectAction').mockResolvedValue('menu de confirmación');
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: 'eliminar 1',
+        });
+
+        expect(result.intent).toBe('MANAGE_CART');
+        expect(result.shouldSend).toBe(true);
+        expect(routeDecisionService.classifyAndRoute).not.toHaveBeenCalled();
+        expect(removeFromCartFlow.handleSelectAction).toHaveBeenCalled();
+      });
+
+      it('AC-06: e2e: confirm_action option 1 (remove) → handleConfirmRemove called', async () => {
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'cart_management',
+          type: 'confirm_action',
+          data: {
+            cartItems,
+            pendingAction: 'remove',
+            selectedItemIndex: 1,
+          },
+          expiresAt: futureExpiry,
+        });
+        jest.spyOn(removeFromCartFlow, 'handleConfirmRemove').mockResolvedValue('Camiseta eliminada');
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: '1',
+        });
+
+        expect(result.shouldSend).toBe(true);
+        expect(removeFromCartFlow.handleConfirmRemove).toHaveBeenCalled();
+      });
+
+      it('AC-09: e2e: confirm_action option 2 → handleAskQuantity called (regardless of pendingAction)', async () => {
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'cart_management',
+          type: 'confirm_action',
+          data: {
+            cartItems,
+            pendingAction: 'remove',
+            selectedItemIndex: 1,
+          },
+          expiresAt: futureExpiry,
+        });
+        jest.spyOn(cartService, 'getVariantStockForItem').mockResolvedValue(10);
+        jest.spyOn(updateCartItemFlow, 'handleAskQuantity').mockResolvedValue('Cuántas unidades?');
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: '2',
+        });
+
+        expect(result.shouldSend).toBe(true);
+        expect(updateCartItemFlow.handleAskQuantity).toHaveBeenCalled();
+      });
+
+      it('AC-09: e2e: confirm_action option 3 (cancel) → handleCancel called, NOT handleConfirmRemove', async () => {
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'cart_management',
+          type: 'confirm_action',
+          data: {
+            cartItems,
+            pendingAction: 'remove',
+            selectedItemIndex: 1,
+          },
+          expiresAt: futureExpiry,
+        });
+        jest.spyOn(removeFromCartFlow, 'handleCancel').mockResolvedValue('Acción cancelada');
+        jest.spyOn(removeFromCartFlow, 'handleConfirmRemove').mockResolvedValue('should not be called');
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: '3',
+        });
+
+        expect(result.shouldSend).toBe(true);
+        expect(removeFromCartFlow.handleCancel).toHaveBeenCalled();
+        expect(removeFromCartFlow.handleConfirmRemove).not.toHaveBeenCalled();
+      });
+
+      it('AC-09: e2e: select_quantity → handleSelectQuantity called', async () => {
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'cart_management',
+          type: 'select_quantity',
+          data: {
+            selectedProduct: { id: 'item-1', name: 'Camiseta' },
+            maxStock: 10,
+          },
+          expiresAt: futureExpiry,
+        });
+        jest.spyOn(updateCartItemFlow, 'handleSelectQuantity').mockResolvedValue('Cantidad actualizada');
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: '3',
+        });
+
+        expect(result.shouldSend).toBe(true);
+        expect(updateCartItemFlow.handleSelectQuantity).toHaveBeenCalled();
+      });
+    });
+
     describe('PR-05.2 AC-07: handoffActive relay — customer message relayed to merchant', () => {
       it('AC-07: should relay customer message when handoffActive = true (NO flows/LLM)', async () => {
         // Conversation with handoffActive = true
