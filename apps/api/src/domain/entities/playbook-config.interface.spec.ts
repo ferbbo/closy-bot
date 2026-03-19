@@ -93,6 +93,37 @@ describe('AC-01: PlaybookConfig interface — botPersonality + PlaybookMessages 
     expect(fieldCount).toBeGreaterThanOrEqual(22);
   });
 
+  // PR-04.0 AC-06: 20 new PR-04.0 keys present in interface + 2 pre-existing = 22 total
+  it('AC-06 (PR-04.0): PlaybookMessages has all 20 new PR-04.0 keys', () => {
+    const msgs: PlaybookMessages = GenericPlaybookDefaults.messages;
+    const pr040Keys: (keyof PlaybookMessages)[] = [
+      'askQuantity',
+      'invalidProductSelection',
+      'cartListWithActions',
+      'cartActionConfirmPrompt',
+      'cartActionCancelled',
+      'cartManagementHint',
+      'cartModifyAskQuantity',
+      'cartModifySuccess',
+      'cartRemoveSuccess',
+      'cartItemNotFound',
+      'noActiveSearch',
+      'searchExpired',
+      'searchAskKeyword',
+      'searchResults',
+      'searchActionMenu',
+      'searchNotFound',
+      'searchCancelled',
+      'searchViewDetails',
+      'searchNextHint',
+      'searchNoMorePages',
+    ];
+    for (const key of pr040Keys) {
+      expect(typeof msgs[key]).toBe('string');
+      expect((msgs[key] as string).length).toBeGreaterThan(0);
+    }
+  });
+
   // PR-GAP-2: Faq type evidence
   it('AC-01 (PR-GAP-2): Faq type has required fields question, keywords, answer', () => {
     const faq: Faq = {
