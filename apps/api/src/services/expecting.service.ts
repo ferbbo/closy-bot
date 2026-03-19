@@ -14,8 +14,8 @@ import { ConversationRepository } from '../persistence/repositories/conversation
 import type { ExpectingState } from '../orchestrator/types/expecting.types';
 
 /** TTL constants (milliseconds) */
-const TTL_CART_SEARCH_MS = 10 * 60 * 1000;   // 10 minutes
-const TTL_CHECKOUT_MS = 30 * 60 * 1000;       // 30 minutes
+const TTL_CART_SEARCH_MS = 10 * 60 * 1000; // 10 minutes
+const TTL_CHECKOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 @Injectable()
 export class ExpectingService {

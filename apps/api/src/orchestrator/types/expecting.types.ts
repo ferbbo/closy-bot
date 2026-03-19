@@ -10,14 +10,14 @@ export type ExpectingFlow = 'search_selection' | 'cart_management' | 'checkout';
 
 export type ExpectingType =
   // search_selection types
-  | 'ask_search_query'   // bare "buscar" — ask user for keyword
-  | 'select_product'     // numbered list shown, awaiting selection
-  | 'product_options'    // product selected: 1) add 2) details 3) cancel
-  | 'view_details'       // details shown: 1) add 2) cancel
+  | 'ask_search_query' // bare "buscar" — ask user for keyword
+  | 'select_product' // numbered list shown, awaiting selection
+  | 'product_options' // product selected: 1) add 2) details 3) cancel
+  | 'view_details' // details shown: 1) add 2) cancel
   // cart_management types
-  | 'select_action'      // cart listed: "eliminar N" or "modificar N"
-  | 'confirm_action'     // item selected, confirm action menu
-  | 'select_quantity'    // awaiting new quantity
+  | 'select_action' // cart listed: "eliminar N" or "modificar N"
+  | 'confirm_action' // item selected, confirm action menu
+  | 'select_quantity' // awaiting new quantity
   // checkout types
   | 'input_name'
   | 'input_address'

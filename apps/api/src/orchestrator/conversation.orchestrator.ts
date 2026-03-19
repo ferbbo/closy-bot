@@ -506,7 +506,12 @@ export class ConversationOrchestrator {
         return await this.helpFlow.handle(merchantPlaybook);
 
       case 'SEARCH_PRODUCT':
-        return await this.searchCatalogFlow.handle(merchantPlaybook, merchantId, originalText, conversationId);
+        return await this.searchCatalogFlow.handle(
+          merchantPlaybook,
+          merchantId,
+          originalText,
+          conversationId,
+        );
 
       case 'ADD_TO_CART':
         return await this.addToCartFlow.execute(
@@ -618,7 +623,12 @@ export class ConversationOrchestrator {
       default:
         // Should not reach here (RouteDecisionService handles UNKNOWN)
         // But keep as safety fallback
-        return await this.searchCatalogFlow.handle(merchantPlaybook, merchantId, originalText, conversationId);
+        return await this.searchCatalogFlow.handle(
+          merchantPlaybook,
+          merchantId,
+          originalText,
+          conversationId,
+        );
     }
   }
 

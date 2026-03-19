@@ -156,7 +156,12 @@ describe('CheckoutService', () => {
       const expectingState: ExpectingState = {
         flow: 'checkout',
         type: 'input_address',
-        data: { cartId: 'cart-1', checkoutName: 'Juan Pérez', startedAt: '2026-01-01T00:00:00.000Z', invalidAttempts: 0 },
+        data: {
+          cartId: 'cart-1',
+          checkoutName: 'Juan Pérez',
+          startedAt: '2026-01-01T00:00:00.000Z',
+          invalidAttempts: 0,
+        },
         expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
       };
       expectingService.getExpecting.mockResolvedValue(expectingState);
@@ -439,7 +444,10 @@ describe('CheckoutService', () => {
 
   describe('AC-11 (PR-04.0): CheckoutService - uses ExpectingService', () => {
     it('AC-11: startCheckout calls expectingService.setExpecting with flow=checkout', async () => {
-      cartRepository.findActiveCart.mockResolvedValue({ id: 'cart-1', status: CartStatus.active } as any);
+      cartRepository.findActiveCart.mockResolvedValue({
+        id: 'cart-1',
+        status: CartStatus.active,
+      } as any);
       (prismaService.cartItem.count as jest.Mock).mockResolvedValue(1);
       expectingService.setExpecting.mockResolvedValue(undefined);
 
@@ -447,7 +455,11 @@ describe('CheckoutService', () => {
 
       expect(expectingService.setExpecting).toHaveBeenCalledWith(
         'conv-1',
-        expect.objectContaining({ flow: 'checkout', type: 'input_name', data: expect.objectContaining({ cartId: 'cart-1' }) }),
+        expect.objectContaining({
+          flow: 'checkout',
+          type: 'input_name',
+          data: expect.objectContaining({ cartId: 'cart-1' }),
+        }),
       );
     });
 

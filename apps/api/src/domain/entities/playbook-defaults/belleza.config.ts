@@ -93,8 +93,7 @@ export const BellezaPlaybookDefaults: PlaybookConfig = {
       'Seleccionaste: *{productName}* ✨\n1. Confirmar eliminación\n2. Modificar cantidad\n3. Cancelar',
     cartActionCancelled: 'Carrito sin cambios. Escribe *modificar carrito* para continuar.',
     cartManagementHint: 'Para seguir modificando tu carrito, escribe *modificar carrito*',
-    cartModifyAskQuantity:
-      '{productName} - tienes {quantity}.\n¿Cuántas quieres? (máx {stock})',
+    cartModifyAskQuantity: '{productName} - tienes {quantity}.\n¿Cuántas quieres? (máx {stock})',
     cartModifySuccess: '✅ Actualizado: {productName} x{newQuantity}',
     cartRemoveSuccess: '✅ Eliminado: {productName} del carrito ✨',
     cartItemNotFound: 'No encontré ese producto en tu carrito',
@@ -106,8 +105,7 @@ export const BellezaPlaybookDefaults: PlaybookConfig = {
       '📦 Productos encontrados:\n{lista}\n\nSelecciona digitando su número.\nPara buscar otro: *buscar [nombre]*{nextHint}',
     searchActionMenu:
       '✅ Seleccionaste: {productName} — ${price} ✨\n\n1️⃣ Agregar al carrito\n2️⃣ Ver detalles\n3️⃣ Cancelar',
-    searchNotFound:
-      '⚠️ Producto no encontrado. Intenta con otra palabra o revisa la lista.',
+    searchNotFound: '⚠️ Producto no encontrado. Intenta con otra palabra o revisa la lista.',
     searchCancelled:
       '❌ Operación cancelada.\nPara buscar otro producto, escribe *buscar [nombre]*',
     searchViewDetails:

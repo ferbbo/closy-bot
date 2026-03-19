@@ -73,7 +73,6 @@ export class ImportService {
     };
 
     try {
-      
       const rows = this.parseCSV(csvContent);
       this.logger.log(`Parsed ${rows.length} rows from CSV`);
 
@@ -121,15 +120,15 @@ export class ImportService {
   private normalizeHeader(raw: string): string {
     const normalized = raw
       .toLowerCase()
-      .normalize('NFD')                // decompose accents (á → a + ́)
+      .normalize('NFD') // decompose accents (á → a + ́)
       .replace(/[\u0300-\u036f]/g, '') // strip combining marks
       .trim();
 
     const ALIASES: Record<string, string> = {
-      nombre:      'name',
+      nombre: 'name',
       descripcion: 'description',
-      categoria:   'category',
-      precio:      'price',
+      categoria: 'category',
+      precio: 'price',
       // stock / sku are identical in both languages — no alias needed
     };
 
@@ -148,9 +147,7 @@ export class ImportService {
       throw new BadRequestException('CSV must have header and at least one row');
     }
 
-    const header = lines[0]
-      .split(',')
-      .map((h) => this.normalizeHeader(h));
+    const header = lines[0].split(',').map((h) => this.normalizeHeader(h));
     const requiredFields = ['name', 'category', 'price', 'stock'];
 
     // Validate header

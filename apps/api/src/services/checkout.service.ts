@@ -330,7 +330,8 @@ export class CheckoutService {
 
   /** Convert CheckoutState (internal) → ExpectingState for persistence */
   private toExpectingState(state: CheckoutState): ExpectingState {
-    const type: ExpectingType = state.step === 'COMPLETED' ? 'confirm_order' : STEP_TO_TYPE[state.step];
+    const type: ExpectingType =
+      state.step === 'COMPLETED' ? 'confirm_order' : STEP_TO_TYPE[state.step];
     return {
       flow: 'checkout',
       type,

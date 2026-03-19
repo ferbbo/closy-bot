@@ -97,8 +97,20 @@ describe('MerchantSettingsService', () => {
       const hydratedPlaybook = {
         industry: 'ropa',
         messages: { greeting: 'Hola' },
-        llmPrompt: { tone: 'friendly', focusAreas: [], commonQuestions: [], upsellStrategy: '', emojiUsage: 'frequent' as const },
-        rules: { askSizeBeforeCart: true, askSkinTypeOnSearch: false, autoSubstitutions: false, upsellEnabled: false, maxRecommendations: 3 },
+        llmPrompt: {
+          tone: 'friendly',
+          focusAreas: [],
+          commonQuestions: [],
+          upsellStrategy: '',
+          emojiUsage: 'frequent' as const,
+        },
+        rules: {
+          askSizeBeforeCart: true,
+          askSkinTypeOnSearch: false,
+          autoSubstitutions: false,
+          upsellEnabled: false,
+          maxRecommendations: 3,
+        },
         checkoutQuestions: [],
       };
 

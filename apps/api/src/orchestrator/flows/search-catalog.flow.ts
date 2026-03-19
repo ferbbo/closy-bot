@@ -104,7 +104,12 @@ export class SearchCatalogFlow {
    * @param query     - Search query (raw user input, may include intent keywords)
    * @param conversationId - Conversation ID for ExpectingService (PR-04.0 REQ-06)
    */
-  async handle(merchant: MerchantPlaybookData, merchantId: string, query: string, conversationId?: string): Promise<string> {
+  async handle(
+    merchant: MerchantPlaybookData,
+    merchantId: string,
+    query: string,
+    conversationId?: string,
+  ): Promise<string> {
     const sanitizedQuery = this.sanitizeQuery(query);
     const subQueries = this.splitMultiProductQuery(sanitizedQuery);
 
@@ -121,7 +126,9 @@ export class SearchCatalogFlow {
     const products = await this.catalogService.searchProducts(merchantId, sanitizedQuery, 5);
 
     if (products.length === 0) {
-      return this.playbookService.getMessage(merchant, 'searchNoResults', { query: sanitizedQuery });
+      return this.playbookService.getMessage(merchant, 'searchNoResults', {
+        query: sanitizedQuery,
+      });
     }
 
     // PR-04.0 REQ-06 / AC-05: persist lastSearchResults + setExpecting select_product
