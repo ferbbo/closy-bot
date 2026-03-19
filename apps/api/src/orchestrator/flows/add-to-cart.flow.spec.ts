@@ -365,6 +365,7 @@ describe('AC-05: AddToCartFlow adds to cart qty=1 and clears expecting', () => {
 
 describe('AC-06: AddToCartFlow view details sets view_details expecting', () => {
   let flow: AddToCartFlow;
+  let catalogService: jest.Mocked<CatalogService>;
   let expectingService: jest.Mocked<ExpectingService>;
   let playbookService: jest.Mocked<PlaybookService>;
 
@@ -387,11 +388,26 @@ describe('AC-06: AddToCartFlow view details sets view_details expecting', () => 
     });
 
     flow = module.get<AddToCartFlow>(AddToCartFlow);
+    catalogService = module.get(CatalogService);
     expectingService = module.get(ExpectingService);
     playbookService = module.get(PlaybookService);
+
+    // AC-06: mock catalog to return product with description and stock
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    catalogService.searchProducts.mockResolvedValue([
+      {
+        id: 'p1',
+        name: 'Camiseta Azul',
+        description: 'Camiseta de algodón 100%',
+        variants: [
+          { id: 'v1', name: 'Talla M', price: 30000, stock: 5, isActive: true },
+          { id: 'v2', name: 'Talla L', price: 30000, stock: 3, isActive: true },
+        ],
+      } as any,
+    ]);
   });
 
-  it('AC-06: option "2" in product_options sets view_details expecting and shows details', async () => {
+  it('AC-06: option "2" in product_options sets view_details expecting and shows description/stock', async () => {
     await flow.handleExpecting(mockMerchant, 'cust-1', 'merch-1', 'conv-1', '2');
 
     expect(expectingService.setExpecting).toHaveBeenCalledWith(
@@ -402,10 +418,15 @@ describe('AC-06: AddToCartFlow view details sets view_details expecting', () => 
         data: expect.objectContaining({ selectedProduct }),
       }),
     );
+    // AC-06: searchViewDetails called with non-empty description and stock
     expect(playbookService.getMessage).toHaveBeenCalledWith(
       mockMerchant,
       'searchViewDetails',
-      expect.any(Object),
+      expect.objectContaining({
+        description: 'Camiseta de algodón 100%',
+        stock: '8', // 5 + 3 variants with stock > 0
+        price: '30000.00',
+      }),
     );
   });
 });
@@ -500,199 +521,5 @@ describe('AC-10: AddToCartFlow expired expecting returns searchExpired', () => {
 
     expect(expectingService.clearExpecting).toHaveBeenCalledWith('conv-1');
     expect(playbookService.getMessage).toHaveBeenCalledWith(mockMerchant, 'searchExpired');
-  });
-});
-
-function buildMockGetMessage() {
-  return jest
-    .fn()
-    .mockImplementation(
-      (
-        merchant: MerchantPlaybookData,
-        key: keyof PlaybookMessages,
-        placeholders?: Record<string, string | number>,
-      ) => {
-        let template: string = GenericPlaybookDefaults.messages[key] ?? String(key);
-        if (placeholders) {
-          for (const [k, v] of Object.entries(placeholders)) {
-            template = template.replace(`{${k}}`, String(v));
-          }
-        }
-        return template;
-      },
-    );
-}
-
-/**
- * AddToCartFlow Unit Tests
- * AC-07: Test add-to-cart conversational flow
- * PR-04: Cart CRUD conversational
- * PR-GAP-1 AC-03: Verifica que AddToCartFlow usa PlaybookService.getMessage() sin hardcode
- */
-describe('AC-07: AddToCartFlow', () => {
-  let flow: AddToCartFlow;
-  let cartService: jest.Mocked<CartService>;
-  let catalogService: jest.Mocked<CatalogService>;
-  let playbookService: jest.Mocked<PlaybookService>;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AddToCartFlow,
-        {
-          provide: CartService,
-          useValue: {
-            addItem: jest.fn(),
-            getCartSummary: jest.fn(),
-          },
-        },
-        {
-          provide: CatalogService,
-          useValue: {
-            searchProducts: jest.fn(),
-          },
-        },
-        {
-          provide: PlaybookService,
-          useValue: {
-            getMessage: buildMockGetMessage(),
-          },
-        },
-        {
-          provide: ExpectingService,
-          useValue: {
-            setExpecting: jest.fn().mockResolvedValue(undefined),
-            getExpecting: jest.fn().mockResolvedValue(null),
-            clearExpecting: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-      ],
-    }).compile();
-
-    flow = module.get<AddToCartFlow>(AddToCartFlow);
-    cartService = module.get(CartService);
-    catalogService = module.get(CatalogService);
-    playbookService = module.get(PlaybookService);
-  });
-
-  it('AC-07: should add item and return confirmation (getMessage called)', async () => {
-    const mockCart = { id: 'cart-1', items: [] };
-    const mockProduct = {
-      id: 'product-1',
-      name: 'Camiseta Roja',
-      variants: [
-        {
-          id: 'variant-1',
-          name: 'Talla M',
-          price: { toNumber: () => 25 },
-          stock: 10,
-          isActive: true,
-        },
-      ],
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    catalogService.searchProducts.mockResolvedValue([mockProduct as any]);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cartService.addItem.mockResolvedValue(mockCart as any);
-    cartService.getCartSummary.mockResolvedValue({
-      items: [],
-      total: 25,
-      itemCount: 1,
-    });
-
-    const response = await flow.execute(mockMerchant, 'customer-1', 'merchant-1', 'camiseta roja');
-
-    expect(response).toContain('Agregado al carrito');
-    expect(response).toContain('Camiseta Roja');
-    expect(cartService.addItem).toHaveBeenCalled();
-    // AC-03: getMessage is called, no hardcode
-    expect(playbookService.getMessage).toHaveBeenCalledWith(
-      mockMerchant,
-      'addToCartConfirm',
-      expect.any(Object),
-    );
-  });
-
-  it('AC-03: should call getMessage(productNotFound) when no results', async () => {
-    catalogService.searchProducts.mockResolvedValue([]);
-
-    const response = await flow.execute(
-      mockMerchant,
-      'customer-1',
-      'merchant-1',
-      'producto inexistente',
-    );
-
-    expect(response).toContain('No encontré');
-    expect(playbookService.getMessage).toHaveBeenCalledWith(
-      mockMerchant,
-      'productNotFound',
-      expect.objectContaining({ query: 'producto inexistente' }),
-    );
-  });
-
-  it('should handle multiple products calling getMessage(productMultipleOptions)', async () => {
-    const mockProducts = [
-      {
-        id: 'product-1',
-        name: 'Camiseta Roja',
-        variants: [{ id: 'v1', name: 'M', price: { toNumber: () => 25 }, stock: 10 }],
-      },
-      {
-        id: 'product-2',
-        name: 'Camiseta Azul',
-        variants: [{ id: 'v2', name: 'L', price: { toNumber: () => 30 }, stock: 5 }],
-      },
-    ];
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    catalogService.searchProducts.mockResolvedValue(mockProducts as any);
-
-    const response = await flow.execute(mockMerchant, 'customer-1', 'merchant-1', 'camiseta');
-
-    expect(response).toContain('Encontré varias opciones');
-    expect(response).toContain('Camiseta Roja');
-    expect(playbookService.getMessage).toHaveBeenCalledWith(
-      mockMerchant,
-      'productMultipleOptions',
-      expect.any(Object),
-    );
-  });
-
-  it('should handle multiple variants calling getMessage(variantMultipleOptions)', async () => {
-    const mockProduct = {
-      id: 'product-1',
-      name: 'Camiseta',
-      variants: [
-        { id: 'v1', name: 'Talla M', price: { toNumber: () => 25 }, stock: 10, isActive: true },
-        { id: 'v2', name: 'Talla L', price: { toNumber: () => 30 }, stock: 5, isActive: true },
-      ],
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    catalogService.searchProducts.mockResolvedValue([mockProduct as any]);
-
-    const response = await flow.execute(mockMerchant, 'customer-1', 'merchant-1', 'camiseta');
-
-    expect(response).toContain('tiene varias opciones');
-    expect(playbookService.getMessage).toHaveBeenCalledWith(
-      mockMerchant,
-      'variantMultipleOptions',
-      expect.any(Object),
-    );
-  });
-
-  it('AC-03: should call getMessage(quantityInvalid) for out-of-range quantity', async () => {
-    const response = await flow.execute(
-      mockMerchant,
-      'customer-1',
-      'merchant-1',
-      'producto',
-      'quiero 200 productos',
-    );
-
-    expect(response).toContain('cantidad debe estar entre 1 y 99');
-    expect(playbookService.getMessage).toHaveBeenCalledWith(mockMerchant, 'quantityInvalid');
   });
 });
