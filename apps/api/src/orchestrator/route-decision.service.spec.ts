@@ -448,7 +448,6 @@ describe('RouteDecisionService (PR-03.5.1)', () => {
 
 describe('AC-04 (PR-04.0): RouteDecisionService - expecting context propagation', () => {
   let service: RouteDecisionService;
-  let intentRouter: IntentRouterService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -483,7 +482,6 @@ describe('AC-04 (PR-04.0): RouteDecisionService - expecting context propagation'
     }).compile();
 
     service = module.get<RouteDecisionService>(RouteDecisionService);
-    intentRouter = module.get<IntentRouterService>(IntentRouterService);
   });
 
   it('AC-04: should accept RouteContext with expectingState and return TEMPLATE route', async () => {

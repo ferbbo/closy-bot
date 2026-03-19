@@ -37,7 +37,6 @@ describe('AC-04: SearchCatalogFlow uses PlaybookService.getMessage() (PR-GAP-1)'
   let flow: SearchCatalogFlow;
   let catalogService: jest.Mocked<CatalogService>;
   let playbookService: jest.Mocked<PlaybookService>;
-  let expectingService: jest.Mocked<ExpectingService>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -69,7 +68,6 @@ describe('AC-04: SearchCatalogFlow uses PlaybookService.getMessage() (PR-GAP-1)'
     flow = module.get<SearchCatalogFlow>(SearchCatalogFlow);
     catalogService = module.get(CatalogService);
     playbookService = module.get(PlaybookService);
-    expectingService = module.get(ExpectingService);
   });
 
   it('should be defined', () => {
@@ -433,7 +431,12 @@ describe('AC-05: SearchCatalogFlow - sets expecting after search (PR-04.0)', () 
         type: 'select_product',
         data: expect.objectContaining({
           products: expect.arrayContaining([
-            expect.objectContaining({ id: 'prod-1', name: 'Camiseta Azul', price: 30000, stock: 5 }),
+            expect.objectContaining({
+              id: 'prod-1',
+              name: 'Camiseta Azul',
+              price: 30000,
+              stock: 5,
+            }),
           ]),
           page: 1,
           hasMore: false,
