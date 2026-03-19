@@ -6,7 +6,12 @@ import type {
   IntentContext,
   ConfidenceLevel,
 } from '../types/intent.types';
-import { INTENT_KEYWORDS, CONTEXT_BONUSES, POST_SEARCH_SELECTION_PATTERNS, type KeywordConfig } from './keyword-configs';
+import {
+  INTENT_KEYWORDS,
+  CONTEXT_BONUSES,
+  POST_SEARCH_SELECTION_PATTERNS,
+  type KeywordConfig,
+} from './keyword-configs';
 
 /**
  * IntentRouterService V2
@@ -229,7 +234,9 @@ export class IntentRouterService {
     // force ADD_TO_CART to HIGH confidence — user is selecting from displayed results.
     // This runs BEFORE context bonuses to override any SEARCH_PRODUCT self-continuation scoring.
     if (context?.lastIntent === 'SEARCH_PRODUCT') {
-      const isSelection = POST_SEARCH_SELECTION_PATTERNS.some((pattern) => pattern.test(normalized));
+      const isSelection = POST_SEARCH_SELECTION_PATTERNS.some((pattern) =>
+        pattern.test(normalized),
+      );
       if (isSelection) {
         scores.set('ADD_TO_CART', 6); // HIGH confidence (> threshold_high=5), will win
         this.logger.debug(
