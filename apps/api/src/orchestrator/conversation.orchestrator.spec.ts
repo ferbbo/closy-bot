@@ -344,6 +344,7 @@ describe('ConversationOrchestrator', () => {
         expect.objectContaining({ id: 'merchant-1', name: 'Test Store' }),
         'merchant-1',
         'busco zapatillas',
+        expect.anything(), // conversationId (PR-04.0)
       );
     });
 
@@ -431,6 +432,7 @@ describe('ConversationOrchestrator', () => {
         expect.objectContaining({ id: 'merchant-1' }),
         'merchant-1',
         'some text',
+        expect.anything(), // conversationId (PR-04.0)
       );
     });
 
