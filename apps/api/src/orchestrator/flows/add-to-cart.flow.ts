@@ -152,7 +152,7 @@ export class AddToCartFlow {
 
     if (num === 2) {
       // REQ-06: View details
-      return this.showProductDetails(merchant, conversationId, selectedProduct);
+      return this.showProductDetails(merchant, merchantId, conversationId, selectedProduct);
     }
 
     if (num === 3) {
@@ -276,9 +276,11 @@ export class AddToCartFlow {
 
   /**
    * REQ-06: Show product details and set view_details expecting.
+   * AC-06: Fetches description and stock from catalog before rendering message.
    */
   private async showProductDetails(
     merchant: MerchantPlaybookData,
+    merchantId: string,
     conversationId: string,
     selectedProduct: { id: string; name: string; price: number },
   ): Promise<string> {
@@ -289,12 +291,33 @@ export class AddToCartFlow {
       expiresAt: ExpectingService.cartSearchExpiresAt(),
     });
 
-    // We don't have description/stock here without a DB lookup; use what we have.
-    // The description and stock are not stored in expecting snapshot — use price as proxy.
+    // REQ-06/AC-06: lookup description and stock from catalog
+    let description = '';
+    let stock = '';
+    try {
+      const products = await this.catalogService.searchProducts(
+        merchantId,
+        selectedProduct.name,
+        5,
+      );
+      const product = products.find((p) => p.id === selectedProduct.id) ?? products[0];
+      if (product) {
+        description = product.description ?? '';
+        const totalStock = product.variants
+          .filter((v) => v.stock > 0)
+          .reduce((sum, v) => sum + v.stock, 0);
+        stock = String(totalStock);
+      }
+    } catch (error) {
+      this.logger.warn(
+        `showProductDetails catalog lookup failed: ${(error as Error).message}`,
+      );
+    }
+
     return this.playbookService.getMessage(merchant, 'searchViewDetails', {
       productName: selectedProduct.name,
-      description: '',
-      stock: '',
+      description,
+      stock,
       price: selectedProduct.price.toFixed(2),
     });
   }
