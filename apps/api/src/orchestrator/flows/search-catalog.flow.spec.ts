@@ -3,6 +3,7 @@ import { SearchCatalogFlow } from './search-catalog.flow';
 import { CatalogService } from '../../services/catalog.service';
 import { ProductWithVariants } from '../../persistence/repositories/product.repository';
 import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.service';
+import { ExpectingService } from '../../services/expecting.service';
 import { PlaybookMessages } from '../../domain/entities/playbook-config.interface';
 import { GenericPlaybookDefaults } from '../../domain/entities/playbook-defaults/generic.config';
 
@@ -51,6 +52,14 @@ describe('AC-04: SearchCatalogFlow uses PlaybookService.getMessage() (PR-GAP-1)'
           provide: PlaybookService,
           useValue: {
             getMessage: buildMockGetMessage(),
+          },
+        },
+        {
+          provide: ExpectingService,
+          useValue: {
+            setExpecting: jest.fn().mockResolvedValue(undefined),
+            getExpecting: jest.fn(),
+            clearExpecting: jest.fn(),
           },
         },
       ],
@@ -348,5 +357,107 @@ describe('AC-04: SearchCatalogFlow uses PlaybookService.getMessage() (PR-GAP-1)'
       expect(result).toContain(longDescription.substring(0, 60));
       expect(result).not.toContain(longDescription);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC-05 (PR-04.0): SearchCatalogFlow sets expecting after search results
+// REQ-06: save lastSearchResults + setExpecting select_product
+// ---------------------------------------------------------------------------
+
+describe('AC-05: SearchCatalogFlow - sets expecting after search (PR-04.0)', () => {
+  let flow: SearchCatalogFlow;
+  let catalogService: jest.Mocked<CatalogService>;
+  let expectingService: jest.Mocked<ExpectingService>;
+
+  const mockProduct: ProductWithVariants = {
+    id: 'prod-1',
+    merchantId: 'merch-1',
+    name: 'Camiseta Azul',
+    description: 'Camiseta casual',
+    variants: [
+      {
+        id: 'var-1',
+        productId: 'prod-1',
+        name: 'M',
+        sku: 'CAM-AZ-M',
+        price: 30000,
+        stock: 5,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SearchCatalogFlow,
+        {
+          provide: CatalogService,
+          useValue: { searchProducts: jest.fn() },
+        },
+        {
+          provide: PlaybookService,
+          useValue: { getMessage: buildMockGetMessage() },
+        },
+        {
+          provide: ExpectingService,
+          useValue: {
+            setExpecting: jest.fn().mockResolvedValue(undefined),
+            getExpecting: jest.fn(),
+            clearExpecting: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    flow = module.get<SearchCatalogFlow>(SearchCatalogFlow);
+    catalogService = module.get(CatalogService);
+    expectingService = module.get(ExpectingService);
+  });
+
+  it('AC-05: should call setExpecting with select_product after returning results', async () => {
+    catalogService.searchProducts.mockResolvedValue([mockProduct]);
+
+    await flow.handle(mockMerchant, 'merch-1', 'camiseta', 'conv-1');
+
+    expect(expectingService.setExpecting).toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({
+        flow: 'search_selection',
+        type: 'select_product',
+        data: expect.objectContaining({
+          products: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'prod-1',
+              name: 'Camiseta Azul',
+              price: 30000,
+              stock: 5,
+            }),
+          ]),
+          page: 1,
+          hasMore: false,
+        }),
+      }),
+    );
+  });
+
+  it('AC-05: should NOT call setExpecting if no conversationId provided', async () => {
+    catalogService.searchProducts.mockResolvedValue([mockProduct]);
+
+    await flow.handle(mockMerchant, 'merch-1', 'camiseta');
+
+    expect(expectingService.setExpecting).not.toHaveBeenCalled();
+  });
+
+  it('AC-05: should NOT call setExpecting if no products found', async () => {
+    catalogService.searchProducts.mockResolvedValue([]);
+
+    await flow.handle(mockMerchant, 'merch-1', 'nonexistent', 'conv-1');
+
+    expect(expectingService.setExpecting).not.toHaveBeenCalled();
   });
 });

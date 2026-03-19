@@ -4,6 +4,7 @@
  */
 
 import type { IntentKey, ConfidenceLevel } from './intent.types';
+import type { ExpectingState } from './expecting.types';
 
 // AC-06: Route type for execution path
 export type RouteType = 'TEMPLATE' | 'LLM_FALLBACK' | 'GENERIC';
@@ -24,4 +25,9 @@ export interface RouteContext {
   merchantId: string;
   confidenceThresholdHigh?: number;
   confidenceThresholdLow?: number;
+  /**
+   * PR-04.0 REQ-05: Pre-loaded expecting state.
+   * If active, used as pre-classification context before intent classification.
+   */
+  expectingState?: ExpectingState | null;
 }

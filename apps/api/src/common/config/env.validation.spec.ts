@@ -67,8 +67,7 @@ describe('Environment Validation', () => {
   });
 
   it('AC-09 (GAP-3): should fail when DASHBOARD_URL is missing', () => {
-    const { DATABASE_URL, DASHBOARD_URL: _unused, ...withoutDashboardUrl } = validEnv;
-    void _unused;
+    const { DATABASE_URL, DASHBOARD_URL: _unused, ...withoutDashboardUrl } = validEnv; // eslint-disable-line @typescript-eslint/no-unused-vars
     const { error } = envValidationSchema.validate({ ...withoutDashboardUrl, DATABASE_URL });
     expect(error).toBeDefined();
     expect(error?.message).toContain('DASHBOARD_URL');

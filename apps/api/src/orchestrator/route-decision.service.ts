@@ -61,6 +61,13 @@ export class RouteDecisionService {
   async classifyAndRoute(text: string, context: RouteContext): Promise<RouteDecision> {
     const startTime = Date.now();
 
+    // PR-04.0 REQ-05 / AC-04: Log expecting state if present
+    if (context.expectingState) {
+      this.logger.debug(
+        `classifyAndRoute: expecting state active — flow=${context.expectingState.flow} type=${context.expectingState.type}`,
+      );
+    }
+
     // Step 1: REQ-01 to REQ-05 - Classify with IntentRouter V2
     const intentContext: IntentContext = {
       lastIntent: context.lastIntent,

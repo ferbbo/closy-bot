@@ -440,3 +440,79 @@ describe('RouteDecisionService (PR-03.5.1)', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// AC-04 (PR-04.0): RouteDecisionService - expecting context propagation
+// REQ-05: classifyAndRoute accepts expectingState in context
+// ---------------------------------------------------------------------------
+
+describe('AC-04 (PR-04.0): RouteDecisionService - expecting context propagation', () => {
+  let service: RouteDecisionService;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        RouteDecisionService,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue(false),
+          },
+        },
+        {
+          provide: IntentRouterService,
+          useValue: {
+            classify: jest.fn().mockReturnValue({
+              intent: 'SEARCH_PRODUCT',
+              confidence: 'HIGH',
+              reason: 'keyword match',
+              signals: ['buscar'],
+              missingSlots: [],
+            }),
+          },
+        },
+        {
+          provide: LlmService,
+          useValue: {
+            generateSimple: jest.fn(),
+            generateConversationalResponse: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    service = module.get<RouteDecisionService>(RouteDecisionService);
+  });
+
+  it('AC-04: should accept RouteContext with expectingState and return TEMPLATE route', async () => {
+    const context: RouteContext = {
+      conversationId: 'conv-1',
+      merchantId: 'merch-1',
+      expectingState: {
+        flow: 'search_selection',
+        type: 'select_product',
+        data: { products: [{ id: 'p1', name: 'Product', price: 10000, stock: 5 }] },
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      },
+    };
+
+    const decision = await service.classifyAndRoute('2', context);
+
+    // Route still determined by IntentRouter (expecting state is context, not override in PR-04.0)
+    expect(decision.route).toBe('TEMPLATE');
+    expect(decision).toBeDefined();
+  });
+
+  it('AC-04: should accept RouteContext without expectingState (backward compat)', async () => {
+    const context: RouteContext = {
+      conversationId: 'conv-1',
+      merchantId: 'merch-1',
+      // expectingState: undefined — optional field
+    };
+
+    const decision = await service.classifyAndRoute('buscar camiseta', context);
+
+    expect(decision.route).toBe('TEMPLATE');
+    expect(decision).toBeDefined();
+  });
+});

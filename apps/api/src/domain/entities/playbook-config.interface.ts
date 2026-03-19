@@ -147,6 +147,49 @@ export interface PlaybookMessages {
   ticketCreatedConfirm: string;
   /** Prompt asking for ticket description */
   ticketDescriptionPrompt: string;
+
+  // ── PR-04.0: Search + Cart management messages (22 new keys) ─────────────
+
+  /** Ask quantity before adding. Placeholders: {productName}, {stock} */
+  askQuantity: string;
+  /** Invalid numeric selection. Placeholder: {count} */
+  invalidProductSelection: string;
+  /** Cart list with action hints. Placeholders: {lista}, {count} */
+  cartListWithActions: string;
+  /** Cart action confirm prompt. Placeholder: {productName} */
+  cartActionConfirmPrompt: string;
+  /** Cart action cancelled (no changes) */
+  cartActionCancelled: string;
+  /** Hint to continue modifying cart after cancel */
+  cartManagementHint: string;
+  /** Modify item: ask new quantity. Placeholders: {productName}, {quantity}, {stock} */
+  cartModifyAskQuantity: string;
+  /** Modify item success. Placeholders: {productName}, {newQuantity} */
+  cartModifySuccess: string;
+  /** Remove item success. Placeholder: {productName} */
+  cartRemoveSuccess: string;
+  /** Item not found in cart */
+  cartItemNotFound: string;
+  /** No active search context */
+  noActiveSearch: string;
+  /** Search session expired */
+  searchExpired: string;
+  /** Ask user for search keyword (bare "buscar") */
+  searchAskKeyword: string;
+  /** Search results numbered list. Placeholders: {lista}, {nextHint} */
+  searchResults: string;
+  /** Product action menu after selection. Placeholders: {productName}, {price} */
+  searchActionMenu: string;
+  /** No products found in search */
+  searchNotFound: string;
+  /** Search flow cancelled */
+  searchCancelled: string;
+  /** Product details view. Placeholders: {productName}, {description}, {stock}, {price} */
+  searchViewDetails: string;
+  /** Hint for next page (appended when hasMore=true) */
+  searchNextHint: string;
+  /** No more pages in search results */
+  searchNoMorePages: string;
 }
 
 export interface PlaybookRules {

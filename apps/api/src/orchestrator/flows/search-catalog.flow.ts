@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CatalogService } from '../../services/catalog.service';
 import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.service';
+import { ExpectingService } from '../../services/expecting.service';
 import { ProductWithVariants } from '../../persistence/repositories/product.repository';
 
 /**
@@ -48,6 +49,7 @@ export class SearchCatalogFlow {
   constructor(
     private readonly catalogService: CatalogService,
     private readonly playbookService: PlaybookService,
+    private readonly expectingService: ExpectingService,
   ) {}
 
   /**
@@ -100,8 +102,14 @@ export class SearchCatalogFlow {
    * @param merchant  - Merchant data (used to resolve playbook messages) [PR-GAP-1]
    * @param merchantId - Merchant ID
    * @param query     - Search query (raw user input, may include intent keywords)
+   * @param conversationId - Conversation ID for ExpectingService (PR-04.0 REQ-06)
    */
-  async handle(merchant: MerchantPlaybookData, merchantId: string, query: string): Promise<string> {
+  async handle(
+    merchant: MerchantPlaybookData,
+    merchantId: string,
+    query: string,
+    conversationId?: string,
+  ): Promise<string> {
     const sanitizedQuery = this.sanitizeQuery(query);
     const subQueries = this.splitMultiProductQuery(sanitizedQuery);
 
@@ -121,6 +129,27 @@ export class SearchCatalogFlow {
       return this.playbookService.getMessage(merchant, 'searchNoResults', {
         query: sanitizedQuery,
       });
+    }
+
+    // PR-04.0 REQ-06 / AC-05: persist lastSearchResults + setExpecting select_product
+    if (conversationId) {
+      const productData = products.slice(0, 5).map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.variants.length > 0 ? Math.min(...p.variants.map((v) => Number(v.price))) : 0,
+        stock: p.variants.reduce((sum, v) => sum + v.stock, 0),
+      }));
+
+      await this.expectingService.setExpecting(conversationId, {
+        flow: 'search_selection',
+        type: 'select_product',
+        data: { products: productData, page: 1, hasMore: false },
+        expiresAt: ExpectingService.cartSearchExpiresAt(),
+      });
+
+      this.logger.debug(
+        `SearchCatalogFlow: setExpecting select_product for conv=${conversationId} (${productData.length} products)`,
+      );
     }
 
     return this.formatResults(merchant, sanitizedQuery, products);
