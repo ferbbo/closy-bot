@@ -57,6 +57,16 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
     { phrase: 'sacar', weight: 3 },
   ],
 
+  MANAGE_CART: [
+    { phrase: 'listar carrito', weight: 5 },
+    { phrase: 'modificar carrito', weight: 5 },
+    { phrase: 'eliminar carrito', weight: 5 },
+    { phrase: 'ver carrito', weight: 5 },
+    { phrase: 'gestionar carrito', weight: 4 },
+    { phrase: 'editar carrito', weight: 4 },
+    { phrase: 'quitar carrito', weight: 4 },
+  ],
+
   ADD_TO_CART: [
     { phrase: 'quiero comprar', weight: 5 }, // REQ-02, AC-02: Higher weight for compound phrase
     { phrase: 'agregar', weight: 3 },
@@ -252,5 +262,9 @@ export const CONTEXT_BONUSES: Partial<Record<IntentKey, Partial<Record<IntentKey
     CHECKOUT: 2,
     UPDATE_CART: 1,
     REMOVE_FROM_CART: 1,
+    MANAGE_CART: 1,
+  },
+  MANAGE_CART: {
+    CHECKOUT: 2,
   },
 };
