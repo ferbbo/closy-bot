@@ -6,11 +6,16 @@ export const envValidationSchema = Joi.object({
   DATABASE_URL: Joi.string().required(),
   LOG_LEVEL: Joi.string().valid('error', 'warn', 'info', 'debug', 'verbose').default('info'),
 
+  // CORS
+  CORS_ORIGINS: Joi.string().optional().allow('').default('http://localhost:3001'),
+
   // WhatsApp Cloud API configuration
   WHATSAPP_ACCESS_TOKEN: Joi.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: Joi.string().optional(),
   WHATSAPP_API_VERSION: Joi.string().default('v18.0'),
   WHATSAPP_API_URL: Joi.string().default('https://graph.facebook.com'),
+  WHATSAPP_WEBHOOK_VERIFY_TOKEN: Joi.string().optional().default('your-verify-token'),
+  WHATSAPP_APP_SECRET: Joi.string().optional(),
 
   // LLM Configuration
   LLM_ENABLED: Joi.boolean().default(false),
@@ -24,6 +29,15 @@ export const envValidationSchema = Joi.object({
   LLM_TIMEOUT_MS: Joi.number().default(30000),
   LLM_MAX_TOKENS: Joi.number().default(500),
   LLM_TEMPERATURE: Joi.number().min(0).max(2).default(0.7),
+
+  // PR-03.5.1: Granular LLM feature flags
+  LLM_INTENT_ASSIST: Joi.boolean().default(false),
+  LLM_FALLBACK_ENABLED: Joi.boolean().default(false),
+  LLM_SUMMARY_ENABLED: Joi.boolean().default(false),
+
+  // PR-03.5.1: Intent classification thresholds
+  INTENT_CONFIDENCE_THRESHOLD_HIGH: Joi.number().default(5),
+  INTENT_CONFIDENCE_THRESHOLD_LOW: Joi.number().default(2),
 
   // PR-03.10: Message retention configuration
   MESSAGE_HISTORY_DAYS: Joi.number().min(1).max(365).default(30),
@@ -40,6 +54,19 @@ export const envValidationSchema = Joi.object({
   // PR-03.5.2: Catalog Full-Text Search configuration
   CATALOG_FTS_ENABLED: Joi.boolean().default(true),
 
+  // PR-17: Catalog import
+  CATALOG_IMPORT_MAX_SIZE_MB: Joi.number().min(1).default(5),
+
+  // PR-04: Cart configuration
+  CART_TTL_HOURS: Joi.number().min(1).default(24),
+
+  // PR-GAP-2: FAQ keyword matching
+  FAQ_MATCH_THRESHOLD: Joi.number().min(0).default(1),
+
+  // PR-06: Payment webhook
+  PAYMENT_WEBHOOK_SECRET: Joi.string().optional().allow(''),
+  PAYMENT_WEBHOOK_HEADER: Joi.string().default('X-Payment-Signature'),
+
   // PR-12: Auth OIDC configuration
   GOOGLE_CLIENT_ID: Joi.string().optional(),
   GOOGLE_CLIENT_SECRET: Joi.string().optional(),
@@ -50,8 +77,8 @@ export const envValidationSchema = Joi.object({
   AUTH_COOKIE_DOMAIN: Joi.string().optional(),
   AUTH_SESSION_CLEANUP_CRON: Joi.string().optional(),
 
-  // GAP-3: Dashboard URL for postMessage targetOrigin security
-  NEXT_PUBLIC_API_URL: Joi.string().uri().required(),
+  // GAP-3: Dashboard URL for postMessage targetOrigin security (never use '*')
+  DASHBOARD_URL: Joi.string().uri().required(),
 
   // PR-13: Meta Embedded Signup configuration
   META_APP_ID: Joi.string().optional(),

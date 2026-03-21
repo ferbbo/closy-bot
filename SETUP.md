@@ -51,17 +51,17 @@ If you have PostgreSQL installed locally or want to use a remote instance:
 ### 4. Configure environment variables
 
 ```bash
+# Workspace root — for Prisma commands (db:migrate, db:studio, etc.)
 cp .env.example .env
+
+# API backend — full configuration
+cp apps/api/.env.example apps/api/.env
+
+# Dashboard frontend
+cp apps/dashboard/.env.example apps/dashboard/.env
 ```
 
-The default values work with Docker Compose. If using your own PostgreSQL, edit `.env`:
-
-```env
-DATABASE_URL="postgresql://your_user:your_password@localhost:5432/closy_dev?schema=public"
-NODE_ENV="development"
-PORT=3000
-LOG_LEVEL="debug"
-```
+The default values in each file work with Docker Compose out of the box. Edit the copies to add secrets (WhatsApp tokens, OAuth credentials, etc.).
 
 ### 5. Run database migrations
 
