@@ -357,15 +357,8 @@ export class SearchCatalogFlow {
       return this.playbookService.getMessage(merchant, 'searchNoResults', { query });
     }
 
-    const header = this.playbookService.getMessage(merchant, 'searchResultsHeader', {
-      query,
-      count: productLines.length,
-    });
-
+    const lista = productLines.join('\n\n');
     const nextHint = hasMore ? this.playbookService.getMessage(merchant, 'searchNextHint') : '';
-
-    const footer = this.playbookService.getMessage(merchant, 'searchResultsFooter');
-
-    return header + productLines.join('\n\n') + footer + nextHint;
+    return this.playbookService.getMessage(merchant, 'searchResults', { lista, nextHint });
   }
 }

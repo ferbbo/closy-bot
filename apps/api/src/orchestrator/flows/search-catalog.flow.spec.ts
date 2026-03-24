@@ -120,14 +120,14 @@ describe('AC-04: SearchCatalogFlow uses PlaybookService.getMessage() (PR-GAP-1)'
 
       const result = await flow.handle(mockMerchant, merchantId, 'zapatillas');
 
-      expect(result).toContain('Resultados para "zapatillas"');
+      expect(result).toContain('Productos encontrados:');
       expect(result).toContain('Zapatillas Running');
       expect(result).toContain('$50000.00');
       expect(result).toContain('Stock: 10 unidades');
-      // AC-04: getMessage called for searchResultsHeader
+      // AC-04: getMessage called for searchResults
       expect(playbookService.getMessage).toHaveBeenCalledWith(
         mockMerchant,
-        'searchResultsHeader',
+        'searchResults',
         expect.any(Object),
       );
     });

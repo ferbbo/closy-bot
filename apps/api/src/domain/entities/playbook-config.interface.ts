@@ -91,10 +91,6 @@ export interface PlaybookMessages {
   // ── New (PR-GAP-1) ────────────────────────────────────────────────────────
   /** No search results. Placeholder: {query} */
   searchNoResults: string;
-  /** Search results header. Placeholders: {query}, {count} */
-  searchResultsHeader: string;
-  /** Search results footer */
-  searchResultsFooter: string;
   /** Help menu message */
   helpMenu: string;
   /** Empty cart message */
@@ -170,8 +166,6 @@ export interface PlaybookMessages {
   cartRemoveSuccess: string;
   /** Item not found in cart */
   cartItemNotFound: string;
-  /** No active search context */
-  noActiveSearch: string;
   /** Search session expired */
   searchExpired: string;
   /** Ask user for search keyword (bare "buscar") */
@@ -180,8 +174,6 @@ export interface PlaybookMessages {
   searchResults: string;
   /** Product action menu after selection. Placeholders: {productName}, {price} */
   searchActionMenu: string;
-  /** No products found in search */
-  searchNotFound: string;
   /** Search flow cancelled */
   searchCancelled: string;
   /** Product details view. Placeholders: {productName}, {description}, {stock}, {price} */
