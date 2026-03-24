@@ -28,8 +28,6 @@ export const GenericPlaybookDefaults: PlaybookConfig = {
     checkoutStart: '¡Perfecto! Vamos a confirmar tu pedido',
     searchNoResults:
       '😔 No encontré productos para "{query}"\n\nIntenta con otras palabras o escribe "ayuda" para ver opciones.',
-    searchResultsHeader: '🔍 Resultados para "{query}" ({count}):\n\n',
-    searchResultsFooter: '\n\n💬 Para agregar al carrito, escribe el nombre del producto',
     helpMenu:
       '📋 *Opciones disponibles*\n\n🔍 *Buscar productos*\nSimplemente escribe lo que buscas\nEjemplo: "busco zapatillas", "tienes camisas azules"\n\n🛒 *Ver carrito*\nEscribe "ver carrito" o "carrito"\n\n❓ *Ayuda*\nEscribe "ayuda" o "menú" para ver estas opciones\n\n💬 *Hablar con un humano*\nEscribe "hablar con agente" o "ayuda humana"\n\n---\n\n¿En qué puedo ayudarte?',
     cartEmpty: '🛒 *Tu carrito está vacío*\n\nEscribe "buscar" para explorar productos.',
@@ -76,14 +74,12 @@ export const GenericPlaybookDefaults: PlaybookConfig = {
     cartModifySuccess: '✅ Actualizado: {productName} x{newQuantity}',
     cartRemoveSuccess: '✅ Eliminado: {productName} del carrito',
     cartItemNotFound: 'No encontré ese producto en tu carrito',
-    noActiveSearch: 'No hay búsqueda activa. Escribe *buscar [nombre del producto]*',
     searchExpired: 'La búsqueda expiró. Escribe *buscar [nombre del producto]*',
     searchAskKeyword: '🔍 ¿Qué producto quieres buscar?\nEjemplo: *camiseta*, *zapatos negros*',
     searchResults:
       '📦 Productos encontrados:\n{lista}\n\nSelecciona digitando su número.\nPara buscar otro: *buscar [nombre]*{nextHint}',
     searchActionMenu:
       '✅ Seleccionaste: {productName} — ${price}\n\n1️⃣ Agregar al carrito\n2️⃣ Ver detalles\n3️⃣ Cancelar',
-    searchNotFound: '⚠️ Producto no encontrado. Intenta con otra palabra o revisa la lista.',
     searchCancelled:
       '❌ Operación cancelada.\nPara buscar otro producto, escribe *buscar [nombre]*',
     searchViewDetails:

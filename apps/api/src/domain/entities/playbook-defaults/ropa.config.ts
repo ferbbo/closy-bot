@@ -47,8 +47,6 @@ export const RopaPlaybookDefaults: PlaybookConfig = {
     checkoutStart: '¡Perfecto! Vamos a confirmar tu pedido 📦',
     searchNoResults:
       '😔 No encontré prendas para "{query}"\n\nIntenta con otras palabras o escribe "ayuda" para ver opciones.',
-    searchResultsHeader: '🔍 Resultados para "{query}" ({count}):\n\n',
-    searchResultsFooter: '\n\n💬 Para agregar al carrito, escribe el nombre de la prenda 👗',
     helpMenu:
       '📋 *Opciones disponibles*\n\n🔍 *Buscar prendas*\nEscribe lo que buscas: "camisas", "vestido azul", "talla M"\n\n🛒 *Ver carrito*\nEscribe "ver carrito" o "carrito"\n\n❓ *Ayuda*\nEscribe "ayuda" o "menú"\n\n💬 *Hablar con un humano*\nEscribe "hablar con agente" o "ayuda humana"\n\n---\n\n¿En qué puedo ayudarte? 👗',
     cartEmpty:
@@ -95,7 +93,6 @@ export const RopaPlaybookDefaults: PlaybookConfig = {
     cartModifySuccess: '✅ Actualizado: {productName} x{newQuantity}',
     cartRemoveSuccess: '✅ Eliminado: {productName} del carrito 👗',
     cartItemNotFound: 'No encontré ese producto en tu carrito',
-    noActiveSearch: 'No hay búsqueda activa. Escribe *buscar [nombre de la prenda]*',
     searchExpired: 'La búsqueda expiró. Escribe *buscar [nombre de la prenda]*',
     searchAskKeyword:
       '🔍 ¿Qué prenda quieres buscar?\nEjemplo: *camiseta*, *vestido azul*, *jeans*',
@@ -103,7 +100,6 @@ export const RopaPlaybookDefaults: PlaybookConfig = {
       '📦 Prendas encontradas:\n{lista}\n\nSelecciona digitando su número.\nPara buscar otra: *buscar [nombre]*{nextHint}',
     searchActionMenu:
       '✅ Seleccionaste: {productName} — ${price} 👗\n\n1️⃣ Agregar al carrito\n2️⃣ Ver detalles\n3️⃣ Cancelar',
-    searchNotFound: '⚠️ Prenda no encontrada. Intenta con otra palabra o revisa la lista.',
     searchCancelled: '❌ Operación cancelada.\nPara buscar otra prenda, escribe *buscar [nombre]*',
     searchViewDetails:
       '📋 {productName}\n\n{description}\n\nStock: {stock} disponibles\nPrecio: ${price}\n\n1️⃣ Agregar al carrito\n2️⃣ Cancelar',

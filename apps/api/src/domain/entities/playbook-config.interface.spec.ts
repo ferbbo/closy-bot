@@ -63,8 +63,6 @@ describe('AC-01: PlaybookConfig interface — botPersonality + PlaybookMessages 
     // Verify each new field is defined and non-empty
     const newFields: (keyof PlaybookMessages)[] = [
       'searchNoResults',
-      'searchResultsHeader',
-      'searchResultsFooter',
       'helpMenu',
       'cartEmpty',
       'cartSummaryHeader',
@@ -107,12 +105,10 @@ describe('AC-01: PlaybookConfig interface — botPersonality + PlaybookMessages 
       'cartModifySuccess',
       'cartRemoveSuccess',
       'cartItemNotFound',
-      'noActiveSearch',
       'searchExpired',
       'searchAskKeyword',
       'searchResults',
       'searchActionMenu',
-      'searchNotFound',
       'searchCancelled',
       'searchViewDetails',
       'searchNextHint',
