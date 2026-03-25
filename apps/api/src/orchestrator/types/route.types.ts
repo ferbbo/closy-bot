@@ -30,4 +30,9 @@ export interface RouteContext {
    * If active, used as pre-classification context before intent classification.
    */
   expectingState?: ExpectingState | null;
+  /**
+   * PR-04.2 REQ-02: Cart action extracted from regex (direct action without listing).
+   * Set by orchestrator when "eliminar N" / "modificar N" regex matches.
+   */
+  cartAction?: { action: 'remove' | 'modify'; index: number } | null;
 }

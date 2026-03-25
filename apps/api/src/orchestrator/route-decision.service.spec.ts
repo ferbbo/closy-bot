@@ -516,3 +516,75 @@ describe('AC-04 (PR-04.0): RouteDecisionService - expecting context propagation'
     expect(decision).toBeDefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// AC-02 (PR-04.2): RouteDecisionService - extractCartAction
+// REQ-02: Parse cart action verb + index from free text
+// ---------------------------------------------------------------------------
+
+describe('AC-02 (PR-04.2): RouteDecisionService - extractCartAction', () => {
+  let service: RouteDecisionService;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        RouteDecisionService,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue(false),
+          },
+        },
+        {
+          provide: IntentRouterService,
+          useValue: {
+            classify: jest.fn().mockReturnValue({
+              intent: 'UNKNOWN',
+              confidence: 'LOW',
+              reason: 'no match',
+              signals: [],
+              missingSlots: [],
+            }),
+          },
+        },
+        {
+          provide: LlmService,
+          useValue: {
+            generateSimple: jest.fn(),
+            generateConversationalResponse: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    service = module.get<RouteDecisionService>(RouteDecisionService);
+  });
+
+  it('AC-02: "eliminar 2" → { action: "remove", index: 2 }', () => {
+    expect(service.extractCartAction('eliminar 2')).toEqual({ action: 'remove', index: 2 });
+  });
+
+  it('AC-02: "quitar 3" → { action: "remove", index: 3 }', () => {
+    expect(service.extractCartAction('quitar 3')).toEqual({ action: 'remove', index: 3 });
+  });
+
+  it('AC-02: "sacar 1" → { action: "remove", index: 1 }', () => {
+    expect(service.extractCartAction('sacar 1')).toEqual({ action: 'remove', index: 1 });
+  });
+
+  it('AC-02: "modificar 1" → { action: "modify", index: 1 }', () => {
+    expect(service.extractCartAction('modificar 1')).toEqual({ action: 'modify', index: 1 });
+  });
+
+  it('AC-02: plain text without number → null', () => {
+    expect(service.extractCartAction('hola quiero saber más')).toBeNull();
+  });
+
+  it('AC-02: "eliminar carrito" (no number) → null', () => {
+    expect(service.extractCartAction('eliminar carrito')).toBeNull();
+  });
+
+  it('AC-02: case-insensitive "ELIMINAR 2" → { action: "remove", index: 2 }', () => {
+    expect(service.extractCartAction('ELIMINAR 2')).toEqual({ action: 'remove', index: 2 });
+  });
+});

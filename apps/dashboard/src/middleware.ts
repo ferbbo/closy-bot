@@ -25,7 +25,8 @@ export async function middleware(request: NextRequest) {
   }
 
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+    // Middleware runs on server, so we need the actual backend URL
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4001';
     const cookie = request.cookies.get('session_id');
     const res = await fetch(`${apiUrl}/auth/me`, {
       headers: cookie ? { Cookie: `session_id=${cookie.value}` } : {},
@@ -55,6 +56,10 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
+<<<<<<< Updated upstream
   matcher: ['/((?!_next/static|_next/image|favicon.ico|auth|channels|onboarding/progress|onboarding/whatsapp/start\|api/|merchants/).*)'],
+=======
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|auth|channels|onboarding/progress|onboarding/whatsapp/start|api/|merchants).*)'],
+>>>>>>> Stashed changes
 };
 

@@ -1,13 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CartService } from '../../services/cart.service';
 import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.service';
+import { ExpectingService } from '../../services/expecting.service';
+import type { ExpectingState } from '../types/expecting.types';
+import { parseNumericSelection } from '../../common/helpers/selection-helpers';
 
 /**
  * UpdateCartItemFlow
- * AC-09: Handles UPDATE_CART intent
- * REQ-06: Updates quantity of existing cart item (1-99)
- * PR-04: Cart CRUD conversational
- * PR-GAP-1: All user-facing messages via PlaybookService.getMessage()
+ * PR-04.2: Rewritten — handles quantity modification steps via ExpectingService.
+ *
+ * Handles:
+ * - handleAskQuantity(): show ask-quantity prompt + setExpecting(select_quantity)
+ * - handleSelectQuantity(): validate + update quantity + clearExpecting
  */
 @Injectable()
 export class UpdateCartItemFlow {
@@ -16,76 +20,128 @@ export class UpdateCartItemFlow {
   constructor(
     private readonly cartService: CartService,
     private readonly playbookService: PlaybookService,
+    private readonly expectingService: ExpectingService,
   ) {}
 
   /**
-   * @param merchant     - Merchant data (used to resolve playbook messages) [PR-GAP-1]
-   * @param customerId   - Customer ID
-   * @param merchantId   - Merchant ID
-   * @param productQuery - Product name extracted from message
-   * @param quantity     - New quantity (extracted from message text)
+   * AC-07: Show ask-quantity prompt and set expecting(select_quantity).
+   * Called by orchestrator when user picks option 2 (modify quantity) from confirm_action menu.
    */
-  async execute(
+  async handleAskQuantity(
+    merchant: MerchantPlaybookData,
+    conversationId: string,
+    selectedProduct: { id: string; name: string; price?: number },
+    currentQty: number,
+    maxStock: number,
+  ): Promise<string> {
+    await this.expectingService.setExpecting(conversationId, {
+      flow: 'cart_management',
+      type: 'select_quantity',
+      data: {
+        selectedProduct: {
+          id: selectedProduct.id,
+          name: selectedProduct.name,
+          price: selectedProduct.price ?? 0,
+        },
+        maxStock,
+      },
+      expiresAt: ExpectingService.cartSearchExpiresAt(),
+    });
+
+    this.logger.debug(
+      `UpdateCartItemFlow: select_quantity set for conv=${conversationId} product=${selectedProduct.name} maxStock=${maxStock}`,
+    );
+
+    return this.playbookService.getMessage(merchant, 'cartModifyAskQuantity', {
+      productName: selectedProduct.name,
+      quantity: currentQty,
+      stock: maxStock,
+    });
+  }
+
+  /**
+   * AC-09: Handle select_quantity state — validate qty, update cart, clearExpecting.
+   * Called by orchestrator when expecting.flow='cart_management' AND type='select_quantity'.
+   *
+   * AC-11: qty > stock → error message with stock info, NO DB update.
+   */
+  async handleSelectQuantity(
     merchant: MerchantPlaybookData,
     customerId: string,
     merchantId: string,
-    productQuery: string,
-    quantity: number,
+    conversationId: string,
+    messageText: string,
+    expectingState: ExpectingState,
   ): Promise<string> {
-    this.logger.log(
-      `Updating cart quantity for customer ${customerId}: "${productQuery}" -> ${quantity}`,
-    );
+    const { selectedProduct, maxStock } = expectingState.data;
+
+    if (!selectedProduct || !selectedProduct.id) {
+      await this.expectingService.clearExpecting(conversationId);
+      return this.playbookService.getMessage(merchant, 'genericError', {
+        action: 'actualizar cantidad',
+      });
+    }
+
+    const stock = maxStock ?? 99;
+
+    // Parse quantity input
+    const qty = parseNumericSelection(messageText, stock);
+
+    if (qty === null) {
+      // AC-11: Invalid (non-numeric or out of range)
+      const rawNum = parseInt(messageText.trim(), 10);
+      if (!isNaN(rawNum) && rawNum > stock) {
+        // qty > stock
+        return this.playbookService.getMessage(merchant, 'cartModifyAskQuantity', {
+          productName: selectedProduct.name,
+          quantity: rawNum,
+          stock,
+        });
+      }
+      // Non-numeric or <= 0
+      return this.playbookService.getMessage(merchant, 'cartModifyAskQuantity', {
+        productName: selectedProduct.name,
+        quantity: 1,
+        stock,
+      });
+    }
 
     try {
       const cart = await this.cartService.createOrGetActiveCart(customerId, merchantId);
-      const summary = await this.cartService.getCartSummary(cart.id);
+      await this.cartService.updateQuantity(cart.id, selectedProduct.id, qty);
 
-      if (summary.items.length === 0) {
-        return this.playbookService.getMessage(merchant, 'cartEmptyNoAction', {
-          action: 'actualizar',
-        });
-      }
+      await this.expectingService.clearExpecting(conversationId);
 
-      // Find matching item in cart
-      const matchingItem = summary.items.find(
-        (item) =>
-          item.productName.toLowerCase().includes(productQuery.toLowerCase()) ||
-          item.variantName.toLowerCase().includes(productQuery.toLowerCase()),
-      );
+      const updatedSummary = await this.cartService.getCartSummary(cart.id);
 
-      if (!matchingItem) {
-        const itemsList = summary.items
-          .map((item, i) => `${i + 1}. ${item.productName} - ${item.variantName}`)
-          .join('\n');
-        return this.playbookService.getMessage(merchant, 'itemNotInCart', {
-          query: productQuery,
-          items_list: itemsList,
-        });
-      }
-
-      // Validate quantity
-      if (quantity < 1 || quantity > 99) {
-        return this.playbookService.getMessage(merchant, 'quantityInvalid');
-      }
-
-      // Update quantity
-      await this.cartService.updateQuantity(cart.id, matchingItem.id, quantity);
-
-      return this.playbookService.getMessage(merchant, 'updateConfirm', {
-        product_name: matchingItem.productName,
-        quantity: String(quantity),
+      const modifyMsg = this.playbookService.getMessage(merchant, 'cartModifySuccess', {
+        productName: selectedProduct.name,
+        newQuantity: qty,
       });
-    } catch (error) {
-      this.logger.error(
-        `Failed to update quantity: ${(error as Error).message}`,
-        (error as Error).stack,
+
+      const hint = this.playbookService.getMessage(merchant, 'cartManagementHint');
+
+      const itemLines = updatedSummary.items.map(
+        (item) => `• *${item.productName}* x${item.quantity} - $${item.subtotal.toFixed(2)}`,
       );
+      const cartDisplay = itemLines.join('\n');
+      const totalLine = `Total: *$${updatedSummary.total.toFixed(2)}*`;
 
-      // Handle stock validation errors gracefully
-      if ((error as Error).message.includes('Stock insuficiente')) {
-        return this.playbookService.getMessage(merchant, 'noStock', { product_name: '' });
+      return `${modifyMsg}\n\n🛒 Tu carrito:\n${cartDisplay}\n${totalLine}\n\n${hint}`;
+    } catch (error) {
+      const msg = (error as Error).message;
+      if (msg.includes('Stock insuficiente')) {
+        // Extract stock number from error message: "Stock insuficiente. Solo quedan N unidades"
+        const stockMatch = msg.match(/(\d+)\s+unidades/);
+        const actualStock = stockMatch ? parseInt(stockMatch[1], 10) : stock;
+        return this.playbookService.getMessage(merchant, 'cartModifyAskQuantity', {
+          productName: selectedProduct.name,
+          quantity: qty,
+          stock: actualStock,
+        });
       }
-
+      this.logger.error(`UpdateCartItemFlow.handleSelectQuantity: ${msg}`, (error as Error).stack);
+      await this.expectingService.clearExpecting(conversationId);
       return this.playbookService.getMessage(merchant, 'genericError', {
         action: 'actualizar cantidad',
       });

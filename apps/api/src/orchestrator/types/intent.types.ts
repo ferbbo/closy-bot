@@ -18,6 +18,7 @@ export type IntentKey =
   | 'ORDER_STATUS' // PR-07 REQ-07: post-sale order status query
   | 'CREATE_TICKET' // PR-07 REQ-08: post-sale ticket creation
   | 'HANDOFF'
+  | 'MANAGE_CART' // PR-04.2: Cart management intent (list + manage)
   | 'UNKNOWN'
   | 'AMBIGUOUS'; // REQ-05: New intent for collision detection
 

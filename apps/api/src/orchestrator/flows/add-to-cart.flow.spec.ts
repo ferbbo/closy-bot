@@ -3,6 +3,7 @@ import { AddToCartFlow } from './add-to-cart.flow';
 import { CartService } from '../../services/cart.service';
 import { CatalogService } from '../../services/catalog.service';
 import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.service';
+import { ExpectingService } from '../../services/expecting.service';
 import { PlaybookMessages } from '../../domain/entities/playbook-config.interface';
 import { GenericPlaybookDefaults } from '../../domain/entities/playbook-defaults/generic.config';
 
@@ -28,6 +29,48 @@ function buildMockGetMessage() {
 
 const mockMerchant: MerchantPlaybookData = { id: 'merchant-1', name: 'TestMerchant' };
 
+function buildTestModule(
+  overrides: Partial<{
+    cartService: object;
+    catalogService: object;
+    playbookService: object;
+    expectingService: object;
+  }> = {},
+) {
+  return Test.createTestingModule({
+    providers: [
+      AddToCartFlow,
+      {
+        provide: CartService,
+        useValue: overrides.cartService ?? {
+          addItem: jest.fn(),
+          getCartSummary: jest.fn(),
+        },
+      },
+      {
+        provide: CatalogService,
+        useValue: overrides.catalogService ?? {
+          searchProducts: jest.fn(),
+        },
+      },
+      {
+        provide: PlaybookService,
+        useValue: overrides.playbookService ?? {
+          getMessage: buildMockGetMessage(),
+        },
+      },
+      {
+        provide: ExpectingService,
+        useValue: overrides.expectingService ?? {
+          getExpecting: jest.fn().mockResolvedValue(null),
+          setExpecting: jest.fn().mockResolvedValue(undefined),
+          clearExpecting: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+    ],
+  }).compile();
+}
+
 /**
  * AddToCartFlow Unit Tests
  * AC-07: Test add-to-cart conversational flow
@@ -41,30 +84,7 @@ describe('AC-07: AddToCartFlow', () => {
   let playbookService: jest.Mocked<PlaybookService>;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AddToCartFlow,
-        {
-          provide: CartService,
-          useValue: {
-            addItem: jest.fn(),
-            getCartSummary: jest.fn(),
-          },
-        },
-        {
-          provide: CatalogService,
-          useValue: {
-            searchProducts: jest.fn(),
-          },
-        },
-        {
-          provide: PlaybookService,
-          useValue: {
-            getMessage: buildMockGetMessage(),
-          },
-        },
-      ],
-    }).compile();
+    const module: TestingModule = await buildTestModule();
 
     flow = module.get<AddToCartFlow>(AddToCartFlow);
     cartService = module.get(CartService);
@@ -191,5 +211,315 @@ describe('AC-07: AddToCartFlow', () => {
 
     expect(response).toContain('cantidad debe estar entre 1 y 99');
     expect(playbookService.getMessage).toHaveBeenCalledWith(mockMerchant, 'quantityInvalid');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PR-04.1: Guided search expecting state tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('AC-04: AddToCartFlow select product sets product_options expecting', () => {
+  let flow: AddToCartFlow;
+  let expectingService: jest.Mocked<ExpectingService>;
+  let playbookService: jest.Mocked<PlaybookService>;
+
+  const products = [
+    { id: 'p1', name: 'Camiseta Azul', price: 30000, stock: 5 },
+    { id: 'p2', name: 'Camiseta Roja', price: 35000, stock: 3 },
+    { id: 'p3', name: 'Camiseta Verde', price: 25000, stock: 8 },
+  ];
+
+  beforeEach(async () => {
+    const mockExpecting = jest.fn().mockResolvedValue({
+      flow: 'search_selection',
+      type: 'select_product',
+      data: { products },
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
+    });
+
+    const mockPlaybook = { getMessage: buildMockGetMessage() };
+
+    const module: TestingModule = await buildTestModule({
+      expectingService: {
+        getExpecting: mockExpecting,
+        setExpecting: jest.fn().mockResolvedValue(undefined),
+        clearExpecting: jest.fn().mockResolvedValue(undefined),
+      },
+      playbookService: mockPlaybook,
+    });
+
+    flow = module.get<AddToCartFlow>(AddToCartFlow);
+    expectingService = module.get(ExpectingService);
+    playbookService = module.get(PlaybookService);
+  });
+
+  it('AC-04: numeric selection sets product_options expecting with selectedProduct', async () => {
+    await flow.handleExpecting(mockMerchant, 'cust-1', 'merch-1', 'conv-1', '2');
+
+    expect(expectingService.setExpecting).toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({
+        flow: 'search_selection',
+        type: 'product_options',
+        data: expect.objectContaining({
+          selectedProduct: expect.objectContaining({ id: 'p2', name: 'Camiseta Roja' }),
+        }),
+      }),
+    );
+    expect(playbookService.getMessage).toHaveBeenCalledWith(
+      mockMerchant,
+      'searchActionMenu',
+      expect.any(Object),
+    );
+  });
+
+  it('AC-09: OOB selection returns invalidProductSelection without changing expecting', async () => {
+    const response = await flow.handleExpecting(mockMerchant, 'cust-1', 'merch-1', 'conv-1', '6');
+
+    expect(expectingService.setExpecting).not.toHaveBeenCalled();
+    expect(playbookService.getMessage).toHaveBeenCalledWith(
+      mockMerchant,
+      'invalidProductSelection',
+      expect.objectContaining({ count: 3 }),
+    );
+    expect(response).toBeDefined();
+  });
+
+  it('AC-09: non-numeric input returns invalidProductSelection without changing expecting', async () => {
+    await flow.handleExpecting(mockMerchant, 'cust-1', 'merch-1', 'conv-1', 'sí');
+
+    expect(expectingService.setExpecting).not.toHaveBeenCalled();
+    expect(playbookService.getMessage).toHaveBeenCalledWith(
+      mockMerchant,
+      'invalidProductSelection',
+      expect.any(Object),
+    );
+  });
+});
+
+describe('AC-05: AddToCartFlow adds to cart qty=1 and clears expecting', () => {
+  let flow: AddToCartFlow;
+  let cartService: jest.Mocked<CartService>;
+  let catalogService: jest.Mocked<CatalogService>;
+  let expectingService: jest.Mocked<ExpectingService>;
+  let playbookService: jest.Mocked<PlaybookService>;
+
+  const selectedProduct = { id: 'p1', name: 'Camiseta Azul', price: 30000 };
+
+  beforeEach(async () => {
+    const mockExpecting = jest.fn().mockResolvedValue({
+      flow: 'search_selection',
+      type: 'product_options',
+      data: { selectedProduct },
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
+    });
+
+    const module: TestingModule = await buildTestModule({
+      expectingService: {
+        getExpecting: mockExpecting,
+        setExpecting: jest.fn().mockResolvedValue(undefined),
+        clearExpecting: jest.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    flow = module.get<AddToCartFlow>(AddToCartFlow);
+    cartService = module.get(CartService);
+    catalogService = module.get(CatalogService);
+    expectingService = module.get(ExpectingService);
+    playbookService = module.get(PlaybookService);
+
+    // Mock catalog returns the product
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    catalogService.searchProducts.mockResolvedValue([
+      {
+        id: 'p1',
+        name: 'Camiseta Azul',
+        variants: [{ id: 'v1', name: 'Talla M', price: 30000, stock: 5, isActive: true }],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+    ]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    cartService.addItem.mockResolvedValue({ id: 'cart-1' } as any);
+    cartService.getCartSummary.mockResolvedValue({ items: [], total: 30000, itemCount: 1 });
+  });
+
+  it('AC-05: option "1" in product_options adds to cart with qty=1 and clears expecting', async () => {
+    await flow.handleExpecting(mockMerchant, 'cust-1', 'merch-1', 'conv-1', '1');
+
+    expect(cartService.addItem).toHaveBeenCalledWith('cust-1', 'merch-1', 'v1', 1);
+    expect(expectingService.clearExpecting).toHaveBeenCalledWith('conv-1');
+    expect(playbookService.getMessage).toHaveBeenCalledWith(
+      mockMerchant,
+      'addToCartConfirm',
+      expect.any(Object),
+    );
+  });
+
+  it('AC-08: option "3" in product_options calls clearExpecting and searchCancelled', async () => {
+    await flow.handleExpecting(mockMerchant, 'cust-1', 'merch-1', 'conv-1', '3');
+
+    expect(expectingService.clearExpecting).toHaveBeenCalledWith('conv-1');
+    expect(playbookService.getMessage).toHaveBeenCalledWith(mockMerchant, 'searchCancelled');
+  });
+});
+
+describe('AC-06: AddToCartFlow view details sets view_details expecting', () => {
+  let flow: AddToCartFlow;
+  let catalogService: jest.Mocked<CatalogService>;
+  let expectingService: jest.Mocked<ExpectingService>;
+  let playbookService: jest.Mocked<PlaybookService>;
+
+  const selectedProduct = { id: 'p1', name: 'Camiseta Azul', price: 30000 };
+
+  beforeEach(async () => {
+    const mockExpecting = jest.fn().mockResolvedValue({
+      flow: 'search_selection',
+      type: 'product_options',
+      data: { selectedProduct },
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
+    });
+
+    const module: TestingModule = await buildTestModule({
+      expectingService: {
+        getExpecting: mockExpecting,
+        setExpecting: jest.fn().mockResolvedValue(undefined),
+        clearExpecting: jest.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    flow = module.get<AddToCartFlow>(AddToCartFlow);
+    catalogService = module.get(CatalogService);
+    expectingService = module.get(ExpectingService);
+    playbookService = module.get(PlaybookService);
+
+    // AC-06: mock catalog to return product with description and stock
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    catalogService.searchProducts.mockResolvedValue([
+      {
+        id: 'p1',
+        name: 'Camiseta Azul',
+        description: 'Camiseta de algodón 100%',
+        variants: [
+          { id: 'v1', name: 'Talla M', price: 30000, stock: 5, isActive: true },
+          { id: 'v2', name: 'Talla L', price: 30000, stock: 3, isActive: true },
+        ],
+      } as any,
+    ]);
+  });
+
+  it('AC-06: option "2" in product_options sets view_details expecting and shows description/stock', async () => {
+    await flow.handleExpecting(mockMerchant, 'cust-1', 'merch-1', 'conv-1', '2');
+
+    expect(expectingService.setExpecting).toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({
+        flow: 'search_selection',
+        type: 'view_details',
+        data: expect.objectContaining({ selectedProduct }),
+      }),
+    );
+    // AC-06: searchViewDetails called with non-empty description and stock
+    expect(playbookService.getMessage).toHaveBeenCalledWith(
+      mockMerchant,
+      'searchViewDetails',
+      expect.objectContaining({
+        description: 'Camiseta de algodón 100%',
+        stock: '8', // 5 + 3 variants with stock > 0
+        price: '30000.00',
+      }),
+    );
+  });
+});
+
+describe('AC-07: AddToCartFlow adds from view_details and clears expecting', () => {
+  let flow: AddToCartFlow;
+  let cartService: jest.Mocked<CartService>;
+  let catalogService: jest.Mocked<CatalogService>;
+  let expectingService: jest.Mocked<ExpectingService>;
+  let playbookService: jest.Mocked<PlaybookService>;
+
+  const selectedProduct = { id: 'p1', name: 'Camiseta Azul', price: 30000 };
+
+  beforeEach(async () => {
+    const mockExpecting = jest.fn().mockResolvedValue({
+      flow: 'search_selection',
+      type: 'view_details',
+      data: { selectedProduct },
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
+    });
+
+    const module: TestingModule = await buildTestModule({
+      expectingService: {
+        getExpecting: mockExpecting,
+        setExpecting: jest.fn().mockResolvedValue(undefined),
+        clearExpecting: jest.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    flow = module.get<AddToCartFlow>(AddToCartFlow);
+    cartService = module.get(CartService);
+    catalogService = module.get(CatalogService);
+    expectingService = module.get(ExpectingService);
+    playbookService = module.get(PlaybookService);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    catalogService.searchProducts.mockResolvedValue([
+      {
+        id: 'p1',
+        name: 'Camiseta Azul',
+        variants: [{ id: 'v1', name: 'Talla M', price: 30000, stock: 5, isActive: true }],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+    ]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    cartService.addItem.mockResolvedValue({ id: 'cart-1' } as any);
+    cartService.getCartSummary.mockResolvedValue({ items: [], total: 30000, itemCount: 1 });
+  });
+
+  it('AC-07: option "1" in view_details adds to cart and clears expecting', async () => {
+    await flow.handleExpecting(mockMerchant, 'cust-1', 'merch-1', 'conv-1', '1');
+
+    expect(cartService.addItem).toHaveBeenCalledWith('cust-1', 'merch-1', 'v1', 1);
+    expect(expectingService.clearExpecting).toHaveBeenCalledWith('conv-1');
+    expect(playbookService.getMessage).toHaveBeenCalledWith(
+      mockMerchant,
+      'addToCartConfirm',
+      expect.any(Object),
+    );
+  });
+
+  it('AC-08: option "2" in view_details calls clearExpecting and searchCancelled', async () => {
+    await flow.handleExpecting(mockMerchant, 'cust-1', 'merch-1', 'conv-1', '2');
+
+    expect(expectingService.clearExpecting).toHaveBeenCalledWith('conv-1');
+    expect(playbookService.getMessage).toHaveBeenCalledWith(mockMerchant, 'searchCancelled');
+  });
+});
+
+describe('AC-10: AddToCartFlow expired expecting returns searchExpired', () => {
+  let flow: AddToCartFlow;
+  let expectingService: jest.Mocked<ExpectingService>;
+  let playbookService: jest.Mocked<PlaybookService>;
+
+  beforeEach(async () => {
+    const module: TestingModule = await buildTestModule({
+      expectingService: {
+        // Expired: getExpecting returns null (TTL check is inside ExpectingService)
+        getExpecting: jest.fn().mockResolvedValue(null),
+        setExpecting: jest.fn().mockResolvedValue(undefined),
+        clearExpecting: jest.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    flow = module.get<AddToCartFlow>(AddToCartFlow);
+    expectingService = module.get(ExpectingService);
+    playbookService = module.get(PlaybookService);
+  });
+
+  it('AC-10: expired expecting (getExpecting returns null) returns searchExpired message', async () => {
+    await flow.handleExpecting(mockMerchant, 'cust-1', 'merch-1', 'conv-1', '1');
+
+    expect(expectingService.clearExpecting).toHaveBeenCalledWith('conv-1');
+    expect(playbookService.getMessage).toHaveBeenCalledWith(mockMerchant, 'searchExpired');
   });
 });

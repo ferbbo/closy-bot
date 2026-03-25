@@ -34,7 +34,7 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
 
   VIEW_CART: [
     { phrase: 'carrito', weight: 5 },
-    { phrase: 'ver carrito', weight: 5 },
+    { phrase: 'ver carrito', weight: 3 }, // weight 3 to avoid AMBIGUOUS tie with MANAGE_CART
     { phrase: 'mostrar carrito', weight: 5 },
     { phrase: 'que tengo', weight: 4 },
     { phrase: 'mi carrito', weight: 5 },
@@ -55,6 +55,19 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
     { phrase: 'quitar', weight: 4 },
     { phrase: 'eliminar', weight: 5 },
     { phrase: 'sacar', weight: 3 },
+  ],
+
+  MANAGE_CART: [
+    // AC-01 (PR-04.2): compound phrases use weight 8 to beat VIEW_CART "carrito" (5) +
+    // REMOVE_FROM_CART "eliminar" (5) / UPDATE_CART "modificar" (4) combinations.
+    // diff = 8 - 5 = 3 ≥ 2 (collision threshold) → clear MANAGE_CART win, no AMBIGUOUS.
+    { phrase: 'listar carrito', weight: 8 },
+    { phrase: 'modificar carrito', weight: 8 },
+    { phrase: 'eliminar carrito', weight: 8 },
+    { phrase: 'ver carrito', weight: 5 }, // VIEW_CART scores 8 (carrito+ver carrito) → VIEW_CART wins, acceptable
+    { phrase: 'gestionar carrito', weight: 7 }, // beats VIEW_CART "carrito"(5) by 2 → MANAGE_CART wins
+    { phrase: 'editar carrito', weight: 7 },
+    { phrase: 'quitar carrito', weight: 7 },
   ],
 
   ADD_TO_CART: [
@@ -99,6 +112,8 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
     { phrase: 'otra', weight: 1 },
     { phrase: 'otros', weight: 1 },
     { phrase: 'otras', weight: 1 },
+    // PR-04.1 REQ-12: Pagination keyword — only meaningful under select_product expecting
+    { phrase: 'siguiente', weight: 1 },
   ],
 
   CHECKOUT: [
@@ -252,5 +267,9 @@ export const CONTEXT_BONUSES: Partial<Record<IntentKey, Partial<Record<IntentKey
     CHECKOUT: 2,
     UPDATE_CART: 1,
     REMOVE_FROM_CART: 1,
+    MANAGE_CART: 1,
+  },
+  MANAGE_CART: {
+    CHECKOUT: 2,
   },
 };

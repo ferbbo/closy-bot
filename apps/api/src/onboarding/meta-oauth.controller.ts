@@ -83,7 +83,7 @@ export class MetaOAuthController {
   ): Promise<void> {
     const merchantId = req.merchant.id;
     const dashboardUrl = this.configService.get<string>(
-      'NEXT_PUBLIC_API_URL',
+      'DASHBOARD_URL',
       'http://localhost:3001',
     );
 

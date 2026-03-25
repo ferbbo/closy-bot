@@ -16,7 +16,7 @@ export default function OnboardingPage() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { merchant, isLoading: authLoading } = useAuth();
   const { data: progress, isFetched: progressFetched } = useOnboardingProgress();
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(2);
 
   const completedSteps = progress?.completedSteps ?? [];
   const percentage = progress?.percentage ?? 0;

@@ -8,6 +8,7 @@ import { CustomerService } from '../services/customer.service';
 import { ConversationService } from '../services/conversation.service';
 import { MerchantResolverService } from '../services/merchant-resolver.service';
 import { PlaybookService, type MerchantPlaybookData } from '../services/playbook.service';
+import { ExpectingService } from '../services/expecting.service'; // PR-04.1 + PR-04.2
 import { SearchCatalogFlow } from './flows/search-catalog.flow';
 import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
@@ -27,6 +28,8 @@ import { MessageRelayService } from '../services/message-relay.service'; // PR-0
 import { LlmService } from '../llm/llm.service';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10 AC-06
+import { parseNumericSelection } from '../common/helpers/selection-helpers'; // PR-04.2
+import { CartService } from '../services/cart.service'; // PR-04.2
 
 export interface OrchestratorInput {
   messageId: string;
@@ -97,6 +100,8 @@ export class ConversationOrchestrator {
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
     private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
     private readonly playbookService: PlaybookService, // Fix: para usar unknownIntent del playbook
+    private readonly expectingService: ExpectingService, // PR-04.1 + PR-04.2
+    private readonly cartService: CartService, // PR-04.2
   ) {
     // PR-03.5.1, REQ-08, AC-08: Removed `this.llmEnabled` binary toggle
   }
@@ -319,6 +324,124 @@ export class ConversationOrchestrator {
       };
     }
 
+    // PR-04.1 + PR-04.2: Check for active expecting state BEFORE intent routing
+    const activeExpecting = await this.expectingService.getExpecting(conversation.id);
+
+    // PR-04.2 REQ-04: cart_management flow pre-check
+    if (activeExpecting && activeExpecting.flow === 'cart_management') {
+      this.logger.log(
+        `cart_management expecting state active (type=${activeExpecting.type}), dispatching to cart handler`,
+      );
+
+      const merchantPlaybookData: MerchantPlaybookData = {
+        id: merchant.id,
+        name: merchant.name,
+        industry: merchant.industry ?? undefined,
+        playbookConfig: merchant.playbookConfig as unknown as Record<string, unknown> | null,
+      };
+
+      const response = await this.handleCartManagementExpecting(
+        merchantPlaybookData,
+        customer.id,
+        merchant.id,
+        conversation.id,
+        input.text,
+        activeExpecting,
+      );
+
+      return {
+        response,
+        shouldSend: true,
+        conversationId: conversation.id,
+        merchantId: merchant.id,
+        intent: 'MANAGE_CART',
+      };
+    }
+
+    // PR-04.1: search_selection flow pre-check.
+    // This handles: ask_search_query, select_product, product_options, view_details.
+    if (activeExpecting?.flow === 'search_selection') {
+      this.logger.log(
+        `Active search_selection state (type=${activeExpecting.type}), routing accordingly`,
+      );
+
+      const merchantPlaybookData: MerchantPlaybookData = {
+        id: merchant.id,
+        name: merchant.name,
+        industry: merchant.industry ?? undefined,
+        playbookConfig: merchant.playbookConfig as unknown as Record<string, unknown> | null,
+      };
+
+      // ask_search_query: any message → treat as search query (REQ-11)
+      if (activeExpecting.type === 'ask_search_query') {
+        const response = await this.searchCatalogFlow.handleAskSearchQueryReply(
+          merchantPlaybookData,
+          merchant.id,
+          input.text,
+          conversation.id,
+        );
+        await this.conversationService.updateLastIntent(conversation.id, 'SEARCH_PRODUCT');
+        return {
+          response,
+          shouldSend: true,
+          conversationId: conversation.id,
+          merchantId: merchant.id,
+          intent: 'SEARCH_PRODUCT',
+        };
+      }
+
+      // select_product + "siguiente": pagination (REQ-03)
+      const normalizedText = input.text
+        .toLowerCase()
+        .trim()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      if (activeExpecting.type === 'select_product' && normalizedText === 'siguiente') {
+        const response = await this.searchCatalogFlow.handleNextPage(
+          merchantPlaybookData,
+          merchant.id,
+          conversation.id,
+        );
+        await this.conversationService.updateLastIntent(conversation.id, 'SEARCH_PRODUCT');
+        return {
+          response,
+          shouldSend: true,
+          conversationId: conversation.id,
+          merchantId: merchant.id,
+          intent: 'SEARCH_PRODUCT',
+        };
+      }
+
+      // select_product / product_options / view_details: delegate to AddToCartFlow (REQ-04..10)
+      if (['select_product', 'product_options', 'view_details'].includes(activeExpecting.type)) {
+        // Guard: if message is a new SEARCH_PRODUCT intent, abandon current expecting and re-route
+        const SEARCH_KEYWORDS = ['buscar', 'busco', 'tienes', 'hay', 'necesito'];
+        const isNewSearchIntent = SEARCH_KEYWORDS.some(
+          (kw) => normalizedText === kw || normalizedText.startsWith(kw + ' '),
+        );
+        if (isNewSearchIntent) {
+          await this.expectingService.clearExpecting(conversation.id);
+          // Fall through to normal intent classification below
+        } else {
+          const response = await this.addToCartFlow.handleExpecting(
+            merchantPlaybookData,
+            customer.id,
+            merchant.id,
+            conversation.id,
+            input.text,
+          );
+          await this.conversationService.updateLastIntent(conversation.id, 'ADD_TO_CART');
+          return {
+            response,
+            shouldSend: true,
+            conversationId: conversation.id,
+            merchantId: merchant.id,
+            intent: 'ADD_TO_CART',
+          };
+        }
+      }
+    }
+
     // 6. PR-03.5.1: Classify and route (REQ-07, AC-07)
     const classifyStartTime = Date.now();
     const routeDecision = await this.routeDecisionService.classifyAndRoute(input.text, {
@@ -391,8 +514,9 @@ export class ConversationOrchestrator {
 
     // PR-03.5.1, REQ-08, AC-08: Route-based execution (no binary toggle)
     switch (routeDecision.route) {
-      case 'TEMPLATE':
+      case 'TEMPLATE': {
         // REQ-15, AC-15: Deterministic flows execute without LLM
+        const cartAction = this.routeDecisionService.extractCartAction(input.text); // PR-04.2
         response = await this.executeTemplateFlow(
           routeDecision.intent,
           input.text,
@@ -401,8 +525,10 @@ export class ConversationOrchestrator {
           customer.name ?? undefined,
           merchantPlaybookData,
           conversation.id, // PR-05: conversationId for checkout state
+          cartAction, // PR-04.2
         );
         break;
+      }
 
       case 'LLM_FALLBACK':
         // REQ-11, AC-11: LLM generates response for UNKNOWN intent
@@ -498,6 +624,7 @@ export class ConversationOrchestrator {
     customerName: string | undefined,
     merchantPlaybook: MerchantPlaybookData,
     conversationId?: string, // PR-05: needed for checkout state
+    cartAction?: { action: 'remove' | 'modify'; index: number } | null, // PR-04.2
   ): Promise<string> {
     switch (intent) {
       case 'GREETING':
@@ -524,27 +651,49 @@ export class ConversationOrchestrator {
         );
 
       case 'VIEW_CART':
-        return await this.viewCartFlow.execute(merchantPlaybook, customerId, merchantId);
+      case 'MANAGE_CART':
+        // PR-04.2: Both intents use ViewCartFlow (numbered list + setExpecting)
+        if (!conversationId) return this.getUnknownIntentMessage(merchantPlaybook);
+        return await this.viewCartFlow.execute(
+          merchantPlaybook,
+          customerId,
+          merchantId,
+          conversationId,
+        );
 
       case 'REMOVE_FROM_CART':
-        return await this.removeFromCartFlow.execute(
-          merchantPlaybook,
-          customerId,
-          merchantId,
-          originalText,
-        );
+        // PR-04.2: If direct action (regex detected), skip to confirm menu
+        if (cartAction && conversationId) {
+          return await this.removeFromCartFlow.handleDirectAction(
+            merchantPlaybook,
+            customerId,
+            merchantId,
+            conversationId,
+            cartAction,
+          );
+        }
+        // No direct action and no expecting → show cart list (fallback to MANAGE_CART behavior)
+        if (conversationId) {
+          return await this.viewCartFlow.execute(
+            merchantPlaybook,
+            customerId,
+            merchantId,
+            conversationId,
+          );
+        }
+        return this.getUnknownIntentMessage(merchantPlaybook);
 
       case 'UPDATE_CART':
-        // Extract quantity from text (e.g., "cambiar a 3", "poner 5", "actualizar a 2")
-        const quantityMatch = originalText.match(/\b(\d+)\b/);
-        const newQuantity = quantityMatch ? parseInt(quantityMatch[1], 10) : 1;
-        return await this.updateCartItemFlow.execute(
-          merchantPlaybook,
-          customerId,
-          merchantId,
-          originalText,
-          newQuantity,
-        );
+        // PR-04.2: UPDATE_CART → show cart list for user to select item to modify
+        if (conversationId) {
+          return await this.viewCartFlow.execute(
+            merchantPlaybook,
+            customerId,
+            merchantId,
+            conversationId,
+          );
+        }
+        return this.getUnknownIntentMessage(merchantPlaybook);
 
       case 'QUERY_FAQ':
         // PR-GAP-2 REQ-05, AC-05: Keyword-based FAQ matching (no LLM)
@@ -649,5 +798,122 @@ export class ConversationOrchestrator {
   private maskPhone(phone: string): string {
     if (phone.length <= 6) return '****';
     return phone.slice(0, 6) + '****' + phone.slice(-3);
+  }
+
+  /**
+   * PR-04.2 REQ-04, REQ-05–REQ-09: Handle active cart_management expecting state.
+   * Dispatches to RemoveFromCartFlow or UpdateCartItemFlow based on expecting.type.
+   */
+  private async handleCartManagementExpecting(
+    merchantPlaybook: MerchantPlaybookData,
+    customerId: string,
+    merchantId: string,
+    conversationId: string,
+    messageText: string,
+    expecting: import('./types/expecting.types').ExpectingState,
+  ): Promise<string> {
+    switch (expecting.type) {
+      case 'select_action':
+        // REQ-05: parse "eliminar N"/"modificar N"/bare-N → confirm menu
+        return await this.removeFromCartFlow.handleSelectAction(
+          merchantPlaybook,
+          customerId,
+          merchantId,
+          conversationId,
+          messageText,
+          expecting,
+        );
+
+      case 'confirm_action': {
+        // REQ-06, REQ-07, REQ-08: option 1=remove, 2=modify qty, 3=cancel
+        const option = parseNumericSelection(messageText, 3);
+        const cartItems = expecting.data.cartItems ?? [];
+        const selectedIdx = expecting.data.selectedItemIndex;
+        const pendingAction = expecting.data.pendingAction;
+
+        if (option === null) {
+          return this.playbookService.getMessage(merchantPlaybook, 'cartItemNotFound');
+        }
+
+        if (option === 3) {
+          // AC-08: Cancel
+          return await this.removeFromCartFlow.handleCancel(merchantPlaybook, conversationId);
+        }
+
+        if (!selectedIdx || selectedIdx < 1 || selectedIdx > cartItems.length) {
+          await this.expectingService.clearExpecting(conversationId);
+          return this.playbookService.getMessage(merchantPlaybook, 'cartItemNotFound');
+        }
+
+        const selectedItem = cartItems[selectedIdx - 1];
+
+        if (option === 1 && pendingAction === 'remove') {
+          // AC-06: Confirm remove
+          return await this.removeFromCartFlow.handleConfirmRemove(
+            merchantPlaybook,
+            customerId,
+            merchantId,
+            conversationId,
+            selectedItem.id,
+            selectedItem.name,
+          );
+        }
+
+        if (option === 1 && pendingAction === 'modify') {
+          // option=1 with modify pending means confirm modification → ask quantity
+          const stock = await this.safeGetVariantStock(selectedItem.id);
+          return await this.updateCartItemFlow.handleAskQuantity(
+            merchantPlaybook,
+            conversationId,
+            { id: selectedItem.id, name: selectedItem.name },
+            selectedItem.qty,
+            stock,
+          );
+        }
+
+        if (option === 2) {
+          // AC-07: Ask quantity (regardless of pendingAction)
+          const stock = await this.safeGetVariantStock(selectedItem.id);
+          return await this.updateCartItemFlow.handleAskQuantity(
+            merchantPlaybook,
+            conversationId,
+            { id: selectedItem.id, name: selectedItem.name },
+            selectedItem.qty,
+            stock,
+          );
+        }
+
+        // Fallback: unknown option
+        return this.playbookService.getMessage(merchantPlaybook, 'cartItemNotFound');
+      }
+
+      case 'select_quantity':
+        // REQ-09: validate qty → update → clearExpecting
+        return await this.updateCartItemFlow.handleSelectQuantity(
+          merchantPlaybook,
+          customerId,
+          merchantId,
+          conversationId,
+          messageText,
+          expecting,
+        );
+
+      default:
+        await this.expectingService.clearExpecting(conversationId);
+        return this.getUnknownIntentMessage(merchantPlaybook);
+    }
+  }
+
+  /**
+   * PR-04.2: Safely get variant stock for a cart item.
+   * Falls back to 99 (generous upper bound) if lookup fails.
+   */
+  private async safeGetVariantStock(itemId: string): Promise<number> {
+    try {
+      return await this.cartService.getVariantStockForItem(itemId);
+    } catch {
+      this.logger.warn(`safeGetVariantStock: failed for itemId=${itemId}, using 99 as fallback`);
+      return 99;
+    }
   }
 }

@@ -26,6 +26,11 @@ import { LlmService } from '../llm/llm.service';
 import { Customer, Merchant, Conversation, ConversationType, MerchantStatus } from '@prisma/client';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10
+import { PlaybookService, MerchantPlaybookData } from '../services/playbook.service'; // PR-04.2
+import { ExpectingService } from '../services/expecting.service'; // PR-04.2
+import { CartService } from '../services/cart.service'; // PR-04.2
+import { PlaybookMessages } from '../domain/entities/playbook-config.interface'; // PR-04.2
+import { GenericPlaybookDefaults } from '../domain/entities/playbook-defaults/generic.config'; // PR-04.2
 
 describe('ConversationOrchestrator', () => {
   let orchestrator: ConversationOrchestrator;
@@ -37,6 +42,7 @@ describe('ConversationOrchestrator', () => {
   let greetingFlow: GreetingFlow;
   let helpFlow: HelpFlow;
   let addToCartFlow: AddToCartFlow;
+  let expectingService: ExpectingService;
 
   const mockMerchant: Merchant = {
     id: 'merchant-1',
@@ -121,6 +127,7 @@ describe('ConversationOrchestrator', () => {
               confidence: 'HIGH',
               signals: ['hola'],
             }),
+            extractCartAction: jest.fn().mockReturnValue(null), // PR-04.2
           },
         },
         {
@@ -157,12 +164,18 @@ describe('ConversationOrchestrator', () => {
           provide: UpdateCartItemFlow,
           useValue: {
             execute: jest.fn().mockResolvedValue('Quantity updated'),
+            handleAskQuantity: jest.fn().mockResolvedValue('Ask quantity'),
+            handleSelectQuantity: jest.fn().mockResolvedValue('Quantity updated'),
           },
         },
         {
           provide: RemoveFromCartFlow,
           useValue: {
             execute: jest.fn().mockResolvedValue('Item removed'),
+            handleSelectAction: jest.fn().mockResolvedValue('Select action'),
+            handleDirectAction: jest.fn().mockResolvedValue('Direct action'),
+            handleConfirmRemove: jest.fn().mockResolvedValue('Item removed'),
+            handleCancel: jest.fn().mockResolvedValue('Cancelled'),
           },
         },
         {
@@ -230,6 +243,21 @@ describe('ConversationOrchestrator', () => {
             getLlmContextLastK: jest.fn().mockReturnValue(10),
           },
         },
+        // PR-04.1: ExpectingService
+        {
+          provide: ExpectingService,
+          useValue: {
+            getExpecting: jest.fn().mockResolvedValue(null), // no active expecting by default
+            clearExpecting: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        // PlaybookService (orchestrator dep — needed for getUnknownIntentMessage)
+        {
+          provide: PlaybookService,
+          useValue: {
+            getMessage: jest.fn().mockReturnValue("No entendí, escribe 'ayuda'"),
+          },
+        },
         // PR-05.1: Merchant command services
         {
           provide: MerchantCommandParserService,
@@ -252,6 +280,40 @@ describe('ConversationOrchestrator', () => {
             relayCustomerMessageToMerchant: jest.fn().mockResolvedValue(undefined),
           },
         },
+        {
+          provide: PlaybookService, // PR-04.2
+          useValue: {
+            getMessage: jest
+              .fn()
+              .mockImplementation(
+                (
+                  merchant: MerchantPlaybookData,
+                  key: keyof PlaybookMessages,
+                  placeholders?: Record<string, string | number>,
+                ) => {
+                  let template: string = GenericPlaybookDefaults.messages[key] ?? String(key);
+                  if (placeholders) {
+                    for (const [k, v] of Object.entries(placeholders)) {
+                      template = template.replace(`{${k}}`, String(v));
+                    }
+                  }
+                  return template;
+                },
+              ),
+          },
+        },
+        {
+          provide: ExpectingService, // PR-04.2
+          useValue: {
+            getExpecting: jest.fn().mockResolvedValue(null),
+            setExpecting: jest.fn().mockResolvedValue(undefined),
+            clearExpecting: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: CartService, // PR-04.2
+          useValue: { getVariantStockForItem: jest.fn().mockResolvedValue(10) },
+        },
       ],
     }).compile();
 
@@ -264,6 +326,7 @@ describe('ConversationOrchestrator', () => {
     greetingFlow = module.get<GreetingFlow>(GreetingFlow);
     helpFlow = module.get<HelpFlow>(HelpFlow);
     addToCartFlow = module.get<AddToCartFlow>(AddToCartFlow);
+    expectingService = module.get<ExpectingService>(ExpectingService);
   });
 
   it('should be defined', () => {
@@ -368,7 +431,7 @@ describe('ConversationOrchestrator', () => {
       // V2: GENERIC route returns hardcoded message, no searchCatalogFlow call
       expect(searchCatalogFlow.handle).not.toHaveBeenCalled();
       // AC-12: Exact message from brief
-      expect(result.response).toBe("No entendí, escribe 'ayuda'");
+      expect(result.response).toBe('No entendí tu mensaje. Escribe "ayuda" para ver opciones.');
     });
 
     it('should resolve merchant, customer, and conversation', async () => {
@@ -582,6 +645,195 @@ describe('ConversationOrchestrator', () => {
         // Should proceed to normal processing
         expect(result.shouldSend).toBe(true);
         expect(result.response).not.toBe('Tienda en configuración. Por favor intenta más tarde.');
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // PR-04.2: Cart management expecting pre-check
+    // AC-06: confirm_action → handleConfirmRemove
+    // AC-09: select_action/confirm_action/select_quantity dispatching
+    // -------------------------------------------------------------------------
+    describe('PR-04.2: cart_management expecting pre-check', () => {
+      let expectingService: ExpectingService;
+      let removeFromCartFlow: RemoveFromCartFlow;
+      let updateCartItemFlow: UpdateCartItemFlow;
+      let cartService: CartService;
+
+      beforeEach(() => {
+        expectingService = orchestrator['expectingService'] as ExpectingService;
+        removeFromCartFlow = orchestrator['removeFromCartFlow'] as RemoveFromCartFlow;
+        updateCartItemFlow = orchestrator['updateCartItemFlow'] as UpdateCartItemFlow;
+        cartService = orchestrator['cartService'] as CartService;
+      });
+
+      const cartItems = [{ id: 'item-1', name: 'Camiseta', qty: 1 }];
+      const futureExpiry = new Date(Date.now() + 600000).toISOString();
+
+      it('AC-09: cart_management expecting active → routes to handleCartManagementExpecting (not intent router)', async () => {
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'cart_management',
+          type: 'select_action',
+          data: { cartItems },
+          expiresAt: futureExpiry,
+        });
+        jest
+          .spyOn(removeFromCartFlow, 'handleSelectAction')
+          .mockResolvedValue('menu de confirmación');
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: 'eliminar 1',
+        });
+
+        expect(result.intent).toBe('MANAGE_CART');
+        expect(result.shouldSend).toBe(true);
+        expect(routeDecisionService.classifyAndRoute).not.toHaveBeenCalled();
+        expect(removeFromCartFlow.handleSelectAction).toHaveBeenCalled();
+      });
+
+      it('AC-06: e2e: confirm_action option 1 (remove) → handleConfirmRemove called', async () => {
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'cart_management',
+          type: 'confirm_action',
+          data: {
+            cartItems,
+            pendingAction: 'remove',
+            selectedItemIndex: 1,
+          },
+          expiresAt: futureExpiry,
+        });
+        jest
+          .spyOn(removeFromCartFlow, 'handleConfirmRemove')
+          .mockResolvedValue('Camiseta eliminada');
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: '1',
+        });
+
+        expect(result.shouldSend).toBe(true);
+        expect(removeFromCartFlow.handleConfirmRemove).toHaveBeenCalled();
+      });
+
+      it('AC-09: e2e: confirm_action option 2 → handleAskQuantity called (regardless of pendingAction)', async () => {
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'cart_management',
+          type: 'confirm_action',
+          data: {
+            cartItems,
+            pendingAction: 'remove',
+            selectedItemIndex: 1,
+          },
+          expiresAt: futureExpiry,
+        });
+        jest.spyOn(cartService, 'getVariantStockForItem').mockResolvedValue(10);
+        jest.spyOn(updateCartItemFlow, 'handleAskQuantity').mockResolvedValue('Cuántas unidades?');
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: '2',
+        });
+
+        expect(result.shouldSend).toBe(true);
+        expect(updateCartItemFlow.handleAskQuantity).toHaveBeenCalled();
+      });
+
+      it('AC-09: e2e: confirm_action option 3 (cancel) → handleCancel called, NOT handleConfirmRemove', async () => {
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'cart_management',
+          type: 'confirm_action',
+          data: {
+            cartItems,
+            pendingAction: 'remove',
+            selectedItemIndex: 1,
+          },
+          expiresAt: futureExpiry,
+        });
+        jest.spyOn(removeFromCartFlow, 'handleCancel').mockResolvedValue('Acción cancelada');
+        jest
+          .spyOn(removeFromCartFlow, 'handleConfirmRemove')
+          .mockResolvedValue('should not be called');
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: '3',
+        });
+
+        expect(result.shouldSend).toBe(true);
+        expect(removeFromCartFlow.handleCancel).toHaveBeenCalled();
+        expect(removeFromCartFlow.handleConfirmRemove).not.toHaveBeenCalled();
+      });
+
+      it('AC-09: e2e: select_quantity → handleSelectQuantity called', async () => {
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'cart_management',
+          type: 'select_quantity',
+          data: {
+            selectedProduct: { id: 'item-1', name: 'Camiseta' },
+            maxStock: 10,
+          },
+          expiresAt: futureExpiry,
+        });
+        jest
+          .spyOn(updateCartItemFlow, 'handleSelectQuantity')
+          .mockResolvedValue('Cantidad actualizada');
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: '3',
+        });
+
+        expect(result.shouldSend).toBe(true);
+        expect(updateCartItemFlow.handleSelectQuantity).toHaveBeenCalled();
+      });
+    });
+
+    describe('PR-04.1 Bug: new search intent while expecting select_product', () => {
+      it('should call clearExpecting and route to SEARCH_PRODUCT when user sends "buscar zapatos" during select_product state', async () => {
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'search_selection',
+          type: 'select_product',
+          products: [],
+          page: 0,
+        } as any);
+
+        jest.spyOn(routeDecisionService, 'classifyAndRoute').mockResolvedValue({
+          route: 'TEMPLATE',
+          intent: 'SEARCH_PRODUCT',
+          reason: 'HIGH confidence keyword match',
+          confidence: 'HIGH',
+          signals: ['buscar'],
+        });
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: 'buscar zapatos',
+        });
+
+        expect(expectingService.clearExpecting).toHaveBeenCalledWith('conv-1');
+        expect(result.intent).toBe('SEARCH_PRODUCT');
+        expect(result.shouldSend).toBe(true);
+      });
+
+      it('should NOT call clearExpecting when user selects a product number (numeric selection) during select_product state', async () => {
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'search_selection',
+          type: 'select_product',
+          products: [],
+          page: 0,
+        } as any);
+
+        const addToCartFlowMock = addToCartFlow as any;
+        addToCartFlowMock.handleExpecting = jest.fn().mockResolvedValue('Producto seleccionado');
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: '1',
+        });
+
+        expect(expectingService.clearExpecting).not.toHaveBeenCalled();
+        expect(addToCartFlowMock.handleExpecting).toHaveBeenCalled();
+        expect(result.intent).toBe('ADD_TO_CART');
       });
     });
 

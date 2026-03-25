@@ -416,12 +416,10 @@ describe('AC-06: PlaybookService mergePlaybookConfig — botPersonality + new me
     expect(playbook.botPersonality?.signatureEmoji).toBe('🎯');
   });
 
-  it('AC-06: all 17 new PlaybookMessages fields present in GenericPlaybookDefaults', () => {
+  it('AC-06: all 15 new PlaybookMessages fields present in GenericPlaybookDefaults', () => {
     const msgs = GenericPlaybookDefaults.messages;
     const requiredNew: (keyof typeof msgs)[] = [
       'searchNoResults',
-      'searchResultsHeader',
-      'searchResultsFooter',
       'helpMenu',
       'cartEmpty',
       'cartSummaryHeader',

@@ -160,10 +160,6 @@ export class PlaybookService {
       // ── new fields (PR-GAP-1) ────────────────────────────────────────────
       if (partial.searchNoResults !== undefined)
         result.messages.searchNoResults = partial.searchNoResults;
-      if (partial.searchResultsHeader !== undefined)
-        result.messages.searchResultsHeader = partial.searchResultsHeader;
-      if (partial.searchResultsFooter !== undefined)
-        result.messages.searchResultsFooter = partial.searchResultsFooter;
       if (partial.helpMenu !== undefined) result.messages.helpMenu = partial.helpMenu;
       if (partial.cartEmpty !== undefined) result.messages.cartEmpty = partial.cartEmpty;
       if (partial.cartSummaryHeader !== undefined)
