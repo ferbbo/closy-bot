@@ -414,21 +414,31 @@ export class ConversationOrchestrator {
 
       // select_product / product_options / view_details: delegate to AddToCartFlow (REQ-04..10)
       if (['select_product', 'product_options', 'view_details'].includes(activeExpecting.type)) {
-        const response = await this.addToCartFlow.handleExpecting(
-          merchantPlaybookData,
-          customer.id,
-          merchant.id,
-          conversation.id,
-          input.text,
+        // Guard: if message is a new SEARCH_PRODUCT intent, abandon current expecting and re-route
+        const SEARCH_KEYWORDS = ['buscar', 'busco', 'tienes', 'hay', 'necesito'];
+        const isNewSearchIntent = SEARCH_KEYWORDS.some(
+          (kw) => normalizedText === kw || normalizedText.startsWith(kw + ' '),
         );
-        await this.conversationService.updateLastIntent(conversation.id, 'ADD_TO_CART');
-        return {
-          response,
-          shouldSend: true,
-          conversationId: conversation.id,
-          merchantId: merchant.id,
-          intent: 'ADD_TO_CART',
-        };
+        if (isNewSearchIntent) {
+          await this.expectingService.clearExpecting(conversation.id);
+          // Fall through to normal intent classification below
+        } else {
+          const response = await this.addToCartFlow.handleExpecting(
+            merchantPlaybookData,
+            customer.id,
+            merchant.id,
+            conversation.id,
+            input.text,
+          );
+          await this.conversationService.updateLastIntent(conversation.id, 'ADD_TO_CART');
+          return {
+            response,
+            shouldSend: true,
+            conversationId: conversation.id,
+            merchantId: merchant.id,
+            intent: 'ADD_TO_CART',
+          };
+        }
       }
     }
 

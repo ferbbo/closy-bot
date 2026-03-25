@@ -42,6 +42,7 @@ describe('ConversationOrchestrator', () => {
   let greetingFlow: GreetingFlow;
   let helpFlow: HelpFlow;
   let addToCartFlow: AddToCartFlow;
+  let expectingService: ExpectingService;
 
   const mockMerchant: Merchant = {
     id: 'merchant-1',
@@ -242,6 +243,21 @@ describe('ConversationOrchestrator', () => {
             getLlmContextLastK: jest.fn().mockReturnValue(10),
           },
         },
+        // PR-04.1: ExpectingService
+        {
+          provide: ExpectingService,
+          useValue: {
+            getExpecting: jest.fn().mockResolvedValue(null), // no active expecting by default
+            clearExpecting: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        // PlaybookService (orchestrator dep — needed for getUnknownIntentMessage)
+        {
+          provide: PlaybookService,
+          useValue: {
+            getMessage: jest.fn().mockReturnValue("No entendí, escribe 'ayuda'"),
+          },
+        },
         // PR-05.1: Merchant command services
         {
           provide: MerchantCommandParserService,
@@ -310,6 +326,7 @@ describe('ConversationOrchestrator', () => {
     greetingFlow = module.get<GreetingFlow>(GreetingFlow);
     helpFlow = module.get<HelpFlow>(HelpFlow);
     addToCartFlow = module.get<AddToCartFlow>(AddToCartFlow);
+    expectingService = module.get<ExpectingService>(ExpectingService);
   });
 
   it('should be defined', () => {
@@ -768,6 +785,55 @@ describe('ConversationOrchestrator', () => {
 
         expect(result.shouldSend).toBe(true);
         expect(updateCartItemFlow.handleSelectQuantity).toHaveBeenCalled();
+      });
+    });
+
+    describe('PR-04.1 Bug: new search intent while expecting select_product', () => {
+      it('should call clearExpecting and route to SEARCH_PRODUCT when user sends "buscar zapatos" during select_product state', async () => {
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'search_selection',
+          type: 'select_product',
+          products: [],
+          page: 0,
+        } as any);
+
+        jest.spyOn(routeDecisionService, 'classifyAndRoute').mockResolvedValue({
+          route: 'TEMPLATE',
+          intent: 'SEARCH_PRODUCT',
+          reason: 'HIGH confidence keyword match',
+          confidence: 'HIGH',
+          signals: ['buscar'],
+        });
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: 'buscar zapatos',
+        });
+
+        expect(expectingService.clearExpecting).toHaveBeenCalledWith('conv-1');
+        expect(result.intent).toBe('SEARCH_PRODUCT');
+        expect(result.shouldSend).toBe(true);
+      });
+
+      it('should NOT call clearExpecting when user selects a product number (numeric selection) during select_product state', async () => {
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'search_selection',
+          type: 'select_product',
+          products: [],
+          page: 0,
+        } as any);
+
+        const addToCartFlowMock = addToCartFlow as any;
+        addToCartFlowMock.handleExpecting = jest.fn().mockResolvedValue('Producto seleccionado');
+
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: '1',
+        });
+
+        expect(expectingService.clearExpecting).not.toHaveBeenCalled();
+        expect(addToCartFlowMock.handleExpecting).toHaveBeenCalled();
+        expect(result.intent).toBe('ADD_TO_CART');
       });
     });
 
