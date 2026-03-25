@@ -120,14 +120,14 @@ describe('AC-04: SearchCatalogFlow uses PlaybookService.getMessage() (PR-GAP-1)'
 
       const result = await flow.handle(mockMerchant, merchantId, 'zapatillas');
 
-      expect(result).toContain('Resultados para "zapatillas"');
+      expect(result).toContain('Productos encontrados:');
       expect(result).toContain('Zapatillas Running');
       expect(result).toContain('$50000.00');
       expect(result).toContain('Stock: 10 unidades');
-      // AC-04: getMessage called for searchResultsHeader
+      // AC-04: getMessage called for searchResults
       expect(playbookService.getMessage).toHaveBeenCalledWith(
         mockMerchant,
-        'searchResultsHeader',
+        'searchResults',
         expect.any(Object),
       );
     });
@@ -459,5 +459,305 @@ describe('AC-05: SearchCatalogFlow - sets expecting after search (PR-04.0)', () 
     await flow.handle(mockMerchant, 'merch-1', 'nonexistent', 'conv-1');
 
     expect(expectingService.setExpecting).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PR-04.1 AC-01: empty sanitizedQuery triggers ask_search_query expecting
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('AC-01: SearchCatalogFlow empty sanitizedQuery sets ask_search_query expecting', () => {
+  let flow: SearchCatalogFlow;
+  let expectingService: jest.Mocked<ExpectingService>;
+  let playbookService: jest.Mocked<PlaybookService>;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SearchCatalogFlow,
+        { provide: CatalogService, useValue: { searchProducts: jest.fn() } },
+        { provide: PlaybookService, useValue: { getMessage: buildMockGetMessage() } },
+        {
+          provide: ExpectingService,
+          useValue: {
+            setExpecting: jest.fn().mockResolvedValue(undefined),
+            getExpecting: jest.fn().mockResolvedValue(null),
+            clearExpecting: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+      ],
+    }).compile();
+
+    flow = module.get<SearchCatalogFlow>(SearchCatalogFlow);
+    expectingService = module.get(ExpectingService);
+    playbookService = module.get(PlaybookService);
+  });
+
+  it.each(['buscar', 'busco', 'tienes', 'hay'])(
+    'AC-01: "%s" (no product) → sets ask_search_query expecting and responds searchAskKeyword',
+    async (input) => {
+      const response = await flow.handle(mockMerchant, 'merch-1', input, 'conv-1');
+
+      expect(expectingService.setExpecting).toHaveBeenCalledWith(
+        'conv-1',
+        expect.objectContaining({
+          flow: 'search_selection',
+          type: 'ask_search_query',
+        }),
+      );
+      expect(playbookService.getMessage).toHaveBeenCalledWith(mockMerchant, 'searchAskKeyword');
+      expect(response).toBeDefined();
+    },
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PR-04.1 AC-02: non-empty sanitizedQuery triggers select_product expecting
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('AC-02: SearchCatalogFlow non-empty sanitizedQuery sets select_product expecting', () => {
+  let flow: SearchCatalogFlow;
+  let catalogService: jest.Mocked<CatalogService>;
+  let expectingService: jest.Mocked<ExpectingService>;
+
+  const mockProduct: ProductWithVariants = {
+    id: 'p1',
+    merchantId: 'merch-1',
+    name: 'Camiseta',
+    description: 'desc',
+    variants: [
+      {
+        id: 'v1',
+        productId: 'p1',
+        name: 'M',
+        sku: 'C-M',
+        price: 30000,
+        stock: 5,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SearchCatalogFlow,
+        { provide: CatalogService, useValue: { searchProducts: jest.fn() } },
+        { provide: PlaybookService, useValue: { getMessage: buildMockGetMessage() } },
+        {
+          provide: ExpectingService,
+          useValue: {
+            setExpecting: jest.fn().mockResolvedValue(undefined),
+            getExpecting: jest.fn().mockResolvedValue(null),
+            clearExpecting: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+      ],
+    }).compile();
+
+    flow = module.get<SearchCatalogFlow>(SearchCatalogFlow);
+    catalogService = module.get(CatalogService);
+    expectingService = module.get(ExpectingService);
+  });
+
+  it.each(['buscar camiseta', 'tienes vestidos?', 'necesito zapatos'])(
+    'AC-02: "%s" → sets select_product expecting with data.products and page=1',
+    async (input) => {
+      catalogService.searchProducts.mockResolvedValue([mockProduct]);
+
+      await flow.handle(mockMerchant, 'merch-1', input, 'conv-1');
+
+      expect(expectingService.setExpecting).toHaveBeenCalledWith(
+        'conv-1',
+        expect.objectContaining({
+          flow: 'search_selection',
+          type: 'select_product',
+          data: expect.objectContaining({
+            products: expect.arrayContaining([expect.objectContaining({ id: 'p1' })]),
+            page: 1,
+          }),
+        }),
+      );
+    },
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PR-04.1 AC-03: pagination next page / no more pages
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('AC-03: SearchCatalogFlow pagination next page / no more pages', () => {
+  let flow: SearchCatalogFlow;
+  let catalogService: jest.Mocked<CatalogService>;
+  let expectingService: jest.Mocked<ExpectingService>;
+  let playbookService: jest.Mocked<PlaybookService>;
+
+  function makeProduct(id: string): ProductWithVariants {
+    return {
+      id,
+      merchantId: 'merch-1',
+      name: `Product ${id}`,
+      description: '',
+      variants: [
+        {
+          id: `v-${id}`,
+          productId: id,
+          name: 'M',
+          sku: `SKU-${id}`,
+          price: 10000,
+          stock: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+  }
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SearchCatalogFlow,
+        { provide: CatalogService, useValue: { searchProducts: jest.fn() } },
+        { provide: PlaybookService, useValue: { getMessage: buildMockGetMessage() } },
+        {
+          provide: ExpectingService,
+          useValue: {
+            setExpecting: jest.fn().mockResolvedValue(undefined),
+            getExpecting: jest.fn(),
+            clearExpecting: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+      ],
+    }).compile();
+
+    flow = module.get<SearchCatalogFlow>(SearchCatalogFlow);
+    catalogService = module.get(CatalogService);
+    expectingService = module.get(ExpectingService);
+    playbookService = module.get(PlaybookService);
+  });
+
+  it('AC-03: "siguiente" with hasMore=true advances to page 2', async () => {
+    // Returns 11 results so page 2 exists
+    catalogService.searchProducts.mockResolvedValue(
+      Array.from({ length: 11 }, (_, i) => makeProduct(`p${i}`)),
+    );
+
+    (expectingService.getExpecting as jest.Mock).mockResolvedValue({
+      flow: 'search_selection',
+      type: 'select_product',
+      data: { products: [], page: 1, hasMore: true, searchQuery: 'pantalones' },
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
+    });
+
+    await flow.handleNextPage(mockMerchant, 'merch-1', 'conv-1');
+
+    expect(expectingService.setExpecting).toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({
+        data: expect.objectContaining({ page: 2 }),
+      }),
+    );
+  });
+
+  it('AC-03: "siguiente" with hasMore=false returns searchNoMorePages', async () => {
+    (expectingService.getExpecting as jest.Mock).mockResolvedValue({
+      flow: 'search_selection',
+      type: 'select_product',
+      data: { products: [], page: 1, hasMore: false, searchQuery: 'pantalones' },
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
+    });
+
+    await flow.handleNextPage(mockMerchant, 'merch-1', 'conv-1');
+
+    expect(playbookService.getMessage).toHaveBeenCalledWith(mockMerchant, 'searchNoMorePages');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PR-04.1 AC-11: ask_search_query state → any text treated as search query
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('AC-11: SearchCatalogFlow handles any text from ask_search_query state as query', () => {
+  let flow: SearchCatalogFlow;
+  let catalogService: jest.Mocked<CatalogService>;
+  let expectingService: jest.Mocked<ExpectingService>;
+
+  const mockProduct: ProductWithVariants = {
+    id: 'p1',
+    merchantId: 'merch-1',
+    name: 'Camiseta Roja',
+    description: 'desc',
+    variants: [
+      {
+        id: 'v1',
+        productId: 'p1',
+        name: 'M',
+        sku: 'C-M',
+        price: 30000,
+        stock: 5,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SearchCatalogFlow,
+        { provide: CatalogService, useValue: { searchProducts: jest.fn() } },
+        { provide: PlaybookService, useValue: { getMessage: buildMockGetMessage() } },
+        {
+          provide: ExpectingService,
+          useValue: {
+            setExpecting: jest.fn().mockResolvedValue(undefined),
+            getExpecting: jest.fn().mockResolvedValue(null),
+            clearExpecting: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+      ],
+    }).compile();
+
+    flow = module.get<SearchCatalogFlow>(SearchCatalogFlow);
+    catalogService = module.get(CatalogService);
+    expectingService = module.get(ExpectingService);
+    catalogService.searchProducts.mockResolvedValue([mockProduct]);
+  });
+
+  it.each(['camiseta roja', 'jeans'])(
+    'AC-11: "%s" received in ask_search_query state → search executed with that text',
+    async (input) => {
+      await flow.handleAskSearchQueryReply(mockMerchant, 'merch-1', input, 'conv-1');
+
+      expect(catalogService.searchProducts).toHaveBeenCalledWith(
+        'merch-1',
+        input,
+        expect.any(Number),
+      );
+      expect(expectingService.setExpecting).toHaveBeenCalledWith(
+        'conv-1',
+        expect.objectContaining({ type: 'select_product' }),
+      );
+    },
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PR-04.1 AC-12: "siguiente" context keyword only active under select_product
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('AC-12: keyword siguiente only active in select_product context', () => {
+  it('AC-12: SEARCH_PRODUCT keyword-configs contains "siguiente"', async () => {
+    const { INTENT_KEYWORDS } = await import('../intent/keyword-configs');
+    const searchKeywords = INTENT_KEYWORDS.SEARCH_PRODUCT;
+    const siguienteEntry = searchKeywords.find((k) => k.phrase === 'siguiente');
+    expect(siguienteEntry).toBeDefined();
   });
 });

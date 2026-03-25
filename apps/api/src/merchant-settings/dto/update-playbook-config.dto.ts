@@ -113,14 +113,6 @@ export class PlaybookMessagesDto {
 
   @IsString()
   @IsOptional()
-  searchResultsHeader?: string;
-
-  @IsString()
-  @IsOptional()
-  searchResultsFooter?: string;
-
-  @IsString()
-  @IsOptional()
   helpMenu?: string;
 
   @IsString()

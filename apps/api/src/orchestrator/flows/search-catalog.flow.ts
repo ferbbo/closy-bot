@@ -4,9 +4,11 @@ import { PlaybookService, MerchantPlaybookData } from '../../services/playbook.s
 import { ExpectingService } from '../../services/expecting.service';
 import { ProductWithVariants } from '../../persistence/repositories/product.repository';
 
+const PAGE_SIZE = 5;
+
 /**
  * SearchCatalogFlow
- * Handles product search and formats results
+ * PR-04.1: Guided search → paginated list → setExpecting(select_product)
  * PR-GAP-1: All user-facing messages via PlaybookService.getMessage()
  */
 @Injectable()
@@ -15,10 +17,11 @@ export class SearchCatalogFlow {
 
   /**
    * Intent keywords to strip from search queries.
-   * These are words that indicate search intent but aren't part of the product query.
+   * PR-04.1 constraint: 'buscar' added to fix keyword drift (sanitize "buscar camiseta" → "camiseta").
    */
   private readonly INTENT_KEYWORDS = [
     // Spanish search intent
+    'buscar',
     'busco',
     'buscando',
     'quiero',
@@ -55,9 +58,7 @@ export class SearchCatalogFlow {
   /**
    * Sanitize query by removing intent keywords and punctuation
    * "tienes jeans azul?" → "jeans azul"
-   * "busco camisas blancas" → "camisas blancas"
-   * "y camisa blanca" → "camisa blanca" (continuation)
-   * "busco jeans por favor" → "jeans" (courtesy phrase removed)
+   * "buscar camiseta" → "camiseta"  (PR-04.1: 'buscar' now in INTENT_KEYWORDS)
    */
   private sanitizeQuery(rawQuery: string): string {
     let query = rawQuery.toLowerCase().trim();
@@ -76,7 +77,6 @@ export class SearchCatalogFlow {
     // Remove intent keywords (sorted by length descending to match longer phrases first)
     const sortedKeywords = [...this.INTENT_KEYWORDS].sort((a, b) => b.length - a.length);
     for (const keyword of sortedKeywords) {
-      // Match keyword at start of query (with possible leading whitespace after)
       const pattern = new RegExp(`^${keyword}\\s*`, 'i');
       query = query.replace(pattern, '');
     }
@@ -89,20 +89,134 @@ export class SearchCatalogFlow {
    * "camisas blancas, jeans azules y vestido floral" → ["camisas blancas", "jeans azules", "vestido floral"]
    */
   private splitMultiProductQuery(query: string): string[] {
-    // Split by common separators: comma, " y ", " o ", " e " (Spanish conjunctions)
     const parts = query
       .split(/,|\s+y\s+|\s+o\s+|\s+e\s+/i)
       .map((part) => part.trim())
-      .filter((part) => part.length >= 2); // Filter out empty or too short parts
+      .filter((part) => part.length >= 2);
 
     return parts.length > 0 ? parts : [query];
   }
 
   /**
-   * @param merchant  - Merchant data (used to resolve playbook messages) [PR-GAP-1]
-   * @param merchantId - Merchant ID
-   * @param query     - Search query (raw user input, may include intent keywords)
-   * @param conversationId - Conversation ID for ExpectingService (PR-04.0 REQ-06)
+   * Fetch a page of products and detect whether there are more.
+   * Fetches PAGE_SIZE + 1 results and trims to PAGE_SIZE to detect hasMore.
+   */
+  private async fetchPage(
+    merchantId: string,
+    query: string,
+    page: number,
+  ): Promise<{ products: ProductWithVariants[]; hasMore: boolean }> {
+    const fetchLimit = page * PAGE_SIZE + 1; // e.g., page=1 → 6, page=2 → 11
+    const allResults = await this.catalogService.searchProducts(merchantId, query, fetchLimit);
+    const pageStart = (page - 1) * PAGE_SIZE;
+    const pageEnd = page * PAGE_SIZE;
+    const products = allResults.slice(pageStart, pageEnd);
+    const hasMore = allResults.length > pageEnd;
+    return { products, hasMore };
+  }
+
+  /**
+   * PR-04.1 REQ-11: Handle message from ask_search_query state.
+   * Treats rawText as the product search query directly.
+   */
+  async handleAskSearchQueryReply(
+    merchant: MerchantPlaybookData,
+    merchantId: string,
+    rawText: string,
+    conversationId: string,
+  ): Promise<string> {
+    const query = rawText.trim();
+    if (!query) {
+      return this.playbookService.getMessage(merchant, 'searchAskKeyword');
+    }
+    return this.searchAndRespond(merchant, merchantId, query, conversationId, 1);
+  }
+
+  /**
+   * PR-04.1 REQ-03: Handle "siguiente" keyword within select_product expecting state.
+   */
+  async handleNextPage(
+    merchant: MerchantPlaybookData,
+    merchantId: string,
+    conversationId: string,
+  ): Promise<string> {
+    const expecting = await this.expectingService.getExpecting(conversationId);
+    if (
+      !expecting ||
+      expecting.flow !== 'search_selection' ||
+      expecting.type !== 'select_product'
+    ) {
+      return this.playbookService.getMessage(merchant, 'searchExpired');
+    }
+
+    if (!expecting.data.hasMore) {
+      return this.playbookService.getMessage(merchant, 'searchNoMorePages');
+    }
+
+    const currentPage = expecting.data.page ?? 1;
+    const nextPage = currentPage + 1;
+    const query = expecting.data.searchQuery ?? '';
+
+    if (!query) {
+      return this.playbookService.getMessage(merchant, 'searchExpired');
+    }
+
+    return this.searchAndRespond(merchant, merchantId, query, conversationId, nextPage);
+  }
+
+  /**
+   * Core search + respond logic: fetches page, formats list, sets expecting.
+   */
+  private async searchAndRespond(
+    merchant: MerchantPlaybookData,
+    merchantId: string,
+    query: string,
+    conversationId: string,
+    page: number,
+  ): Promise<string> {
+    const { products, hasMore } = await this.fetchPage(merchantId, query, page);
+
+    // Filter out products with no stock
+    const available = products.filter((p) => p.variants.some((v) => v.stock > 0));
+
+    if (available.length === 0) {
+      return this.playbookService.getMessage(merchant, 'searchNoResults', { query });
+    }
+
+    // Persist expecting state with current page snapshot
+    const productData = available.map((p) => ({
+      id: p.id,
+      name: p.name,
+      price: p.variants.length > 0 ? Math.min(...p.variants.map((v) => Number(v.price))) : 0,
+      stock: p.variants.reduce((sum, v) => sum + v.stock, 0),
+    }));
+
+    await this.expectingService.setExpecting(conversationId, {
+      flow: 'search_selection',
+      type: 'select_product',
+      data: { products: productData, page, hasMore, searchQuery: query },
+      expiresAt: ExpectingService.cartSearchExpiresAt(),
+    });
+
+    this.logger.debug(
+      `SearchCatalogFlow: setExpecting select_product conv=${conversationId} page=${page} hasMore=${hasMore}`,
+    );
+
+    return this.formatResults(merchant, query, available, hasMore);
+  }
+
+  /**
+   * Main entry point.
+   * PR-04.1:
+   *  - sanitizedQuery === "" → ask_search_query expecting + searchAskKeyword
+   *  - "siguiente" in select_product → next page
+   *  - sanitizedQuery !== "" → search + list + select_product expecting
+   *  - multi-product query → combined results (no pagination)
+   *
+   * @param merchant        - Merchant data for playbook messages
+   * @param merchantId      - Merchant ID
+   * @param query           - Raw user message
+   * @param conversationId  - Required for ExpectingService state
    */
   async handle(
     merchant: MerchantPlaybookData,
@@ -111,52 +225,55 @@ export class SearchCatalogFlow {
     conversationId?: string,
   ): Promise<string> {
     const sanitizedQuery = this.sanitizeQuery(query);
-    const subQueries = this.splitMultiProductQuery(sanitizedQuery);
 
     this.logger.log(
-      `Searching catalog for merchant ${merchantId} (raw: "${query}" → sanitized: "${sanitizedQuery}" → subQueries: ${subQueries.length})`,
+      `SearchCatalogFlow: merchant=${merchantId} raw="${query}" sanitized="${sanitizedQuery}"`,
     );
 
-    // If multiple sub-queries, search each and combine results
+    // PR-04.1 REQ-01: Empty query after sanitization → ask user for keyword
+    if (sanitizedQuery === '') {
+      if (conversationId) {
+        await this.expectingService.setExpecting(conversationId, {
+          flow: 'search_selection',
+          type: 'ask_search_query',
+          data: {},
+          expiresAt: ExpectingService.cartSearchExpiresAt(),
+        });
+      }
+      return this.playbookService.getMessage(merchant, 'searchAskKeyword');
+    }
+
+    // PR-04.1 REQ-03: "siguiente" keyword — handled at orchestrator level via handleNextPage().
+    // This path handles single/multi-product searches.
+
+    const subQueries = this.splitMultiProductQuery(sanitizedQuery);
+
+    // Multi-product search: no pagination, no expecting
     if (subQueries.length > 1) {
       return this.handleMultiSearch(merchant, merchantId, subQueries);
     }
 
-    // Single product search (max 5 for WhatsApp readability)
-    const products = await this.catalogService.searchProducts(merchantId, sanitizedQuery, 5);
+    // Single product search with pagination support
+    if (conversationId) {
+      return this.searchAndRespond(merchant, merchantId, sanitizedQuery, conversationId, 1);
+    }
 
+    // No conversationId fallback (legacy callers without expecting)
+    const products = await this.catalogService.searchProducts(
+      merchantId,
+      sanitizedQuery,
+      PAGE_SIZE,
+    );
     if (products.length === 0) {
       return this.playbookService.getMessage(merchant, 'searchNoResults', {
         query: sanitizedQuery,
       });
     }
-
-    // PR-04.0 REQ-06 / AC-05: persist lastSearchResults + setExpecting select_product
-    if (conversationId) {
-      const productData = products.slice(0, 5).map((p) => ({
-        id: p.id,
-        name: p.name,
-        price: p.variants.length > 0 ? Math.min(...p.variants.map((v) => Number(v.price))) : 0,
-        stock: p.variants.reduce((sum, v) => sum + v.stock, 0),
-      }));
-
-      await this.expectingService.setExpecting(conversationId, {
-        flow: 'search_selection',
-        type: 'select_product',
-        data: { products: productData, page: 1, hasMore: false },
-        expiresAt: ExpectingService.cartSearchExpiresAt(),
-      });
-
-      this.logger.debug(
-        `SearchCatalogFlow: setExpecting select_product for conv=${conversationId} (${productData.length} products)`,
-      );
-    }
-
-    return this.formatResults(merchant, sanitizedQuery, products);
+    return this.formatResults(merchant, sanitizedQuery, products, false);
   }
 
   /**
-   * Handle multi-product search: search each sub-query and combine results
+   * Handle multi-product search: search each sub-query and combine results (no pagination)
    */
   private async handleMultiSearch(
     merchant: MerchantPlaybookData,
@@ -168,14 +285,12 @@ export class SearchCatalogFlow {
     const foundQueries: string[] = [];
     const notFoundQueries: string[] = [];
 
-    // Search each sub-query (limit 2 per sub-query to avoid overwhelming)
     for (const subQuery of subQueries) {
       const products = await this.catalogService.searchProducts(merchantId, subQuery, 2);
 
       if (products.length > 0) {
         foundQueries.push(subQuery);
         for (const product of products) {
-          // Deduplicate by product ID
           if (!seenProductIds.has(product.id)) {
             seenProductIds.add(product.id);
             allProducts.push(product);
@@ -186,20 +301,17 @@ export class SearchCatalogFlow {
       }
     }
 
-    // Build response
     if (allProducts.length === 0) {
       return this.playbookService.getMessage(merchant, 'searchNoResults', {
         query: subQueries.join(', '),
       });
     }
 
-    // Limit total to 5 products for readability
-    const limitedProducts = allProducts.slice(0, 5);
+    const limitedProducts = allProducts.slice(0, PAGE_SIZE);
     const displayQuery = foundQueries.join(', ');
 
-    let response = this.formatResults(merchant, displayQuery, limitedProducts);
+    let response = this.formatResults(merchant, displayQuery, limitedProducts, false);
 
-    // Add note about not-found items
     if (notFoundQueries.length > 0) {
       response += `\n\n_No encontré: ${notFoundQueries.join(', ')}_`;
     }
@@ -208,18 +320,18 @@ export class SearchCatalogFlow {
   }
 
   /**
-   * Format products as WhatsApp message
+   * Format products as WhatsApp numbered list with optional "siguiente" hint.
    */
   private formatResults(
     merchant: MerchantPlaybookData,
     query: string,
     products: ProductWithVariants[],
+    hasMore: boolean,
   ): string {
     const productLines = products
       .map((product, index) => {
         const variants = product.variants.filter((v) => v.stock > 0);
 
-        // Skip products with no stock available
         if (variants.length === 0) {
           return null;
         }
@@ -241,17 +353,12 @@ export class SearchCatalogFlow {
       })
       .filter((line) => line !== null);
 
-    // If all products have zero stock after filtering
     if (productLines.length === 0) {
       return this.playbookService.getMessage(merchant, 'searchNoResults', { query });
     }
 
-    const header = this.playbookService.getMessage(merchant, 'searchResultsHeader', {
-      query,
-      count: productLines.length,
-    });
-    const footer = this.playbookService.getMessage(merchant, 'searchResultsFooter');
-
-    return header + productLines.join('\n\n') + footer;
+    const lista = productLines.join('\n\n');
+    const nextHint = hasMore ? this.playbookService.getMessage(merchant, 'searchNextHint') : '';
+    return this.playbookService.getMessage(merchant, 'searchResults', { lista, nextHint });
   }
 }

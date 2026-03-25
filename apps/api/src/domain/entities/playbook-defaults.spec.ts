@@ -19,8 +19,6 @@ const ALL_MESSAGE_KEYS: (keyof PlaybookMessages)[] = [
   'checkoutStart',
   // New (PR-GAP-1)
   'searchNoResults',
-  'searchResultsHeader',
-  'searchResultsFooter',
   'helpMenu',
   'cartEmpty',
   'cartSummaryHeader',

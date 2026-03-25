@@ -26,6 +26,8 @@ import { LlmService } from '../llm/llm.service';
 import { Customer, Merchant, Conversation, ConversationType, MerchantStatus } from '@prisma/client';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10
+import { ExpectingService } from '../services/expecting.service'; // PR-04.1
+import { PlaybookService } from '../services/playbook.service'; // orchestrator dep
 
 describe('ConversationOrchestrator', () => {
   let orchestrator: ConversationOrchestrator;
@@ -37,6 +39,7 @@ describe('ConversationOrchestrator', () => {
   let greetingFlow: GreetingFlow;
   let helpFlow: HelpFlow;
   let addToCartFlow: AddToCartFlow;
+  let expectingService: ExpectingService;
 
   const mockMerchant: Merchant = {
     id: 'merchant-1',
@@ -230,6 +233,21 @@ describe('ConversationOrchestrator', () => {
             getLlmContextLastK: jest.fn().mockReturnValue(10),
           },
         },
+        // PR-04.1: ExpectingService
+        {
+          provide: ExpectingService,
+          useValue: {
+            getExpecting: jest.fn().mockResolvedValue(null), // no active expecting by default
+            clearExpecting: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        // PlaybookService (orchestrator dep — needed for getUnknownIntentMessage)
+        {
+          provide: PlaybookService,
+          useValue: {
+            getMessage: jest.fn().mockReturnValue("No entendí, escribe 'ayuda'"),
+          },
+        },
         // PR-05.1: Merchant command services
         {
           provide: MerchantCommandParserService,
@@ -264,6 +282,7 @@ describe('ConversationOrchestrator', () => {
     greetingFlow = module.get<GreetingFlow>(GreetingFlow);
     helpFlow = module.get<HelpFlow>(HelpFlow);
     addToCartFlow = module.get<AddToCartFlow>(AddToCartFlow);
+    expectingService = module.get<ExpectingService>(ExpectingService);
   });
 
   it('should be defined', () => {
@@ -582,6 +601,62 @@ describe('ConversationOrchestrator', () => {
         // Should proceed to normal processing
         expect(result.shouldSend).toBe(true);
         expect(result.response).not.toBe('Tienda en configuración. Por favor intenta más tarde.');
+      });
+    });
+
+    describe('PR-04.1 Bug: new search intent while expecting select_product', () => {
+      it('should call clearExpecting and route to SEARCH_PRODUCT when user sends "buscar zapatos" during select_product state', async () => {
+        // Dado: expecting select_product activo
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'search_selection',
+          type: 'select_product',
+          products: [],
+          page: 0,
+        } as any);
+
+        jest.spyOn(routeDecisionService, 'classifyAndRoute').mockResolvedValue({
+          route: 'TEMPLATE',
+          intent: 'SEARCH_PRODUCT',
+          reason: 'HIGH confidence keyword match',
+          confidence: 'HIGH',
+          signals: ['buscar'],
+        });
+
+        // Cuando: usuario envía "buscar zapatos"
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: 'buscar zapatos',
+        });
+
+        // Entonces: clearExpecting es llamado y se inicia nueva búsqueda
+        expect(expectingService.clearExpecting).toHaveBeenCalledWith('conv-1');
+        expect(result.intent).toBe('SEARCH_PRODUCT');
+        expect(result.shouldSend).toBe(true);
+      });
+
+      it('should NOT call clearExpecting when user selects a product number (numeric selection) during select_product state', async () => {
+        // Dado: expecting select_product activo
+        jest.spyOn(expectingService, 'getExpecting').mockResolvedValue({
+          flow: 'search_selection',
+          type: 'select_product',
+          products: [],
+          page: 0,
+        } as any);
+
+        // Mock handleExpecting on the addToCartFlow mock value
+        const addToCartFlowMock = addToCartFlow as any;
+        addToCartFlowMock.handleExpecting = jest.fn().mockResolvedValue('Producto seleccionado');
+
+        // Cuando: usuario envía una selección numérica
+        const result = await orchestrator.process({
+          ...baseInput,
+          text: '1',
+        });
+
+        // Entonces: se delega a AddToCartFlow, NO se llama clearExpecting
+        expect(expectingService.clearExpecting).not.toHaveBeenCalled();
+        expect(addToCartFlowMock.handleExpecting).toHaveBeenCalled();
+        expect(result.intent).toBe('ADD_TO_CART');
       });
     });
 
