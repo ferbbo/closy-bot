@@ -8,6 +8,7 @@ import { CustomerService } from '../services/customer.service';
 import { ConversationService } from '../services/conversation.service';
 import { MerchantResolverService } from '../services/merchant-resolver.service';
 import { PlaybookService, type MerchantPlaybookData } from '../services/playbook.service';
+import { ExpectingService } from '../services/expecting.service'; // PR-04.1 + PR-04.2
 import { SearchCatalogFlow } from './flows/search-catalog.flow';
 import { GreetingFlow } from './flows/greeting.flow';
 import { HelpFlow } from './flows/help.flow';
@@ -27,7 +28,6 @@ import { MessageRelayService } from '../services/message-relay.service'; // PR-0
 import { LlmService } from '../llm/llm.service';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10 AC-06
-import { ExpectingService } from '../services/expecting.service'; // PR-04.2
 import { parseNumericSelection } from '../common/helpers/selection-helpers'; // PR-04.2
 import { CartService } from '../services/cart.service'; // PR-04.2
 
@@ -100,7 +100,7 @@ export class ConversationOrchestrator {
     private readonly messageLogRepository: MessageLogRepository, // PR-03.10
     private readonly memoryConfigService: MemoryConfigService, // PR-03.10 AC-06
     private readonly playbookService: PlaybookService, // Fix: para usar unknownIntent del playbook
-    private readonly expectingService: ExpectingService, // PR-04.2
+    private readonly expectingService: ExpectingService, // PR-04.1 + PR-04.2
     private readonly cartService: CartService, // PR-04.2
   ) {
     // PR-03.5.1, REQ-08, AC-08: Removed `this.llmEnabled` binary toggle
@@ -324,11 +324,13 @@ export class ConversationOrchestrator {
       };
     }
 
-    // PR-04.2 REQ-04: Check for active cart_management expecting state BEFORE intent routing
-    const cartExpecting = await this.expectingService.getExpecting(conversation.id);
-    if (cartExpecting && cartExpecting.flow === 'cart_management') {
+    // PR-04.1 + PR-04.2: Check for active expecting state BEFORE intent routing
+    const activeExpecting = await this.expectingService.getExpecting(conversation.id);
+
+    // PR-04.2 REQ-04: cart_management flow pre-check
+    if (activeExpecting && activeExpecting.flow === 'cart_management') {
       this.logger.log(
-        `cart_management expecting state active (type=${cartExpecting.type}), dispatching to cart handler`,
+        `cart_management expecting state active (type=${activeExpecting.type}), dispatching to cart handler`,
       );
 
       const merchantPlaybookData: MerchantPlaybookData = {
@@ -344,7 +346,7 @@ export class ConversationOrchestrator {
         merchant.id,
         conversation.id,
         input.text,
-        cartExpecting,
+        activeExpecting,
       );
 
       return {
@@ -354,6 +356,80 @@ export class ConversationOrchestrator {
         merchantId: merchant.id,
         intent: 'MANAGE_CART',
       };
+    }
+
+    // PR-04.1: search_selection flow pre-check.
+    // This handles: ask_search_query, select_product, product_options, view_details.
+    if (activeExpecting?.flow === 'search_selection') {
+      this.logger.log(
+        `Active search_selection state (type=${activeExpecting.type}), routing accordingly`,
+      );
+
+      const merchantPlaybookData: MerchantPlaybookData = {
+        id: merchant.id,
+        name: merchant.name,
+        industry: merchant.industry ?? undefined,
+        playbookConfig: merchant.playbookConfig as unknown as Record<string, unknown> | null,
+      };
+
+      // ask_search_query: any message → treat as search query (REQ-11)
+      if (activeExpecting.type === 'ask_search_query') {
+        const response = await this.searchCatalogFlow.handleAskSearchQueryReply(
+          merchantPlaybookData,
+          merchant.id,
+          input.text,
+          conversation.id,
+        );
+        await this.conversationService.updateLastIntent(conversation.id, 'SEARCH_PRODUCT');
+        return {
+          response,
+          shouldSend: true,
+          conversationId: conversation.id,
+          merchantId: merchant.id,
+          intent: 'SEARCH_PRODUCT',
+        };
+      }
+
+      // select_product + "siguiente": pagination (REQ-03)
+      const normalizedText = input.text
+        .toLowerCase()
+        .trim()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      if (activeExpecting.type === 'select_product' && normalizedText === 'siguiente') {
+        const response = await this.searchCatalogFlow.handleNextPage(
+          merchantPlaybookData,
+          merchant.id,
+          conversation.id,
+        );
+        await this.conversationService.updateLastIntent(conversation.id, 'SEARCH_PRODUCT');
+        return {
+          response,
+          shouldSend: true,
+          conversationId: conversation.id,
+          merchantId: merchant.id,
+          intent: 'SEARCH_PRODUCT',
+        };
+      }
+
+      // select_product / product_options / view_details: delegate to AddToCartFlow (REQ-04..10)
+      if (['select_product', 'product_options', 'view_details'].includes(activeExpecting.type)) {
+        const response = await this.addToCartFlow.handleExpecting(
+          merchantPlaybookData,
+          customer.id,
+          merchant.id,
+          conversation.id,
+          input.text,
+        );
+        await this.conversationService.updateLastIntent(conversation.id, 'ADD_TO_CART');
+        return {
+          response,
+          shouldSend: true,
+          conversationId: conversation.id,
+          merchantId: merchant.id,
+          intent: 'ADD_TO_CART',
+        };
+      }
     }
 
     // 6. PR-03.5.1: Classify and route (REQ-07, AC-07)
