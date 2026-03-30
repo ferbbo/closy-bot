@@ -315,10 +315,9 @@ graph TD
         PR0351 --> PRGAP2[PR-GAP-2 FAQ Flow]
         PR04 --> PR040[PR-04.0 Expecting Layer]
         PRGAP1 --> PR040
-        PR040 --> PR041[PR-04.1 Guided Add-to-Cart]
+        PR040 --> PR041[PR-04.1 Search & Add-to-Cart]
         PR03511 --> PR041
-        PR040 --> PR042[PR-04.2 Cart Modify/Remove]
-        PR041 --> PR042
+        PR040 --> PR042[PR-04.2 Cart Management]
         PR045[PR-04.5 MerchantConfig] --> PR05[PR-05 Checkout]
         PR0351 --> PR05
         PRGAP1 --> PR05
@@ -922,7 +921,8 @@ graph TD
 ##### PR-04.2 — Cart Management Flow: Keywords + Confirmación + Modificación 🔵 PENDIENTE
 - **Scope:** MVP
 - **Objetivo:** Flujo de gestión de carrito por keywords (`modificar carrito`, `eliminar N`, `modificar N`) con confirmaciones ligeras y carrito actualizado.
-- **Depende de:** PR-04.0 (Expecting Layer), PR-04.1 (patrón consistente de selección numérica).
+- **Depende de:** PR-04.0 (Expecting Layer).
+- **Paralelizable con:** PR-04.1 (no hay conflicto de archivos ni flows).
 - **Incluye:**
 
   **A) Trigger: Listar carrito**
