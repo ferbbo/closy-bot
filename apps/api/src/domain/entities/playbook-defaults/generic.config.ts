@@ -65,7 +65,7 @@ export const GenericPlaybookDefaults: PlaybookConfig = {
     askQuantity: '¿Cuántas unidades de {productName}? (máx {stock})',
     invalidProductSelection: 'Selección inválida. Elige un número del 1 al {count}',
     cartListWithActions:
-      '{lista}\n\nPara eliminar: *eliminar [N]*\nPara modificar cantidad: *modificar [N]*',
+      '{lista}\n\nPara eliminar: *eliminar [N]*\nPara modificar cantidad: *modificar [N]*\nPara cancelar: *cancelar*',
     cartActionConfirmPrompt:
       'Seleccionaste: *{productName}*\n1. Confirmar eliminación\n2. Modificar cantidad\n3. Cancelar',
     cartActionCancelled: 'Carrito sin cambios. Escribe *modificar carrito* para continuar.',

@@ -8,3 +8,6 @@ ignoredBuiltDependencies:
   - esbuild
   - prisma
   - unrs-resolver
+
+onlyBuiltDependencies:
+  - sharp

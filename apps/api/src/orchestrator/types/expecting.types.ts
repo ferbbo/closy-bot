@@ -32,7 +32,7 @@ export interface ExpectingStateData {
   /** Cart items snapshot in display order (cart_management) */
   cartItems?: Array<{ id: string; name: string; qty: number }>;
   /** Pending cart action in cart_management */
-  pendingAction?: 'remove' | 'modify';
+  pendingAction?: 'remove' | 'modify' | 'cancel';
   /** 1-based index of selected cart item */
   selectedItemIndex?: number;
   /** Maximum stock available for selected product */

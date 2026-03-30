@@ -83,6 +83,7 @@ export const INTENT_KEYWORDS: Record<IntentKey, KeywordConfig[]> = {
 
   SEARCH_PRODUCT: [
     { phrase: 'busco', weight: 3 },
+    { phrase: 'buscar', weight: 3 },
     { phrase: 'tienes', weight: 2 },
     { phrase: 'tienen', weight: 2 },
     { phrase: 'tendras', weight: 2 }, // Colloquial future: "¿tendrás vestidos?"

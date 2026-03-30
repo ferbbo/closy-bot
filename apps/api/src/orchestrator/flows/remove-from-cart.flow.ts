@@ -22,6 +22,7 @@ export class RemoveFromCartFlow {
   // Regex patterns for direct action extraction within select_action state
   private readonly REMOVE_PATTERN = /(eliminar|quitar|sacar)\s+(\d+)/i;
   private readonly MODIFY_PATTERN = /modificar\s+(\d+)/i;
+  private readonly CANCEL_PATTERN = /cancelar/i;
 
   constructor(
     private readonly cartService: CartService,
@@ -49,18 +50,23 @@ export class RemoveFromCartFlow {
     }
 
     // Parse action and index from message
-    let action: 'remove' | 'modify' = 'remove';
+    let action: 'remove' | 'modify' | 'cancel' = 'remove';
     let selectedIndex: number | null = null;
 
     const removeMatch = messageText.match(this.REMOVE_PATTERN);
     const modifyMatch = messageText.match(this.MODIFY_PATTERN);
+    const cancelMatch = messageText.match(this.CANCEL_PATTERN);
 
+
+     this.logger.debug(`messageText: ${messageText}`)
     if (removeMatch) {
       action = 'remove';
       selectedIndex = parseInt(removeMatch[2], 10);
     } else if (modifyMatch) {
       action = 'modify';
       selectedIndex = parseInt(modifyMatch[1], 10);
+    } else if (cancelMatch) {
+      action = 'cancel'
     } else {
       // Try bare number
       const bare = parseNumericSelection(messageText, cartItems.length);
@@ -69,7 +75,10 @@ export class RemoveFromCartFlow {
         selectedIndex = bare;
       }
     }
-
+     this.logger.debug(`${selectedIndex} \\\ ${action}`)
+    if (selectedIndex == null && action === 'cancel') {
+      return this.handleCancel(merchant, conversationId)
+    }
     // AC-10: Validate index
     if (selectedIndex === null || selectedIndex < 1 || selectedIndex > cartItems.length) {
       return this.playbookService.getMessage(merchant, 'cartItemNotFound');

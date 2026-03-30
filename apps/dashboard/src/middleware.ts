@@ -56,10 +56,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-<<<<<<< Updated upstream
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|auth|channels|onboarding/progress|onboarding/whatsapp/start\|api/|merchants/).*)'],
-=======
   matcher: ['/((?!_next/static|_next/image|favicon.ico|auth|channels|onboarding/progress|onboarding/whatsapp/start|api/|merchants).*)'],
->>>>>>> Stashed changes
 };
 
