@@ -325,6 +325,9 @@ export const api = {
   getMe: () => apiFetch<AuthMeResponse>('/auth/me'),
   getGoogleAuthUrl: () => `${API_URL}/auth/login/google`,
   getMicrosoftAuthUrl: () => `${API_URL}/auth/login/microsoft`,
+  postLogout:() => apiFetch<Promise<void>>('/auth/logout', {
+    method: 'POST',
+  }),
 
   // Onboarding endpoints
   getOnboardingProgress: () =>

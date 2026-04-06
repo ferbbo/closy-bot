@@ -13,9 +13,12 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
+import {  useState } from 'react';
 import { usePendingOrdersCount } from '@/hooks/use-orders';
 import { useMerchantProfile } from '@/hooks/use-playbook-config';
+import { api } from '@/lib/api';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -35,11 +38,20 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
+  const router = useRouter()
   // REQ-14, AC-18: Contador de pedidos pendientes para sidebar badge
   const { data: pendingData } = usePendingOrdersCount();
   const pendingCount = pendingData?.count ?? 0;
 
+  async function handleLogout(e: React.MouseEvent<HTMLButtonElement>) {
+    e.preventDefault()
+    try {
+      await api.postLogout()
+      router.replace('/login')
+    } catch (error) {
+      toast.error('NO fue posible esta accion');
+    }
+  }
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Mobile header */}
@@ -74,9 +86,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Link
                     key={item.name}
                     href={item.href}
-                    className={cn(
-                      'group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
+                    className={cn('group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
                       isActive
+                      
                         ? 'bg-gray-100 text-gray-900'
                         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
                     )}
@@ -99,6 +111,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   </Link>
                 );
               })}
+              <button className='flex items-center px-3 py-2 text-sm font-medium'
+              onClick={(e) => handleLogout(e)}>Cerrar sesion</button>
             </nav>
           </div>
 
