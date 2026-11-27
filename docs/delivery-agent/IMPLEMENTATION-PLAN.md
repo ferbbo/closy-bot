@@ -30,7 +30,7 @@ Si la base de datos para e2e no está disponible (ver STATUS §Entorno), G-slice
 
 | Fase | Objetivo | Slices (Tracks) | Paralelismo |
 |---|---|---|---|
-| F1 Fundaciones | Schema, flag, módulo, configuración y LLM con herramientas | S1.1 → (S1.2 ∥ S1.3) | S1.1 secuencial y del Integrador |
+| F1 Fundaciones | Schema, flag, módulo, configuración, LLM con herramientas y mensajería con plantillas | S1.1 → (S1.2 ∥ S1.3 ∥ S1.4) | S1.1 secuencial y del Integrador; luego 3 tracks |
 | F2 Toma de pedido IA | El agente arma el carrito desde lenguaje natural | (S2.1 ∥ S2.2) → S2.3 | 2 tracks + integración |
 | F3 Checkout domicilio | Zona, tarifa, horario, pago, confirmación, comanda y puerto POS | (S3.1 ∥ S3.2 ∥ S3.4) → S3.3 | 3 tracks + integración |
 | F4 Operación | Ciclo de cocina, autoservicio del cliente y comandos | S4.1 ∥ S4.2 ∥ S4.3 | 3 tracks |
@@ -45,7 +45,7 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.0–S5.3 + 
 ### S1.1 Schema + flag + esqueleto del módulo + contratos · *Integrador (secuencial)* · AC-01, AC-02 (parcial)
 | Tarea | Commit | Archivos | Verificación |
 |---|---|---|---|
-| T1 | Cambios aditivos de schema de SPEC §3.4 (Industry, OrderStatus, deliveryConfig, CartItem.notes + unique, OrderItem.notes, campos de Order) | `prisma/schema.prisma` | `prisma validate` + `db push` en la base local + tsc |
+| T1 | Cambios aditivos de schema de SPEC §3.4 (Industry, OrderStatus, deliveryConfig, CartItem.notes + unique, OrderItem.notes, campos de Order incluidos los de POS, `OutboxMessageType.SEND_TEMPLATE`, `Conversation.optedOutAt`, modelo `WhatsappTemplateState`) | `prisma/schema.prisma` | `prisma validate` + `db push` en la base local + tsc |
 | T2 | Flag `isDeliveryEnabled` + `DELIVERY_ENABLED` / `DELIVERY_LLM_MODEL` / `DELIVERY_STT_MODEL` / `DELIVERY_VISION_MODEL` en Joi y `.env.example` + specs del flag (mvp=false) | `feature-flags.service(.spec).ts`, `env.validation.ts`, `.env.example` | unit |
 | T3 | `verticals/vertical.types.ts`, `vertical-router.service.ts` (registro vacío) y `delivery/contracts.ts` (copia literal de CONTRACTS.md), `delivery.module.ts`, `delivery/CLAUDE.md`, registro en `app.module.ts` | nuevos + `app.module.ts` | tsc + arranque del módulo (test de compilación del módulo) |
 | T4 | Hook en `ConversationOrchestrator`: después de resolver la conversación y antes del checkout activo, `const v = await this.verticalRouter.tryHandle(ctx); if (v) return v;`. Con el flag apagado retorna `null` sin consultas | `conversation.orchestrator.ts` + spec | spec del orquestador existente en verde + test nuevo "flag off → no delega" |
@@ -66,6 +66,14 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.0–S5.3 + 
 | T2 | `FakeLlmProvider` (test util compartido en `apps/api/test/utils/fake-llm.provider.ts`, que también se exporta para unit) con guiones `[{toolCalls}|{text}]` | unit |
 | T3 | `LlmService.runToolLoop()` genérico: máximo N iteraciones, ejecuta handlers registrados, corta ante error y devuelve `{finalText, toolTrace, fallbackReason?}` | unit |
 
+### S1.4 Mensajería de negocio + plantillas WhatsApp · *Track A* · AC-34, AC-35 (parcial), AC-36, AC-37 (base) · P0
+| Tarea | Commit | Verificación |
+|---|---|---|
+| T1 | Soporte de `SEND_TEMPLATE` en el dispatcher del outbox y en `WhatsAppOutboundService` (payload `type: template`, `language.code`, `components[body].parameters` con `parameter_name`) sin tocar `SEND_TEXT` | specs del outbox y del outbound en verde + nuevos |
+| T2 | `whatsapp-templates.catalog.ts` (las 10 plantillas de SPEC §4.6a con ejemplos) + lint en tests (RN-31: UTILITY, sin palabras promocionales, sin cuerpos solo de variables, parámetros sin `\n`) + `scripts/register-whatsapp-templates.ts` (`--dry-run` por defecto; `--apply` exige `WABA_ID` + token del canal; nunca corre en CI) | unit |
+| T3 | `CustomerServiceWindowService.isOpen(merchantId, phone)` (último mensaje **entrante** < 24 h − 5 min, desde `InboundMessage`/`MessageLog`) + `BusinessMessenger.notify({merchantId, to, template, params, dedupeKey, conversationId?, freeTextFallback?})` → decide plantilla o texto según `notifications.mode`, ventana, opt-out (RN-29), tope por pedido (RN-30) y `WhatsappTemplateState` (RN-31). Devuelve `{status:'queued'\|'skipped', channel, reason?}` | unit (matriz de decisiones) |
+| T4 | Webhooks de WABA: `message_template_status_update`, `template_category_update` y `phone_number_quality_update` → upsert en `WhatsappTemplateState` / alerta (`alerta_operacion`) en el controlador de webhook existente, sin romper el campo `messages` | unit + e2e `delivery-templates.e2e-spec.ts` |
+
 ---
 
 ## F2 — Toma de pedido IA
@@ -81,33 +89,36 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.0–S5.3 + 
 | Tarea | Commit | Verificación |
 |---|---|---|
 | T1 | `CartService.addItem(..., opts?: {notes?: string; skipStockCheck?: boolean})` retrocompatible; upsert por `(cartId, variantId, notes)`; `getCartSummary` incluye las notas | specs existentes de cart en verde + nuevos |
-| T2 | `CheckoutService.createOrder` copia `notes` a `OrderItem.notes` y acepta `extras?: {deliveryZone, etaMinutes, shippingCost, fulfillment, cashChangeFor}` (opcional y retrocompatible) | specs de checkout en verde + nuevos |
+| T2 | `CheckoutService.createOrder` copia `notes` a `OrderItem.notes` y acepta `extras?: {deliveryZone, etaMinutes, shippingCost, fulfillment, cashChangeFor, neighborhood, reference}` (opcional y retrocompatible; único cambio legacy de checkout en toda la vertical) | specs de checkout en verde + nuevos |
 | T3 | Herramientas `agregar_al_carrito`, `quitar_del_carrito`, `ver_carrito` + `CartPresenter` (las cifras salen solo de aquí) + guard RN-02 (variantIds vistos en el turno) | unit |
 
 ### S2.3 Agente + handler vertical · *Integrador después de S2.1 y S2.2* · AC-03, AC-04, AC-07, AC-22, AC-23
 | Tarea | Commit | Verificación |
 |---|---|---|
-| T1 | `delivery-agent.prompt.ts` (sistema acotado, RN-01/19) + `DeliveryAgentService.handleTurn(ctx)` usando `runToolLoop` + fallback S2.1-T3 | unit con FakeLlm |
-| T2 | `DeliveryVerticalHandler`: `canHandle` (flag + industria restaurante), guards de privacidad (RN-18), horario (RN-07) y handoff activo; enruta a agente, menú y estados de espera `delivery_disambiguation`; "confirmar" → `CheckoutFlow.start` existente | unit |
-| T3 | Registro del handler en `VerticalRouter` + e2e `delivery-order.e2e-spec.ts` (webhook → carrito con notas; AC-03/05/06/22/23) | e2e |
+| T1 | `delivery-agent.prompt.ts` (persona RN-27: natural, breve, colombiano, sin menús obligatorios; reglas RN-01/19; memoria = summary + últimos 8 mensajes existentes) + `DeliveryAgentService.handleTurn(ctx)` con `runToolLoop` + fallback S2.1-T3 | unit con FakeLlm |
+| T2 | `GroundingValidator` (RN-28: extracción de montos y minutos, verificación contra la traza de herramientas, carrito y config, 1 reintento, respaldo del presenter) + persistencia de `lastCandidates` (TTL 30 min) para la selección libre (RN-02) | unit (AC-33, AC-05) |
+| T3 | `DeliveryVerticalHandler`: `canHandle` (flag + industria restaurante), guards de privacidad (RN-18), opt-out (RN-29), horario (RN-07) y handoff activo → agente | unit |
+| T4 | Registro del handler en `VerticalRouter` + e2e `delivery-order.e2e-spec.ts` (webhook → carrito con notas; AC-03/05/06/22/23/35) | e2e |
 
 ---
 
-## F3 — Checkout de domicilio
+## F3 — Checkout de domicilio (conversacional, con herramientas; el `CheckoutFlow` legacy no se toca)
 
-### S3.1 Cotización de domicilio en checkout · *Track A* · AC-11, AC-12
+> Estado del checkout en `Conversation.metadata.delivery.checkout` (`CheckoutDraft`, CONTRACTS §1). Las herramientas validan y persisten; el LLM solo conversa.
+
+### S3.1 Entrega y cotización · *Track A* · AC-11, AC-12, AC-32 (parcial)
 | Tarea | Commit | Verificación |
 |---|---|---|
-| T1 | Token `SHIPPING_QUOTE_PROVIDER` + `FlatShippingQuoteProvider` por defecto (comportamiento actual) inyectado en `CheckoutService` | specs de checkout en verde |
-| T2 | `DeliveryQuoteService` (implementa el provider usando DeliveryConfigService + extracción de barrio de la dirección: último segmento tras coma o guion, o match contra zonas/alias) | unit |
-| T3 | `CheckoutFlow`: tras `ASK_ADDRESS` → cotizar → `NEEDS_NEIGHBORHOOD` (nuevo paso `ASK_NEIGHBORHOOD`), `OUT_OF_COVERAGE` (ofrecer pickup) o `BELOW_MINIMUM` (volver al carrito) | unit + specs existentes |
+| T1 | `DeliveryQuoteService` (implementa `ShippingQuoteProvider` con DeliveryConfigService + extracción de barrio de la dirección: segmento tras coma o guion, o match contra zonas y alias) | unit |
+| T2 | Herramientas `fijar_entrega` (dirección, barrio, referencia, `fulfillment` delivery/pickup → persiste en `CheckoutDraft`) y `cotizar_domicilio` (→ `ShippingQuote`; `NEEDS_NEIGHBORHOOD` / `OUT_OF_COVERAGE` / `BELOW_MINIMUM` como datos para que el LLM lo explique natural) | unit |
+| T3 | Casos de conversación: datos en un solo mensaje, en desorden y corrección ("no, es en Provenza") con FakeLlm | unit |
 
-### S3.2 Horario, pago y límites · *Track B* · AC-10, AC-13, AC-24
+### S3.2 Pago, horario y límites · *Track B* · AC-10, AC-13, AC-24
 | Tarea | Commit | Verificación |
 |---|---|---|
-| T1 | Guard de horario en el handler, aplicado en checkout y carrito (`isOpen`) + mensajes con la próxima apertura | unit |
-| T2 | Paso `ASK_CASH_CHANGE` cuando el pago es `cod` y la vertical está activa: parser "50 mil / 50.000 / 50k" + validación ≥ total | unit |
-| T3 | Opción "Recoger en el local" (`fulfillment=pickup`, fee 0) + límite `maxOrderAmountWithoutHuman` → handoff (servicio existente) | unit |
+| T1 | Guard de horario aplicado a las herramientas de carrito y checkout (`isOpen`); la respuesta con la próxima apertura la redacta el LLM con el dato | unit |
+| T2 | Herramienta `fijar_pago` (`cod` / `transfer` según `PaymentMethodConfig`; `cashChangeFor` con parser "50 mil / 50.000 / 50k / con 50"; validación ≥ total; las instrucciones de transferencia se devuelven como dato) | unit |
+| T3 | Límite `maxOrderAmountWithoutHuman` → handoff (servicio existente) + pickup (fee 0) | unit |
 
 ### S3.4 Puerto POS (Adapter) · *Track C* · AC-30 · P0
 | Tarea | Commit | Verificación |
@@ -116,12 +127,12 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.0–S5.3 + 
 | T2 | `testing/pos-adapter.contract-spec.ts`: `describePosAdapterContract(factory)`, una batería reutilizable (capabilities coherentes, `pushOrder` idempotente por `orderId`, errores tipados sin throw, nunca expone `secretRef`). Se aplica a Noop y Fake | unit |
 | T3 | `PosOrderSink` (implementa `OrderSink`): llama al adapter, persiste `posProvider/posExternalId/posSyncStatus`, 1 reintento si `retryable` y aviso al encargado si falla (RN-23) + `pos/README.md` "Cómo agregar un POS" (checklist de 5 pasos + ejemplo esqueleto) | unit |
 
-### S3.3 Confirmación + OrderSink · *Integrador después de S3.1, S3.2 y S3.4* · AC-14, AC-15, AC-30
+### S3.3 Confirmación + OrderSink · *Integrador después de S3.1, S3.2 y S3.4* · AC-14, AC-15, AC-30, AC-32, AC-37
 | Tarea | Commit | Verificación |
 |---|---|---|
-| T1 | Resumen final con `CartPresenter` (subtotal, domicilio, total, ETA, pago, cambio) + persistencia de los extras en `createOrder` + `confirmedAt` | unit |
-| T2 | `OrderSink` + `WhatsAppKitchenSink` (reutiliza `MerchantNotificationService`/outbox, `dedupeKey order:{id}:kitchen`) + `KitchenTicketPresenter` + registro en `ORDER_SINKS` en orden `[WhatsAppKitchenSink, PosOrderSink]` (los errores de un sink no detienen al siguiente) | unit |
-| T3 | e2e `delivery-checkout.e2e-spec.ts`: lenguaje natural → dirección → zona → efectivo → "sí" → Order + comanda | e2e |
+| T1 | Herramientas `resumen_pedido` (→ `OrderSummaryPresenter` con el bloque exacto + `confirmationToken` ligado al hash) y `confirmar_pedido` (RN-12: resumen en turno previo, hash, vencimiento, afirmación) → `CheckoutService.createOrder(extras)` + `confirmedAt` + plantilla `pedido_confirmado` vía `BusinessMessenger` | unit |
+| T2 | `OrderSink` + `WhatsAppKitchenSink` (vía `BusinessMessenger`: texto completo con la ventana del encargado abierta y `mode=auto`, si no plantilla `comanda_nuevo_pedido`; `dedupeKey order:{id}:kitchen`) + `KitchenTicketPresenter` + registro en `ORDER_SINKS` en orden `[WhatsAppKitchenSink, PosOrderSink]` (los errores de un sink no detienen al siguiente) | unit |
+| T3 | e2e `delivery-checkout.e2e-spec.ts`: pedido natural → entrega + pago en un mensaje → resumen → "dale" → Order + comanda + plantilla de confirmación | e2e |
 
 ---
 
@@ -131,7 +142,7 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.0–S5.3 + 
 | Tarea | Commit | Verificación |
 |---|---|---|
 | T1 | `DeliveryOrderLifecycleService.transition(orderRef, to, opts)` con la tabla RN-14, idempotencia y `cancelledAt` | unit |
-| T2 | `CustomerStatusNotifier` (outbox `dedupeKey order:{id}:status:{s}`, chequeo de ventana de 24 h por `Conversation.lastMessageAt`) | unit |
+| T2 | `CustomerStatusNotifier` → `BusinessMessenger.notify` con la plantilla de §4.6a por estado (`dedupeKey order:{id}:status:{s}`) | unit |
 | T3 | Parser y servicio de comandos: `preparando N [min]`, `salio N`, `entregado N`, `cancelar N [motivo]`, registrados como comandos **adicionales** (solo con el flag activo) sin romper `enviado`/`confirmar` existentes + e2e `delivery-lifecycle.e2e-spec.ts` | unit + e2e |
 
 ### S4.2 Autoservicio del cliente · *Track B* · AC-17, AC-18, AC-19
@@ -157,7 +168,7 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.0–S5.3 + 
 | S5.0 Media plumbing | Integrador | **P0** | T1 propagar `mediaType`, `mediaId`, `caption` y `mimeType` del mapper → `OrchestratorInput` (campos opcionales) → `VerticalContext.input` · T2 `MediaFetcher` (Graph API `GET /{media-id}` → url → descarga con el token del canal, límites RN-24) + `FakeMediaFetcher` · T3 `MediaRouter` en el handler: `audio` → `Transcriber`, `image` → `ImageInterpreter` (stubs con fallback "escríbelo" hasta que entren S5.2 y S5.3). Con el flag apagado, media = comportamiento legacy | — (base de AC-26/27/31) |
 | S5.1 Debounce | A | **P0** | T1 buffer en `Conversation.metadata.pendingBurst` + ventana `DELIVERY_DEBOUNCE_MS` (4000): el webhook guarda y responde 200, y un procesamiento diferido por conversación (timeout de `@nestjs/schedule`, re-armable) concatena los textos y llama al orquestador una vez. **Un mensaje de media vacía el buffer y se procesa como turno propio** · T2 tests de ráfaga + reinicio seguro (un barrido cada minuto procesa los buffers vencidos) | AC-25 |
 | S5.2 Voz | B | **P0** | T1 `Transcriber` (interfaz + `GroqWhisperTranscriber` vía SDK o REST + `FakeTranscriber`) · T2 audio → texto → mismo turno del agente con el eco "🎙️ Entendí: «…»" + fallos RN-24 + e2e `delivery-media.e2e-spec.ts` (caso voz) | AC-26 |
-| S5.3 Imagen: producto + comprobante | C | **P0** | T1 `ImageInterpreter` (interfaz + `GroqVisionInterpreter` con prompt de solo descripción → JSON `ImageInterpretation` validado + `FakeImageInterpreter`) · T2 `kind:'product'` → `CatalogMatcherService` → candidatos numerados (`delivery_disambiguation` existente, con cantidad) → el cliente elige → carrito (RN-25) · T3 `kind:'payment_receipt'` o caption de pago con `pending_payment` → reenvío al encargado (`dedupeKey order:{id}:receipt:{wamid}`) + respuesta al cliente (RN-26) · T4 casos e2e (producto, comprobante, other) | AC-27, AC-31 |
+| S5.3 Imagen: producto + comprobante | C | **P0** | T1 `ImageInterpreter` (interfaz + `GroqVisionInterpreter` con prompt de solo descripción → JSON `ImageInterpretation` validado + `FakeImageInterpreter`) · T2 `kind:'product'` → `CatalogMatcherService` → candidatos guardados en `lastCandidates` (con cantidad) que el agente presenta conversando → el cliente elige libremente → carrito (RN-25) · T3 `kind:'payment_receipt'` o caption de pago con `pending_payment` → reenvío al encargado (`dedupeKey order:{id}:receipt:{wamid}`) + respuesta al cliente (RN-26) · T4 casos e2e (producto, comprobante, other) | AC-27, AC-31 |
 | S5.4 Botón interactivo | C (después de S5.3) | P1 | T1 `OutboxMessageType.SEND_INTERACTIVE` (aditivo) + sender · T2 confirmación con botones Sí/No + mapeo de `button_reply` al mismo flujo | AC-28 |
 | S5.5 Hardening + release | Integrador | **P0** | T1 `delivery-journey.e2e-spec.ts` (AC-29) · T2 corrida `FEATURES_MODE=mvp` + fixes · T3 sección en `BACKEND-EXECUTION-GUIDE.md` (config, comandos, cURL) + `docs/delivery-agent/DEMO.md` (simular webhook) · T4 PR final `feat/delivery-agent → dev` con checklist §7 | AC-01, AC-29 |
 
@@ -166,6 +177,7 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.0–S5.3 + 
 ## 3. Grafo de dependencias
 ```
 S1.1 ──┬─► S1.2 ──┐
+       ├─► S1.4 ──┤ (BusinessMessenger: lo consumen S3.3, S4.1, S5.3)
        └─► S1.3 ──┼─► S2.1 ──┐
                   └─► S2.2 ──┴─► S2.3 ──┬─► S3.1 ──┐
                                         ├─► S3.2 ──┤
@@ -177,7 +189,7 @@ S1.1 ──┬─► S1.2 ──┐
 ## 4. Calendario objetivo (18 corridas, cada 2 h, desde vie 27-nov 18:00 hasta dom 29-nov 04:00, America/Bogota)
 | Corridas | Objetivo |
 |---|---|
-| 1–2 | F1 completa |
+| 1–2 | F1 completa (S1.1 y luego S1.2 ∥ S1.3 ∥ S1.4) |
 | 3–6 | F2 |
 | 7–10 | F3 (S3.4 corre en paralelo con S3.1 y S3.2) |
 | 11–14 | F4 |

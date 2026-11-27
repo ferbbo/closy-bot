@@ -43,3 +43,14 @@
 - **Decisión:** las dos con Groq (Whisper y un modelo de visión con salida JSON), modelos configurables, media procesada en memoria sin persistir. La visión solo describe: la identificación de producto y el precio salen del catálogo, y siempre se confirma con el cliente antes de agregar (RN-25). Se agrega el slice S5.0 (propagación de media + `MediaFetcher`) para que voz, imagen y comprobante no se pisen.
 - **Descartado:** OCR de montos del comprobante (se puede falsificar; la validación es humana), embeddings de imagen contra fotos del catálogo (no hay fotos suficientes en un menú típico; queda para v2).
 - **Riesgo:** F5 crece de 4 a 6 slices. Si el tiempo no alcanza, se recorta primero el botón interactivo y luego el debounce.
+
+### D-011 · Conversación natural con herramientas + validador de cifras; checkout conversacional propio · Tier 2 · plan · 2026-11-27
+- **Contexto:** el owner exige respuestas en lenguaje humano, sin depender de plantillas ni de opciones numeradas.
+- **Decisión:** el LLM redacta todas las respuestas (persona RN-27) y conduce el checkout con herramientas (`fijar_entrega`, `cotizar_domicilio`, `fijar_pago`, `resumen_pedido`, `confirmar_pedido`). La exactitud se protege con: cifras solo desde herramientas, `GroundingValidator` (RN-28), bloque de resumen exacto y token ligado al hash para confirmar (RN-12). **El `CheckoutFlow` legacy no se toca**, así que hay menos riesgo para RN-21.
+- **Descartado:** extender la máquina de estados determinista de `CheckoutFlow` (respuestas rígidas); dejar que el LLM escriba los totales sin validar.
+- **Reversión:** las herramientas encapsulan la lógica; se puede volver a un flujo guiado reutilizándolas.
+
+### D-012 · Plantillas utility para toda notificación iniciada por el negocio · Tier 2 · plan · 2026-11-27
+- **Contexto:** dentro de la ventana de 24 h el texto libre está permitido. Las plantillas son obligatorias solo fuera de ella. Desde el 1-oct-2026 Meta cobra también los mensajes de servicio y las plantillas utility enviadas dentro de la ventana. Meta recategoriza cada mes las plantillas con contenido promocional y aplica bloqueos progresivos por mal uso.
+- **Decisión:** conversación = texto libre. Notificaciones de estado, pago y comanda = plantilla utility (`template_always` por defecto, `auto` configurable). Catálogo de 10 plantillas sin promoción, lint en tests, registro con un script (dry-run), `BusinessMessenger` con ventana, opt-out, topes y estado de las plantillas, y webhooks de calidad y recategorización.
+- **Riesgo / pendiente humano:** las plantillas deben registrarse y aprobarse en el WABA de cada comercio (`scripts/register-whatsapp-templates.ts --apply`) antes de producción. El agente no puede hacerlo sin credenciales.

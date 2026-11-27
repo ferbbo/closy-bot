@@ -29,6 +29,9 @@ export interface DeliveryConfig {
   maxQtyPerLine: number;
   maxLines: number;
   maxOrderAmountWithoutHuman: number;
+  assistantName: string | null;
+  toneHints: string;
+  notifications: { mode: 'template_always' | 'auto'; templateLanguage: string; maxBusinessInitiatedPerOrder: number };
   privacyPolicyUrl: string | null;
   menuImageUrl: string | null;
   pos: PosIntegrationConfig;               // ver Puerto POS; por defecto { provider: 'none', enabled: false, settings: {}, secretRef: null }
@@ -73,6 +76,40 @@ export type LlmToolResponse =
 export type ToolHandler = (args: Record<string, unknown>, ctx: DeliveryTurnContext) => Promise<ToolResult>;
 export interface ToolResult { ok: boolean; data?: unknown; error?: string }   // `data` compacto (≤ 5 ítems)
 export interface ToolLoopResult { finalText: string | null; toolTrace: Array<{ name: string; ok: boolean }>; fallbackReason?: string }
+
+// ===== Checkout conversacional (S3.x) =============================
+export interface CheckoutDraft {                  // Conversation.metadata.delivery.checkout
+  cartId: string;
+  fulfillment?: Fulfillment; address?: string; neighborhood?: string; reference?: string;
+  quote?: Extract<ShippingQuote, { ok: true }>;
+  paymentMethod?: 'cod' | 'transfer'; cashChangeFor?: number | null;
+  summary?: { hash: string; token: string; issuedAt: string; shownInMessageId: string }; // RN-12
+}
+export interface ConversationalCandidates { items: VariantCandidate[]; createdAt: string } // metadata.delivery.lastCandidates (TTL 30 min, RN-02)
+export interface OrderSummaryView { block: string; total: number; hash: string; confirmationToken: string }
+export type GroundingCheck = { ok: true } | { ok: false; invalidFigures: string[] };
+export interface GroundingValidator { check(text: string, allowed: { amounts: number[]; minutes: number[] }): GroundingCheck }
+// Herramientas del agente (nombres estables): buscar_producto, ver_menu, agregar_al_carrito, quitar_del_carrito, ver_carrito,
+// fijar_entrega, cotizar_domicilio, fijar_pago, resumen_pedido, confirmar_pedido, estado_pedido, cancelar_pedido, repetir_pedido, pedir_humano
+
+// ===== Mensajería iniciada por el negocio (S1.4) ==================
+export type TemplateName = 'pedido_confirmado' | 'pago_pendiente' | 'pago_confirmado' | 'pedido_en_preparacion' | 'pedido_en_camino'
+  | 'pedido_entregado' | 'pedido_cancelado' | 'seguimiento_atencion' | 'comanda_nuevo_pedido' | 'alerta_operacion';
+export interface TemplateDefinition {
+  name: TemplateName; category: 'UTILITY'; language: string; audience: 'customer' | 'merchant';
+  body: string;                                   // con {{named_params}}
+  params: Array<{ name: string; example: string; maxLength: number }>;
+}
+export interface NotifyRequest {
+  merchantId: string; channelId?: string | null; to: string; conversationId?: string | null; orderId?: string | null;
+  template: TemplateName; params: Record<string, string>;   // sin '\n'; el messenger los sanea
+  dedupeKey: string; freeText?: string;                      // texto libre equivalente (para mode=auto o fallback RN-31)
+}
+export type NotifyResult =
+  | { status: 'queued'; channel: 'template' | 'text'; outboxId: string }
+  | { status: 'skipped'; reason: 'OPTED_OUT' | 'WINDOW_CLOSED_NO_TEMPLATE' | 'TEMPLATE_NOT_USABLE' | 'CAP_REACHED' | 'DUPLICATE' };
+export interface BusinessMessenger { notify(req: NotifyRequest): Promise<NotifyResult> }
+export interface CustomerServiceWindow { isOpen(merchantId: string, phone: string, now?: Date): Promise<boolean> }
 
 // ===== Turno del agente (S2.3) ====================================
 export interface DeliveryTurnContext {
@@ -179,7 +216,8 @@ export const IMAGE_INTERPRETER = Symbol('IMAGE_INTERPRETER');
 | `orchestrator/orchestrator.module.ts` | Importar o proveer `VerticalRouter` | Integrador |
 | `common/feature-flags/feature-flags.service.ts`, `common/config/env.validation.ts`, `.env.example` | Flag y variables nuevas | Integrador |
 | `services/cart.service.ts` | `addItem(..., opts?: AddItemOptions)` y notas en summary | Track B de S2.2 |
-| `services/checkout.service.ts`, `orchestrator/flows/checkout.flow.ts` | `extras` en createOrder (S2.2); provider + pasos `ASK_NEIGHBORHOOD`, `ASK_CASH_CHANGE`, pickup (S3.x) | S2.2 Track B → S3.1 Track A → S3.2 Track B (**secuencial por archivo**: S3.2 rebasea sobre S3.1) |
+| `services/checkout.service.ts` | Solo `extras` en createOrder (S2.2). **`checkout.flow.ts` no se modifica**: la vertical hace el checkout con herramientas propias | S2.2 Track B |
+| `workers/outbox-dispatcher/*`, `channels/whatsapp/whatsapp-outbound.service.ts`, controlador del webhook (campos de WABA) | `SEND_TEMPLATE` + webhooks de plantillas y calidad (S1.4) | S1.4 Track A (antes de S5.x) |
 | `services/merchant-command-parser.service.ts`, `merchant-command.service.ts` | Delegar a `DeliveryCommandsService` cuando el comando no es legacy y el flag está activo | S4.1 Track A (S4.3 añade sus comandos en `DeliveryCommandsService`, no en legacy) |
 | `merchant-settings/*` | Aceptar `deliveryConfig` | S1.2 Track B |
 | `llm/interfaces/llm-provider.interface.ts`, `llm/providers/groq-llm.provider.ts`, `llm/llm.service.ts` | Métodos nuevos, sin cambiar los existentes | S1.3 Track C |
@@ -190,9 +228,9 @@ export const IMAGE_INTERPRETER = Symbol('IMAGE_INTERPRETER');
 
 | Fase | Track A | Track B | Track C | Integrador |
 |---|---|---|---|---|
-| F1 | — | `delivery/config/**`, `merchant-settings/**` (deliveryConfig), `test/delivery-config.e2e-spec.ts` | `llm/**`, `test/utils/fake-llm.provider.ts` | S1.1 completo + archivos compartidos |
-| F2 | `delivery/catalog/**`, `delivery/agent/tools/catalog.tools.ts`, `delivery/agent/fallback-parser.ts`, `delivery/presenters/menu.presenter.ts` | `services/cart.service.ts`, `services/checkout.service.ts` (extras), `delivery/agent/tools/cart.tools.ts`, `delivery/presenters/cart.presenter.ts` | — | S2.3: `delivery/agent/delivery-agent.*`, `delivery/handler/**`, `test/delivery-order.e2e-spec.ts` |
-| F3 | `delivery/checkout/**`, provider en `checkout.service.ts` + paso `ASK_NEIGHBORHOOD` en `checkout.flow.ts` | `delivery/handler/guards/opening-hours.guard.ts`, pasos `ASK_CASH_CHANGE` y pickup en `checkout.flow.ts` (después de S3.1), límite → handoff | S3.4: `delivery/pos/**`, `delivery/sinks/pos-order.sink(.spec).ts`, `test/utils/fake-pos.adapter.ts` | S3.3: resto de `delivery/sinks/**`, `presenters/kitchen-ticket.presenter.ts`, registro de `ORDER_SINKS`/`POS_ADAPTERS` en `delivery.module.ts`, `test/delivery-checkout.e2e-spec.ts` |
+| F1 | S1.4: `delivery/messaging/**`, `scripts/register-whatsapp-templates.ts`, outbox dispatcher/outbound (SEND_TEMPLATE), campos de WABA en el controlador del webhook, `test/delivery-templates.e2e-spec.ts` | `delivery/config/**`, `merchant-settings/**` (deliveryConfig), `test/delivery-config.e2e-spec.ts` | `llm/**`, `test/utils/fake-llm.provider.ts` | S1.1 completo + archivos compartidos |
+| F2 | `delivery/catalog/**`, `delivery/agent/tools/catalog.tools.ts`, `delivery/agent/fallback-parser.ts`, `delivery/presenters/menu.presenter.ts` | `services/cart.service.ts`, `services/checkout.service.ts` (extras), `delivery/agent/tools/cart.tools.ts`, `delivery/presenters/cart.presenter.ts` | — | S2.3: `delivery/agent/delivery-agent.*`, `delivery/agent/grounding-validator.*`, `delivery/handler/**`, `test/delivery-order.e2e-spec.ts` |
+| F3 | `delivery/checkout/**`, `delivery/agent/tools/delivery.tools.ts` (fijar_entrega, cotizar_domicilio) | `delivery/handler/guards/opening-hours.guard.ts`, `delivery/agent/tools/payment.tools.ts` (fijar_pago), límite → handoff | S3.4: `delivery/pos/**`, `delivery/sinks/pos-order.sink(.spec).ts`, `test/utils/fake-pos.adapter.ts` | S3.3: `delivery/agent/tools/confirm.tools.ts` (resumen_pedido, confirmar_pedido), `presenters/order-summary.presenter.ts`, resto de `delivery/sinks/**`, `presenters/kitchen-ticket.presenter.ts`, registro de `ORDER_SINKS`/`POS_ADAPTERS` en `delivery.module.ts`, `test/delivery-checkout.e2e-spec.ts` |
 | F4 | `delivery/lifecycle/**`, delegación en merchant-command legacy, `test/delivery-lifecycle.e2e-spec.ts` | `delivery/agent/tools/order.tools.ts`, `test/delivery-customer.e2e-spec.ts` | `delivery/commands/**` (stock, tienda, reporte) | integración + resolución de conflictos |
 | F5 | S5.1: `channels/whatsapp/*` (debounce, después de S5.0) + `delivery/burst/**` | S5.2: `delivery/media/transcriber*`, casos de voz en `test/delivery-media.e2e-spec.ts` | S5.3: `delivery/media/image-interpreter*`, `delivery/media/receipt*`, `delivery/media/product-photo*`, casos de imagen en el e2e; luego S5.4 interactive | S5.0: `delivery/media/media-fetcher*`, `media-router*`, `test/utils/fake-media.ts`, propagación en `OrchestratorInput`/mapper; S5.5 |
 

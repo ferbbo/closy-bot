@@ -44,6 +44,7 @@ PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 npx prisma generate --no-engine --schem
 | S1.1 | Integrador | TODO | | | | |
 | S1.2 | B | TODO | | | | |
 | S1.3 | C | TODO | | | | |
+| S1.4 | A | TODO | | | | P0 mensajería + plantillas |
 | S2.1 | A | TODO | | | | |
 | S2.2 | B | TODO | | | | |
 | S2.3 | Integrador | TODO | | | | |
