@@ -21,7 +21,7 @@ Un lock con más de 110 minutos se considera abandonado: se toma y se anota en e
 | Node 22 + pnpm 10 | ✅ | `pnpm install --frozen-lockfile` |
 | Postgres 16 local | ✅ (docker **no** corre) | `pg_ctlcluster 16 main start`; rol/db: `su postgres -c "psql -c \"CREATE ROLE closy LOGIN SUPERUSER PASSWORD 'closy_dev_password';\" -c 'CREATE DATABASE closy_dev OWNER closy;'"` (ignorar "already exists"). `DATABASE_URL=postgresql://closy:closy_dev_password@localhost:5432/closy_dev` |
 | Prisma engines (`binaries.prisma.sh`) | ❌ bloqueado por el proxy (403) a menos que el owner lo agregue a la allowlist de red | Ver "Generar cliente" |
-| Groq / Meta | ❌ sin credenciales y **no se usan** (Tier 3) | `FakeLlmProvider` / fakes de media + **Meta Sandbox** (S1.5) |
+| Groq / Meta | ❌ sin credenciales y **no se usan** (Tier 3). Conectores MCP de Meta (Social Technologies y WhatsApp Business Tools) disponibles **solo** en la sesión de planeación del owner, no en las corridas | `FakeLlmProvider` / fakes de media + **Meta Sandbox** (S1.5) |
 
 **Generar cliente (para tsc + unit), funciona sin engines:**
 ```bash

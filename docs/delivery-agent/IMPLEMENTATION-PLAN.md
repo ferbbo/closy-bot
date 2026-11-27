@@ -55,7 +55,7 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.0–S5.3 + 
 ### S1.2 DeliveryConfigService · *Track B* · AC-02, AC-10 (parcial), AC-11 (parcial)
 | Tarea | Commit | Verificación |
 |---|---|---|
-| T1 | `delivery-config.validator.ts` (validación pura → `{ok, errors[{path,msg}]}`) + `restaurante.defaults.ts` + specs | unit |
+| T1 | `delivery-config.validator.ts` (validación pura → `{ok, errors[{path,msg}]}`) + `restaurante.defaults.ts` **solo con parámetros técnicos** (RN-00 corolario 2) + `isCommerciallyComplete(cfg, merchantConfig)` → `{complete, missing[]}` + specs | unit (AC-02, AC-41) |
 | T2 | `delivery-config.service.ts`: `get(merchantId)` (defaults + override), `isOpen(cfg, now)` → `{open, nextOpening?}` con zona horaria (Intl, sin dependencias nuevas), `resolveZone(cfg, text)` (normalización RN-08) + specs con tabla de casos (tildes, alias, palabras completas) | unit |
 | T3 | `quote(cfg, {neighborhood, subtotal, fulfillment})` → `ShippingQuote` (RN-09 a RN-11) + specs | unit |
 | T4 | Merchant settings: aceptar `deliveryConfig` en el PATCH existente (DTO + validator → 400 con path) | e2e `delivery-config.e2e-spec.ts` |
@@ -94,6 +94,7 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.0–S5.3 + 
 |---|---|---|
 | T1 | `CatalogMatcherService.search(merchantId, query, limit=5)`: reutiliza `CatalogService.searchProducts` (FTS existente) y aplana a variantes activas `{variantId, label, unitPrice, score}`; clasifica MATCHED / AMBIGUOUS / NOT_FOUND con umbral relativo | unit con fixtures |
 | T2 | Herramientas `buscar_producto` y `ver_menu` (schemas JSON + handlers) + `MenuPresenter` paginado | unit |
+| T4 | Herramienta `consultar_negocio({tema?})` → FAQ (reutiliza `PlaybookService`), políticas (`returnPolicy`, `shippingPolicy`, `privacyPolicyUrl`), horario y estado abierto o cerrado, zonas con tarifa y mínimo, y medios de pago con instrucciones literales. Todo leído de la BD en el turno; campos nulos devueltos como `null` explícito para que el agente diga "no tengo ese dato" | unit (AC-42) |
 | T3 | Fallback determinista `parseOrderText(text)` → `ParsedOrderLine[]` (números en dígito y palabra "dos/una/media docena", separadores "y" / ","; notas tras "sin/con/extra") + 20 frases colombianas de fixture | unit |
 
 ### S2.2 Carrito con notas y sin stock · *Track B* · AC-08, RN-04/05
@@ -107,9 +108,9 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.0–S5.3 + 
 | Tarea | Commit | Verificación |
 |---|---|---|
 | T1 | `delivery-agent.prompt.ts` (persona RN-27: natural, breve, colombiano, sin menús obligatorios; reglas RN-01/19; memoria = summary + últimos 8 mensajes existentes) + `DeliveryAgentService.handleTurn(ctx)` con `runToolLoop` + fallback S2.1-T3 | unit con FakeLlm |
-| T2 | `GroundingValidator` (RN-28: extracción de montos y minutos, verificación contra la traza de herramientas, carrito y config, 1 reintento, respaldo del presenter) + persistencia de `lastCandidates` (TTL 30 min) para la selección libre (RN-02) | unit (AC-33, AC-05) |
+| T2 | `GroundingValidator` (RN-28: montos, minutos, secuencias de ≥ 6 dígitos, URLs y nombres de producto contra la traza de herramientas del turno; 1 reintento y respaldo del presenter) + guard `isCommerciallyComplete` en el handler (AC-41) + persistencia de `lastCandidates` (TTL 30 min) para la selección libre (RN-02) | unit (AC-33, AC-05) |
 | T3 | `DeliveryVerticalHandler`: `canHandle` (flag + industria restaurante), guards de privacidad (RN-18), opt-out (RN-29), horario (RN-07) y handoff activo → agente | unit |
-| T4 | Registro del handler en `VerticalRouter` + e2e `delivery-order.e2e-spec.ts` (webhook → carrito con notas; AC-03/05/06/22/23/35) | e2e |
+| T4 | Registro del handler en `VerticalRouter` + e2e `delivery-order.e2e-spec.ts` (webhook → carrito con notas; AC-03/05/06/22/23/35/39/40) | e2e |
 
 ---
 
@@ -180,7 +181,7 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.0–S5.3 + 
 | S5.1 Debounce | A | **P0** | T1 buffer en `Conversation.metadata.pendingBurst` + ventana `DELIVERY_DEBOUNCE_MS` (4000): el webhook guarda y responde 200, y un procesamiento diferido por conversación (timeout de `@nestjs/schedule`, re-armable) concatena los textos y llama al orquestador una vez. **Un mensaje de media vacía el buffer y se procesa como turno propio** · T2 tests de ráfaga + reinicio seguro (un barrido cada minuto procesa los buffers vencidos) | AC-25 |
 | S5.2 Voz | B | **P0** | T1 `Transcriber` (interfaz + `GroqWhisperTranscriber` vía SDK o REST + `FakeTranscriber`) · T2 audio → texto → mismo turno del agente con el eco "🎙️ Entendí: «…»" + fallos RN-24 + e2e `delivery-media.e2e-spec.ts` (caso voz) | AC-26 |
 | S5.3 Imagen: producto + comprobante | C | **P0** | T1 `ImageInterpreter` (interfaz + `GroqVisionInterpreter` con prompt de solo descripción → JSON `ImageInterpretation` validado + `FakeImageInterpreter`) · T2 `kind:'product'` → `CatalogMatcherService` → candidatos guardados en `lastCandidates` (con cantidad) que el agente presenta conversando → el cliente elige libremente → carrito (RN-25) · T3 `kind:'payment_receipt'` o caption de pago con `pending_payment` → reenvío al encargado (`dedupeKey order:{id}:receipt:{wamid}`) + respuesta al cliente (RN-26) · T4 casos e2e (producto, comprobante, other) | AC-27, AC-31 |
-| S5.4 Botón interactivo | C (después de S5.3) | P1 | T1 `OutboxMessageType.SEND_INTERACTIVE` (aditivo) + sender · T2 confirmación con botones Sí/No + mapeo de `button_reply` al mismo flujo | AC-28 |
+| S5.4 Botón interactivo + foto de producto | C (después de S5.3) | P1 | T1 `OutboxMessageType.SEND_INTERACTIVE` (aditivo) + sender · T2 confirmación con botones Sí/No + mapeo de `button_reply` al mismo flujo · T3 `SEND_IMAGE` (aditivo) + herramienta `ver_foto_producto` que envía **solo** `Product.imageUrl` o `menuImageUrl` de la BD (si es null: "no tengo foto de ese producto") | AC-28 |
 | S5.5 Hardening + release | Integrador | **P0** | T1 `delivery-journey.e2e-spec.ts` (AC-29) · T2 corrida `FEATURES_MODE=mvp` + fixes · T3 sección en `BACKEND-EXECUTION-GUIDE.md` (config, comandos, cURL) + `docs/delivery-agent/DEMO.md` (simular webhook) · T4 PR final `feat/delivery-agent → dev` con checklist §7 | AC-01, AC-29 |
 
 ---

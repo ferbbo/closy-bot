@@ -158,7 +158,7 @@ Notificación idempotente: **sin cambios de schema**. Se reutiliza `OutboxMessag
 
 ### 3.5 LLM
 - Proveedor: Groq (existente). Se agrega `generateWithTools()` (tool calling, formato OpenAI) y `generateJson()` al `LlmProvider`. Modelo configurable con `DELIVERY_LLM_MODEL`, por defecto `llama-3.3-70b-versatile`.
-- System prompt: datos del comercio, horario, políticas, reglas duras y lista de herramientas. **Sin precios en el prompt**: los precios llegan solo en los resultados de las herramientas y el texto final con totales lo renderiza `CartPresenter`.
+- System prompt: **solo** persona (nombre del comercio y `assistantName`/`toneHints` leídos de la BD en cada turno), reglas duras y lista de herramientas. **Ningún dato comercial vive en el prompt ni en el código**: precios, productos, horario, zonas, políticas, FAQ, medios de pago e imágenes llegan únicamente como resultado de herramientas que consultan la BD en ese turno (RN-00).
 - **Multimodal (mismo proveedor Groq, modelos configurables):**
   - Voz: `DELIVERY_STT_MODEL` (por defecto `whisper-large-v3-turbo`), idioma `es`.
   - Visión: `DELIVERY_VISION_MODEL` (por defecto `meta-llama/llama-4-scout-17b-16e-instruct`), salida JSON `ImageInterpretation`.
@@ -268,9 +268,35 @@ Fallos: audio > 2 min o > 16 MB, o transcripción vacía → "No pude escuchar b
 
 ## 5. Reglas de negocio
 
+### RN-00 · La base de datos es la única fuente de verdad comercial (regla raíz)
+Toda información comercial que el agente afirma, muestra o usa para calcular sale de **PostgreSQL en el momento del turno**, a través de una herramienta o un presenter. El LLM, su conocimiento general, la memoria de la conversación, el código, los prompts, los defaults y las respuestas anteriores **nunca** son fuente de un dato comercial. Si el dato no está en la BD, el agente dice que no lo tiene y ofrece hablar con el local (`pedir_humano`); **no lo infiere, no lo aproxima, no lo inventa**.
+
+| Dato comercial | Fuente en BD (única) | Cómo llega al cliente |
+|---|---|---|
+| Productos, variantes, descripciones, categorías | `Product`, `ProductVariant`, `Category` | `buscar_producto`, `ver_menu` |
+| Precios | `ProductVariant.price` (y `CartItem.priceSnapshot` / `OrderItem.unitPrice` una vez en carrito u orden) | Resultados de herramientas + `CartPresenter` / `OrderSummaryPresenter` |
+| Disponibilidad y cantidades (agotado, stock si `trackStock`, límites por línea) | `ProductVariant.isActive` / `stock`, `MerchantConfig.deliveryConfig` | Herramientas de catálogo y carrito (validan en servidor) |
+| Imágenes de producto y de la carta | `Product.imageKey`/`imageUrl` (R2), `deliveryConfig.menuImageUrl` | Solo esas URLs; nunca imágenes generadas, buscadas en internet ni descritas como reales sin estar en la BD |
+| Horario, cierre temporal, tiempos de preparación | `MerchantConfig.deliveryConfig` (`openingHours`, `temporarilyClosed`, `prepTimeMinutes`) | `consultar_negocio`, guards, `cotizar_domicilio` |
+| Zonas, tarifas, mínimos, ETA de trayecto, pickup | `MerchantConfig.deliveryConfig.zones`, `freeDeliveryAbove`, `pickupEnabled` | `cotizar_domicilio`, `consultar_negocio` |
+| Medios de pago, cuentas, llaves, instrucciones | `MerchantConfig.paymentMethods` | `fijar_pago` / `consultar_negocio` → texto **literal** del presenter |
+| FAQ | `Merchant.playbookConfig.faqs` (vía `PlaybookService` existente) | `consultar_negocio` (respuesta literal o parafraseada sin agregar hechos) |
+| Políticas (devoluciones, domicilio, privacidad) | `MerchantConfig.returnPolicy`, `shippingConfig.shippingPolicy`, `deliveryConfig.privacyPolicyUrl` | `consultar_negocio` |
+| Nombre del comercio, del asistente y tono | `Merchant.name`, `deliveryConfig.assistantName` / `toneHints` | Prompt construido por turno desde la BD |
+| Estado, código y total de pedidos | `Order`, `OrderItem`, `Payment` | `estado_pedido`, plantillas con parámetros de la BD |
+
+Corolarios obligatorios:
+1. **Sin caché comercial entre turnos.** Cada turno re-consulta. `lastCandidates`, el resumen y la memoria (`Conversation.summary` / `memoryFacts`) sirven **solo** para entender referencias ("la segunda"), nunca para afirmar un precio o una disponibilidad. Al agregar al carrito, el precio se toma de la BD en ese momento.
+2. **Sin defaults comerciales en código.** `restaurante.defaults.ts` solo contiene parámetros técnicos (`maxQtyPerLine`, `maxLines`, `notifications`, `timezone`, `trackStock=false`). Zonas, tarifas, mínimos, horario, tiempo de preparación, medios de pago y políticas **no tienen default**: si faltan, el comercio está *comercialmente incompleto* y el agente no cotiza ni confirma pedidos (responde que el pedido lo toma el local y abre handoff), y queda un log de alerta para el encargado.
+3. **Cambios en vivo.** Si el comercio cambia un precio, marca agotado o cierra la tienda, el siguiente turno lo refleja. Si cambia entre el resumen y la confirmación, el hash no coincide y se emite un resumen nuevo (RN-12).
+4. **El POS tampoco es fuente directa.** Si en el futuro un `PosAdapter.pullCatalog` trae el menú, se **sincroniza a la BD** y el agente sigue leyendo solo la BD.
+5. **La visión y la voz no son fuente.** Lo que el modelo "ve" o "escucha" es una consulta; el producto, el precio y la disponibilidad salen del catálogo en la BD (RN-25).
+6. **Las plantillas** solo llevan parámetros leídos de la BD (código, total, ETA, nombre del comercio).
+
+
 | ID | Regla |
 |---|---|
-| RN-01 | Precios, disponibilidad, tarifas, mínimos, ETA y horarios salen **solo** de la base de datos o de `DeliveryConfig`, a través de herramientas. El LLM redacta en lenguaje natural y puede **citar** cifras que le devolvió una herramienta en el turno. Nunca calcula ni inventa cifras: los totales los calcula el servidor, y el resumen previo a confirmar es un bloque exacto renderizado por `OrderSummaryPresenter`. |
+| RN-01 | (Aplicación de RN-00 a cifras.) Precios, disponibilidad, tarifas, mínimos, ETA y horarios salen **solo** de la BD (incluido `MerchantConfig.deliveryConfig`), a través de herramientas. El LLM redacta en lenguaje natural y puede **citar** cifras que le devolvió una herramienta en el turno. Nunca calcula ni inventa cifras: los totales los calcula el servidor, y el resumen previo a confirmar es un bloque exacto renderizado por `OrderSummaryPresenter`. |
 | RN-02 | `agregar_al_carrito` recibe un `variantId` que salió de `buscar_producto` en el mismo turno **o** de `lastCandidates` persistidos (TTL 30 min). Cualquier otro id se rechaza. |
 | RN-03 | Cantidad por línea entre 1 y `maxQtyPerLine` (por defecto 20). Máximo `maxLines` líneas (por defecto 15). |
 | RN-04 | Si `trackStock=false` (por defecto en restaurantes), no se valida stock: manda `ProductVariant.isActive` (agotado = `false`). |
@@ -292,8 +318,8 @@ Fallos: audio > 2 min o > 16 MB, o transcripción vacía → "No pude escuchar b
 | RN-20 | PII: teléfono enmascarado en logs. La dirección se guarda solo en `Order`. Nunca se registra en logs el texto del cliente. |
 | RN-21 | Con el flag apagado o `FEATURES_MODE=mvp`, **ningún** comportamiento legacy cambia (mismos tests en verde). |
 | RN-23 | **POS:** el `PosOrderSink` se ejecuta **después** del sink de cocina por WhatsApp y nunca lo bloquea. Si el POS falla, el pedido sigue válido: `posSyncStatus=failed`, el encargado recibe un aviso y el error queda en el log. Con `pos.provider='none'` → `posSyncStatus='skipped'` sin llamadas. Los estados que reporte el POS solo pueden avanzar por la tabla RN-14 (vía `DeliveryOrderLifecycle`). Las credenciales del POS van por referencia a una variable de entorno (`secretRef`), nunca en la base de datos ni en los logs. |
-| RN-27 | **Persona y tono:** español colombiano, cálido y breve (1–3 frases por respuesta salvo el resumen). Se adapta al registro del cliente, máximo 1 emoji, sin repetir saludos, sin pedir datos que ya dio y preguntando solo lo que falta. Responde preguntas del negocio (horario, zonas, medios de pago, descripción de productos) con herramientas o config. Charla trivial: una frase amable y de vuelta al pedido. Nombre del asistente y estilo configurables por comercio (`assistantName`, `toneHints`). |
-| RN-28 | **Validador de cifras (grounding):** antes de enviar, `GroundingValidator` extrae del texto del LLM los montos (`$`, "mil", "k", números ≥ 1.000) y los minutos de ETA, y verifica que cada uno exista en los resultados de herramientas del turno, en el carrito o en la config. Si falla: un reintento con la lista de cifras inválidas; si vuelve a fallar, se envía la respuesta de respaldo del presenter. Se registra `groundingFailures` sin PII. |
+| RN-27 | **Persona y tono:** español colombiano, cálido y breve (1–3 frases por respuesta salvo el resumen). Se adapta al registro del cliente, máximo 1 emoji, sin repetir saludos, sin pedir datos que ya dio y preguntando solo lo que falta. Responde preguntas del negocio (horario, zonas, medios de pago, políticas, FAQ, descripción de productos) **solo** con `consultar_negocio` o las herramientas de catálogo, nunca con conocimiento propio (RN-00). Charla trivial: una frase amable y de vuelta al pedido. Nombre del asistente y estilo configurables por comercio (`assistantName`, `toneHints`). |
+| RN-28 | **Validador de datos (grounding):** antes de enviar, `GroundingValidator` extrae del texto del LLM los montos (`$`, "mil", "k", números ≥ 1.000), los minutos de ETA, las **secuencias de 6 o más dígitos** (cuentas, llaves, teléfonos), las **URLs** y los **nombres de producto** citados, y verifica que cada uno exista en los resultados de herramientas del turno (que vienen de la BD). Si falla: un reintento con la lista de cifras inválidas; si vuelve a fallar, se envía la respuesta de respaldo del presenter. Se registra `groundingFailures` sin PII. |
 | RN-29 | **Opt-out:** "no me escriban", "no quiero más mensajes", "stop", "baja" o "cancelar suscripción" → `Conversation.optedOutAt` y una confirmación única. Desde ahí, `BusinessMessenger` no envía nada iniciado por el negocio a ese cliente para ese comercio. Las respuestas a mensajes nuevos del cliente sí se permiten, y si el cliente vuelve a pedir se reactiva (`optedOutAt = null`). |
 | RN-30 | **Límites antibloqueo:** máximo 6 mensajes iniciados por el negocio por pedido y ninguno sin un pedido o un handoff asociado (no hay difusión). Nunca se envía una plantilla de marketing (v1). |
 | RN-31 | **Higiene de plantillas:** el catálogo es la fuente de verdad. Un lint en tests bloquea palabras promocionales (descuento, promo, oferta, gratis, cupón, vuelve, aprovecha) y cuerpos solo de variables. Webhooks: `message_template_status_update` y `template_category_update` actualizan `WhatsappTemplateState`. Una plantilla con `category != UTILITY` o `status != APPROVED` no se usa (fallback: texto libre si la ventana está abierta, si no `skipped`) y se envía una `alerta_operacion`. `phone_number_quality_update` con calidad baja o flagged → alerta al encargado + log. |
@@ -337,7 +363,7 @@ Se edita con la API de merchant settings existente (`PATCH`, campo `deliveryConf
 | AC | Feature | Criterio |
 |---|---|---|
 | AC-01 | F-01 | **Dado** `DELIVERY_ENABLED=false` o `FEATURES_MODE=mvp`, **cuando** corre toda la suite unit + e2e existente, **entonces** todo pasa sin cambios (excepto los 5 fallos de la línea base documentada). |
-| AC-02 | F-01 | **Dado** un comercio `restaurante` sin `deliveryConfig`, **cuando** se lee la configuración, **entonces** se devuelven `restaurante.defaults`. Un `PATCH` inválido responde 400 con el campo exacto. |
+| AC-02 | F-01 | **Dado** un comercio `restaurante` sin `deliveryConfig`, **cuando** se lee la configuración, **entonces** solo se completan los parámetros técnicos y `isCommerciallyComplete=false` con la lista de campos faltantes (zonas, horario, preparación, medios de pago). Un `PATCH` inválido responde 400 con el campo exacto. |
 | AC-03 | F-02 | **Dado** el catálogo demo, **cuando** el cliente escribe "2 hamburguesas sencillas sin cebolla y una coca 400", **entonces** el carrito tiene 2× Hamburguesa sencilla (notas "sin cebolla") y 1× Coca-Cola 400, y la respuesta muestra un subtotal igual a la suma de la base de datos. |
 | AC-04 | F-02 | **Dado** un LLM que propone `agregar_al_carrito` con un variantId no devuelto por una búsqueda, **entonces** se rechaza y el carrito no cambia. |
 | AC-05 | F-02/F-21 | **Dado** "quiero una hamburguesa" con 3 tipos disponibles, **entonces** el bot menciona las 3 con su precio en lenguaje natural. Las respuestas "la doble", "la segunda" y "la de 19 mil" agregan la misma variante (3 casos con FakeLlm que resuelve contra `lastCandidates`). Un id fuera de los candidatos se rechaza. |
@@ -373,6 +399,10 @@ Se edita con la API de merchant settings existente (`PATCH`, campo `deliveryConf
 | AC-36 | F-22 | Un webhook `template_category_update` → MARKETING para `pedido_en_camino` actualiza `WhatsappTemplateState`. El siguiente `on_the_way` no usa esa plantilla (texto libre si la ventana está abierta, si no `skipped`) y se emite `alerta_operacion`. |
 | AC-37 | F-22 | Comanda con la ventana del encargado cerrada → plantilla `comanda_nuevo_pedido` con los ítems en una sola línea. Con la ventana abierta y `mode=auto` → texto libre con el formato completo de `KitchenTicketPresenter`. |
 | AC-38 | F-23 | Con `WHATSAPP_API_URL` apuntando al sandbox: (a) un mensaje del bot llega al registro del sandbox con el payload válido de Cloud API (text, template o interactive); (b) una plantilla no registrada o con un parámetro con `\n` devuelve un error con el formato de Meta, y el outbox lo marca FAILED con reintento según la política existente; (c) `GET /{media-id}` + descarga devuelve el audio y la imagen de fixture; (d) un webhook firmado con el `appSecret` de prueba pasa `MetaSignatureGuard` y uno con firma inválida da 401; (e) `register-whatsapp-templates --apply` contra el sandbox registra las 10 plantillas. |
+| AC-39 | RN-00 | Preguntas sin dato en la BD ("¿hacen domicilio a Girón?" sin esa zona, "¿tienen opción vegana?" sin ese producto, "¿cuál es la política de devoluciones?" con `returnPolicy=null`) → el agente responde que no tiene ese dato o que no lo maneja y ofrece hablar con el local. FakeLlm que intenta inventar → `GroundingValidator` lo bloquea. Ninguna respuesta contiene datos ausentes de la BD. |
+| AC-40 | RN-00 | Se cambia en la BD el precio de un producto y se marca otro como agotado en mitad de la conversación → el siguiente turno muestra el precio nuevo y ya no ofrece el agotado, y una confirmación con un resumen previo al cambio se rechaza y se re-resume. |
+| AC-41 | RN-00 | Un comercio sin zonas, horario o medios de pago (`isCommerciallyComplete=false`) no cotiza ni confirma: responde con handoff y registra la alerta. No aparece ningún valor de un default de código. |
+| AC-42 | RN-00 | `consultar_negocio` devuelve FAQ, políticas, horario, zonas y medios de pago leídos de la BD, y el texto del agente sobre medios de pago incluye la cuenta o llave **literal** de `paymentMethods` (validada por RN-28). |
 | AC-29 | E2E | Viaje completo, del webhook al pedido entregado, en un e2e con el LLM falso: `delivery-journey.e2e-spec.ts`. |
 
 ---

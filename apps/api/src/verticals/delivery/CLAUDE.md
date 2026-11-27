@@ -7,6 +7,7 @@ El agente de pedidos a domicilio por WhatsApp para restaurantes de comidas rápi
 Spec: `docs/delivery-agent/SPEC.md` · Contratos: `docs/delivery-agent/CONTRACTS.md` (`contracts.ts` aquí es su copia literal y está **congelado**).
 
 ## Reglas de este módulo
+0. **RN-00 · la BD es la única fuente de verdad comercial.** Precios, productos, cantidades o agotados, FAQ, políticas, horario, zonas, medios de pago e imágenes se leen de PostgreSQL en el turno, vía herramienta. Nada comercial va en prompts, defaults, código, memoria o caché. Si falta en la BD → "no tengo ese dato" + `pedir_humano`.
 1. **Feature flag:** todo se activa solo si `FeatureFlagsService.isDeliveryEnabled` y `merchant.industry === 'restaurante'`. Con el flag apagado, `DeliveryVerticalHandler.canHandle` devuelve `false` **sin tocar la base de datos**.
 2. **El LLM no escribe cifras.** Los precios y totales salen de `presenters/*`. `agregar_al_carrito` solo acepta variantIds vistos en `buscar_producto` en el mismo turno (`ctx.seenVariantIds`).
 3. **Reutiliza, no copies:** `CatalogService.searchProducts` (FTS), `CartService`, `CheckoutService` y `CheckoutFlow`, `ExpectingService` (estado multi-paso en `Conversation.metadata.expecting`), `OutboxService.enqueueWhatsAppText` (usa `dedupeKey`), `MerchantNotificationService`, `HandoffService`, `LlmService`/`GroqLlmProvider`.

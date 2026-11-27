@@ -89,8 +89,22 @@ export interface ConversationalCandidates { items: VariantCandidate[]; createdAt
 export interface OrderSummaryView { block: string; total: number; hash: string; confirmationToken: string }
 export type GroundingCheck = { ok: true } | { ok: false; invalidFigures: string[] };
 export interface GroundingValidator { check(text: string, allowed: { amounts: number[]; minutes: number[] }): GroundingCheck }
-// Herramientas del agente (nombres estables): buscar_producto, ver_menu, agregar_al_carrito, quitar_del_carrito, ver_carrito,
-// fijar_entrega, cotizar_domicilio, fijar_pago, resumen_pedido, confirmar_pedido, estado_pedido, cancelar_pedido, repetir_pedido, pedir_humano
+// Herramientas del agente (nombres estables): buscar_producto, ver_menu, consultar_negocio, agregar_al_carrito, quitar_del_carrito, ver_carrito,
+// fijar_entrega, cotizar_domicilio, fijar_pago, resumen_pedido, confirmar_pedido, estado_pedido, cancelar_pedido, repetir_pedido, pedir_humano,
+// (P1) ver_foto_producto. TODAS leen de la BD en el turno (RN-00); ninguna devuelve datos de defaults de código, memoria o caché.
+
+// ===== Información del negocio (S2.1-T4) — RN-00 =================
+export type BusinessTopic = 'faq' | 'politicas' | 'horario' | 'zonas' | 'pagos' | 'todo';
+export interface BusinessInfo {                    // lo que no esté en la BD va como null explícito
+  merchantName: string;
+  faqs: Array<{ question: string; answer: string }> | null;
+  policies: { returns: string | null; delivery: string | null; privacyUrl: string | null };
+  hours: { openNow: boolean; nextOpening: { day: number; time: string } | null; windows: OpeningWindow[] } | null;
+  zones: Array<{ name: string; fee: number; minOrder: number; etaMinutes: number }> | null;
+  payments: Array<{ type: string; label: string; instructions: string | null }> | null; // literal de MerchantConfig.paymentMethods
+  pickupEnabled: boolean | null;
+}
+export interface CommercialCompleteness { complete: boolean; missing: Array<'zones' | 'openingHours' | 'prepTimeMinutes' | 'paymentMethods'> }
 
 // ===== Mensajería iniciada por el negocio (S1.4) ==================
 export type TemplateName = 'pedido_confirmado' | 'pago_pendiente' | 'pago_confirmado' | 'pedido_en_preparacion' | 'pedido_en_camino'
@@ -247,7 +261,7 @@ export interface FakeGraphApi {
 | Fase | Track A | Track B | Track C | Integrador |
 |---|---|---|---|---|
 | F1 | S1.5 (Integrador): `apps/api/test/meta-sandbox/**`, `test/jest-e2e.setup.ts` (solo agregar), `scripts/simulate-whatsapp.ts`, script `meta:sandbox`, `docs/delivery-agent/DEMO.md`. S1.4: `delivery/messaging/**`, `scripts/register-whatsapp-templates.ts`, outbox dispatcher/outbound (SEND_TEMPLATE), campos de WABA en el controlador del webhook, `test/delivery-templates.e2e-spec.ts` | `delivery/config/**`, `merchant-settings/**` (deliveryConfig), `test/delivery-config.e2e-spec.ts` | `llm/**`, `test/utils/fake-llm.provider.ts` | S1.1 completo + archivos compartidos |
-| F2 | `delivery/catalog/**`, `delivery/agent/tools/catalog.tools.ts`, `delivery/agent/fallback-parser.ts`, `delivery/presenters/menu.presenter.ts` | `services/cart.service.ts`, `services/checkout.service.ts` (extras), `delivery/agent/tools/cart.tools.ts`, `delivery/presenters/cart.presenter.ts` | — | S2.3: `delivery/agent/delivery-agent.*`, `delivery/agent/grounding-validator.*`, `delivery/handler/**`, `test/delivery-order.e2e-spec.ts` |
+| F2 | `delivery/catalog/**`, `delivery/agent/tools/catalog.tools.ts`, `delivery/agent/tools/business-info.tool.ts`, `delivery/agent/fallback-parser.ts`, `delivery/presenters/menu.presenter.ts` | `services/cart.service.ts`, `services/checkout.service.ts` (extras), `delivery/agent/tools/cart.tools.ts`, `delivery/presenters/cart.presenter.ts` | — | S2.3: `delivery/agent/delivery-agent.*`, `delivery/agent/grounding-validator.*`, `delivery/handler/**`, `test/delivery-order.e2e-spec.ts` |
 | F3 | `delivery/checkout/**`, `delivery/agent/tools/delivery.tools.ts` (fijar_entrega, cotizar_domicilio) | `delivery/handler/guards/opening-hours.guard.ts`, `delivery/agent/tools/payment.tools.ts` (fijar_pago), límite → handoff | S3.4: `delivery/pos/**`, `delivery/sinks/pos-order.sink(.spec).ts`, `test/utils/fake-pos.adapter.ts` | S3.3: `delivery/agent/tools/confirm.tools.ts` (resumen_pedido, confirmar_pedido), `presenters/order-summary.presenter.ts`, resto de `delivery/sinks/**`, `presenters/kitchen-ticket.presenter.ts`, registro de `ORDER_SINKS`/`POS_ADAPTERS` en `delivery.module.ts`, `test/delivery-checkout.e2e-spec.ts` |
 | F4 | `delivery/lifecycle/**`, delegación en merchant-command legacy, `test/delivery-lifecycle.e2e-spec.ts` | `delivery/agent/tools/order.tools.ts`, `test/delivery-customer.e2e-spec.ts` | `delivery/commands/**` (stock, tienda, reporte) | integración + resolución de conflictos |
 | F5 | S5.1: `channels/whatsapp/*` (debounce, después de S5.0) + `delivery/burst/**` | S5.2: `delivery/media/transcriber*`, casos de voz en `test/delivery-media.e2e-spec.ts` | S5.3: `delivery/media/image-interpreter*`, `delivery/media/receipt*`, `delivery/media/product-photo*`, casos de imagen en el e2e; luego S5.4 interactive | S5.0: `delivery/media/media-fetcher*`, `media-router*`, `test/utils/fake-media.ts`, propagación en `OrchestratorInput`/mapper; S5.5 |
