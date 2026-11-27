@@ -20,6 +20,7 @@
 
 | Nivel | Cuándo | Comandos | Debe ser |
 |---|---|---|---|
+| **Entorno de pruebas** | Siempre | Meta Sandbox (S1.5) para todo lo de WhatsApp; `FakeLlmProvider`, `FakeTranscriber` y `FakeImageInterpreter` para la IA | Nunca APIs reales |
 | **G-commit** | Cada commit | `npx tsc --noEmit -p apps/api/tsconfig.json` · `pnpm lint` (sin `--fix` sobre archivos ajenos) · `npx jest <archivos del slice> ` · `pnpm test:e2e -- delivery` (si existe el e2e del slice y la base de datos está disponible) | 0 errores, verde |
 | **G-slice** | Antes de mergear el PR del slice | `pnpm test` completo · `pnpm test:e2e` completo · `FEATURES_MODE=mvp pnpm test:e2e` | Verde salvo la línea base de fallos conocidos (STATUS §Baseline) |
 | **G-release** | PR final `feat/delivery-agent → dev` | G-slice + AC-29 viaje e2e + checklist del SPEC §7 | Verde, revisión humana |
@@ -30,7 +31,7 @@ Si la base de datos para e2e no está disponible (ver STATUS §Entorno), G-slice
 
 | Fase | Objetivo | Slices (Tracks) | Paralelismo |
 |---|---|---|---|
-| F1 Fundaciones | Schema, flag, módulo, configuración, LLM con herramientas y mensajería con plantillas | S1.1 → (S1.2 ∥ S1.3 ∥ S1.4) | S1.1 secuencial y del Integrador; luego 3 tracks |
+| F1 Fundaciones | Schema, flag, módulo, configuración, LLM con herramientas, mensajería con plantillas y Meta Sandbox | S1.1 → (S1.2 ∥ S1.3 ∥ S1.4) + S1.5 (Integrador) | S1.1 secuencial; luego 3 tracks mientras el Integrador hace S1.5 |
 | F2 Toma de pedido IA | El agente arma el carrito desde lenguaje natural | (S2.1 ∥ S2.2) → S2.3 | 2 tracks + integración |
 | F3 Checkout domicilio | Zona, tarifa, horario, pago, confirmación, comanda y puerto POS | (S3.1 ∥ S3.2 ∥ S3.4) → S3.3 | 3 tracks + integración |
 | F4 Operación | Ciclo de cocina, autoservicio del cliente y comandos | S4.1 ∥ S4.2 ∥ S4.3 | 3 tracks |
@@ -66,13 +67,23 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.0–S5.3 + 
 | T2 | `FakeLlmProvider` (test util compartido en `apps/api/test/utils/fake-llm.provider.ts`, que también se exporta para unit) con guiones `[{toolCalls}|{text}]` | unit |
 | T3 | `LlmService.runToolLoop()` genérico: máximo N iteraciones, ejecuta handlers registrados, corta ante error y devuelve `{finalText, toolTrace, fallbackReason?}` | unit |
 
+### S1.5 Meta Sandbox (app de prueba + Graph API falso) · *Integrador, en paralelo con los tracks de F1* · AC-38 · P0
+> Lo consumen los e2e de S1.4, S2.3, S3.3, S4.x y S5.x. **Ningún test usa graph.facebook.com.**
+
+| Tarea | Commit | Verificación |
+|---|---|---|
+| T1 | `apps/api/test/meta-sandbox/sandbox-app.ts`: identidad de la app de prueba (`appId`, `appSecret`, `wabaId`, `phoneNumberId`, `accessToken`, `verifyToken`, número del encargado y de 3 clientes) + `env.ts` que fija `WHATSAPP_API_URL`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN` y `META_*` para los e2e (se integra en `jest-e2e.setup.ts` sin romper los valores existentes) | e2e existentes en verde |
+| T2 | `fake-graph-api.ts` (express de `@nestjs/platform-express`, puerto efímero, arranque y parada por suite): `POST /:v/:pnid/messages` (valida text/template/interactive, rechaza una plantilla no registrada o un parámetro con `\n` con el JSON de error de Meta, responde `wamid.SANDBOX…` y registra el mensaje), `GET /:v/:mediaId` + `GET /__media/:id` (fixtures de audio `.ogg` e imagen `.jpg` pequeños), `POST`/`GET /:v/:waba/message_templates` (valida categoría, nombre, ejemplos y parámetros; estado APPROVED), `POST /__sandbox/fail-next` (simula 429/500/131047) y `GET /__sandbox/sent` (inspección) | unit del fake |
+| T3 | `webhook-builders.ts`: `inboundText`, `inboundAudio`, `inboundImage(caption?)`, `buttonReply`, `templateStatusUpdate`, `templateCategoryUpdate`, `phoneQualityUpdate` + `signPayload(body, appSecret)` → `X-Hub-Signature-256`; e2e `meta-sandbox.e2e-spec.ts` (AC-38 a–d) | e2e |
+| T4 | Modo standalone para la demo local: `pnpm meta:sandbox` (puerto 4010) + `scripts/simulate-whatsapp.ts "<texto>" --from <tel> [--audio\|--image]` que firma y envía el webhook a la API local; documentado en `docs/delivery-agent/DEMO.md` | manual + e2e (AC-38 e) |
+
 ### S1.4 Mensajería de negocio + plantillas WhatsApp · *Track A* · AC-34, AC-35 (parcial), AC-36, AC-37 (base) · P0
 | Tarea | Commit | Verificación |
 |---|---|---|
 | T1 | Soporte de `SEND_TEMPLATE` en el dispatcher del outbox y en `WhatsAppOutboundService` (payload `type: template`, `language.code`, `components[body].parameters` con `parameter_name`) sin tocar `SEND_TEXT` | specs del outbox y del outbound en verde + nuevos |
 | T2 | `whatsapp-templates.catalog.ts` (las 10 plantillas de SPEC §4.6a con ejemplos) + lint en tests (RN-31: UTILITY, sin palabras promocionales, sin cuerpos solo de variables, parámetros sin `\n`) + `scripts/register-whatsapp-templates.ts` (`--dry-run` por defecto; `--apply` exige `WABA_ID` + token del canal; nunca corre en CI) | unit |
 | T3 | `CustomerServiceWindowService.isOpen(merchantId, phone)` (último mensaje **entrante** < 24 h − 5 min, desde `InboundMessage`/`MessageLog`) + `BusinessMessenger.notify({merchantId, to, template, params, dedupeKey, conversationId?, freeTextFallback?})` → decide plantilla o texto según `notifications.mode`, ventana, opt-out (RN-29), tope por pedido (RN-30) y `WhatsappTemplateState` (RN-31). Devuelve `{status:'queued'\|'skipped', channel, reason?}` | unit (matriz de decisiones) |
-| T4 | Webhooks de WABA: `message_template_status_update`, `template_category_update` y `phone_number_quality_update` → upsert en `WhatsappTemplateState` / alerta (`alerta_operacion`) en el controlador de webhook existente, sin romper el campo `messages` | unit + e2e `delivery-templates.e2e-spec.ts` |
+| T4 | Webhooks de WABA: `message_template_status_update`, `template_category_update` y `phone_number_quality_update` → upsert en `WhatsappTemplateState` / alerta (`alerta_operacion`) en el controlador de webhook existente, sin romper el campo `messages` | unit + e2e `delivery-templates.e2e-spec.ts` con el Meta Sandbox (si S1.5 no está mergeado aún, el e2e se agrega en el mismo PR después de rebasear sobre S1.5) |
 
 ---
 
@@ -178,6 +189,7 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.0–S5.3 + 
 ```
 S1.1 ──┬─► S1.2 ──┐
        ├─► S1.4 ──┤ (BusinessMessenger: lo consumen S3.3, S4.1, S5.3)
+       ├─► S1.5 ──┤ (Meta Sandbox: lo consumen todos los e2e de la vertical)
        └─► S1.3 ──┼─► S2.1 ──┐
                   └─► S2.2 ──┴─► S2.3 ──┬─► S3.1 ──┐
                                         ├─► S3.2 ──┤
@@ -189,7 +201,7 @@ S1.1 ──┬─► S1.2 ──┐
 ## 4. Calendario objetivo (18 corridas, cada 2 h, desde vie 27-nov 18:00 hasta dom 29-nov 04:00, America/Bogota)
 | Corridas | Objetivo |
 |---|---|
-| 1–2 | F1 completa (S1.1 y luego S1.2 ∥ S1.3 ∥ S1.4) |
+| 1–2 | F1 completa (S1.1 y luego S1.2 ∥ S1.3 ∥ S1.4, con S1.5 del Integrador en paralelo) |
 | 3–6 | F2 |
 | 7–10 | F3 (S3.4 corre en paralelo con S3.1 y S3.2) |
 | 11–14 | F4 |

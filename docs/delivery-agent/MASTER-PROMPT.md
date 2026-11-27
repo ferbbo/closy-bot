@@ -55,7 +55,7 @@ Ante dos lecturas razonables de la spec, elige la que **menos cambia el comporta
 ## 6. Reglas técnicas duras
 - Todo el código de la vertical queda detrás de `FeatureFlagsService.isDeliveryEnabled` y de `merchant.industry === 'restaurante'`. Con `FEATURES_MODE=mvp` los tests legacy pasan igual (RN-21).
 - El LLM nunca produce cifras. Los precios, tarifas, totales y ETA visibles salen de presenters y de datos de la base (RN-01, RN-02).
-- Los tests nunca llaman a proveedores reales: usa `FakeLlmProvider` y mocks.
+- Los tests nunca llaman a proveedores reales: usa `FakeLlmProvider`, los fakes de media y el **Meta Sandbox** (`apps/api/test/meta-sandbox/`, slice S1.5). La configuración real de Meta es post-desarrollo (STATUS §Post-desarrollo): no la intentes.
 - Commits de un máximo de 400 líneas (`git diff --shortstat HEAD~1`), en formato `feat(delivery): … [S#-T#]`, y terminan con:
   ```
   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -67,7 +67,7 @@ Ante dos lecturas razonables de la spec, elige la que **menos cambia el comporta
 ## 7. Reporte final de la corrida (tu último mensaje)
 ```
 Closy bot · run-<id> · <inicio>–<fin> (America/Bogota)
-Estado global: F<x> · <n>/20 slices MERGED · rama feat/delivery-agent @ <sha>
+Estado global: F<x> · <n>/21 slices MERGED · rama feat/delivery-agent @ <sha>
 Esta corrida:
   ✅ MERGED: S#.# (#PR) — AC: …
   🔄 IN_REVIEW / BLOCKED: S#.# — motivo

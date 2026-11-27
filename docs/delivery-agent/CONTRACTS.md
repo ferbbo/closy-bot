@@ -201,6 +201,24 @@ export interface ImageInterpreter { interpret(media: FetchedMedia, opts: { capti
 export const IMAGE_INTERPRETER = Symbol('IMAGE_INTERPRETER');
 // Fakes: test/utils/fake-media.ts → FakeMediaFetcher, FakeTranscriber(text|failure), FakeImageInterpreter(interpretation|failure)
 
+// ===== Meta Sandbox (S1.5) — solo tests y demo local =============
+// apps/api/test/meta-sandbox/
+export const SANDBOX_APP = {
+  appId: 'sandbox-app-id', appSecret: 'sandbox-app-secret', wabaId: 'sandbox-waba-id',
+  phoneNumberId: 'sandbox-phone-number-id', accessToken: 'sandbox-access-token', verifyToken: 'sandbox-verify-token',
+  apiVersion: 'v21.0', merchantPhone: '+573000000001', customers: ['+573000000101', '+573000000102', '+573000000103'],
+} as const;
+export interface FakeGraphApi {
+  start(): Promise<{ baseUrl: string }>; stop(): Promise<void>; reset(): void;
+  sent(): Array<{ to: string; type: 'text' | 'template' | 'interactive'; payload: unknown; at: Date }>;
+  registeredTemplates(): Array<{ name: string; language: string; category: string; status: string }>;
+  failNext(endpoint: 'messages' | 'media' | 'templates', error: { httpStatus: number; code: number; message: string }): void;
+  putMedia(mediaId: string, file: { buffer: Buffer; mimeType: string }): void;
+}
+// webhook-builders.ts: inboundText(from, text) · inboundAudio(from, mediaId) · inboundImage(from, mediaId, caption?) · buttonReply(from, id, title)
+//                      templateStatusUpdate(name, status) · templateCategoryUpdate(name, prev, next) · phoneQualityUpdate(level)
+//                      signPayload(rawBody: string, appSecret: string): string  // 'sha256=…'
+
 // ===== Utilidades de prueba (S1.3) ================================
 // apps/api/test/utils/fake-llm.provider.ts
 // new FakeLlmProvider([{ toolCalls: [{ name: 'buscar_producto', arguments: { query: 'hamburguesa sencilla' } }] }, { text: 'Listo' }])
@@ -228,7 +246,7 @@ export const IMAGE_INTERPRETER = Symbol('IMAGE_INTERPRETER');
 
 | Fase | Track A | Track B | Track C | Integrador |
 |---|---|---|---|---|
-| F1 | S1.4: `delivery/messaging/**`, `scripts/register-whatsapp-templates.ts`, outbox dispatcher/outbound (SEND_TEMPLATE), campos de WABA en el controlador del webhook, `test/delivery-templates.e2e-spec.ts` | `delivery/config/**`, `merchant-settings/**` (deliveryConfig), `test/delivery-config.e2e-spec.ts` | `llm/**`, `test/utils/fake-llm.provider.ts` | S1.1 completo + archivos compartidos |
+| F1 | S1.5 (Integrador): `apps/api/test/meta-sandbox/**`, `test/jest-e2e.setup.ts` (solo agregar), `scripts/simulate-whatsapp.ts`, script `meta:sandbox`, `docs/delivery-agent/DEMO.md`. S1.4: `delivery/messaging/**`, `scripts/register-whatsapp-templates.ts`, outbox dispatcher/outbound (SEND_TEMPLATE), campos de WABA en el controlador del webhook, `test/delivery-templates.e2e-spec.ts` | `delivery/config/**`, `merchant-settings/**` (deliveryConfig), `test/delivery-config.e2e-spec.ts` | `llm/**`, `test/utils/fake-llm.provider.ts` | S1.1 completo + archivos compartidos |
 | F2 | `delivery/catalog/**`, `delivery/agent/tools/catalog.tools.ts`, `delivery/agent/fallback-parser.ts`, `delivery/presenters/menu.presenter.ts` | `services/cart.service.ts`, `services/checkout.service.ts` (extras), `delivery/agent/tools/cart.tools.ts`, `delivery/presenters/cart.presenter.ts` | — | S2.3: `delivery/agent/delivery-agent.*`, `delivery/agent/grounding-validator.*`, `delivery/handler/**`, `test/delivery-order.e2e-spec.ts` |
 | F3 | `delivery/checkout/**`, `delivery/agent/tools/delivery.tools.ts` (fijar_entrega, cotizar_domicilio) | `delivery/handler/guards/opening-hours.guard.ts`, `delivery/agent/tools/payment.tools.ts` (fijar_pago), límite → handoff | S3.4: `delivery/pos/**`, `delivery/sinks/pos-order.sink(.spec).ts`, `test/utils/fake-pos.adapter.ts` | S3.3: `delivery/agent/tools/confirm.tools.ts` (resumen_pedido, confirmar_pedido), `presenters/order-summary.presenter.ts`, resto de `delivery/sinks/**`, `presenters/kitchen-ticket.presenter.ts`, registro de `ORDER_SINKS`/`POS_ADAPTERS` en `delivery.module.ts`, `test/delivery-checkout.e2e-spec.ts` |
 | F4 | `delivery/lifecycle/**`, delegación en merchant-command legacy, `test/delivery-lifecycle.e2e-spec.ts` | `delivery/agent/tools/order.tools.ts`, `test/delivery-customer.e2e-spec.ts` | `delivery/commands/**` (stock, tienda, reporte) | integración + resolución de conflictos |

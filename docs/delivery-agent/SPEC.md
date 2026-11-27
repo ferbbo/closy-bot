@@ -70,11 +70,14 @@ Un **pedido facturable** cumple tres condiciones: (a) tiene `Order` creado por e
 | F-17 | Foto de comprobante → reenvío al encargado para confirmar con `PAGADO ORD-x` | P0 |
 | F-21 | **Conversación natural**: respuestas redactadas por el LLM (sin menús numerados obligatorios), selección libre de opciones, checkout conversacional con herramientas (dirección, barrio, pago, cambio, confirmación) y respuestas a preguntas del negocio (horario, zonas, medios de pago, ingredientes) desde la configuración y el catálogo | P0 |
 | F-22 | **Plantillas WhatsApp + política anti-bloqueo**: catálogo de plantillas utility (cliente y encargado), registro por Graph API, envío `type: template`, chequeo de ventana de 24 h, opt-out, límites de frecuencia y webhooks de calidad y recategorización | P0 |
+| F-23 | **Meta Sandbox para pruebas**: app de prueba simulada (ids, secretos y tokens ficticios) + Graph API falso local (envío de mensajes y plantillas, descarga de media, registro de plantillas, simulación de errores) + generadores de webhooks firmados. Lo usan todos los e2e de la vertical y la demo local | P0 |
 | F-20 | Foto de producto → modelo de visión → candidatos del catálogo con precio de la base de datos → el cliente elige → carrito | P0 |
 | F-18 | Botón interactivo de confirmación (WhatsApp `interactive.button`) | P1 |
 | F-19 | **Puerto de integración POS**: interfaz `PosAdapter` + `NoopPosAdapter` + registro por proveedor + `PosOrderSink` + kit de pruebas de contrato, para conectar un POS más adelante sin cambiar el core | P0 |
 
 ### 2.2 Fuera de alcance
+**Configuración real de Meta (post-desarrollo, por cliente):** crear o vincular la app, el WABA y el número del comercio, suscribir el webhook (`messages`, `message_template_status_update`, `template_category_update`, `phone_number_quality_update`), registrar y aprobar las plantillas, cargar los tokens y la verificación del negocio. Se hace cuando exista el primer cliente (checklist en STATUS §Post-desarrollo). **Durante el desarrollo todo se prueba contra el Meta Sandbox local (F-23); ningún test ni corrida usa la API real de Meta.**
+
 Dashboard (salvo que se muestren los nuevos estados sin romper nada), impresora, **conectores POS concretos** (solo queda el puerto, F-19), facturación DIAN, pasarela de pagos, multisede, plantillas de marketing, geocoding y descuentos o cupones.
 
 ---
@@ -369,6 +372,7 @@ Se edita con la API de merchant settings existente (`PATCH`, campo `deliveryConf
 | AC-35 | F-22 | "no me escriban más" → `optedOutAt` y una confirmación única. Después, una transición de estado no encola nada (`skipped: OPTED_OUT`). Un nuevo pedido del cliente lo reactiva. |
 | AC-36 | F-22 | Un webhook `template_category_update` → MARKETING para `pedido_en_camino` actualiza `WhatsappTemplateState`. El siguiente `on_the_way` no usa esa plantilla (texto libre si la ventana está abierta, si no `skipped`) y se emite `alerta_operacion`. |
 | AC-37 | F-22 | Comanda con la ventana del encargado cerrada → plantilla `comanda_nuevo_pedido` con los ítems en una sola línea. Con la ventana abierta y `mode=auto` → texto libre con el formato completo de `KitchenTicketPresenter`. |
+| AC-38 | F-23 | Con `WHATSAPP_API_URL` apuntando al sandbox: (a) un mensaje del bot llega al registro del sandbox con el payload válido de Cloud API (text, template o interactive); (b) una plantilla no registrada o con un parámetro con `\n` devuelve un error con el formato de Meta, y el outbox lo marca FAILED con reintento según la política existente; (c) `GET /{media-id}` + descarga devuelve el audio y la imagen de fixture; (d) un webhook firmado con el `appSecret` de prueba pasa `MetaSignatureGuard` y uno con firma inválida da 401; (e) `register-whatsapp-templates --apply` contra el sandbox registra las 10 plantillas. |
 | AC-29 | E2E | Viaje completo, del webhook al pedido entregado, en un e2e con el LLM falso: `delivery-journey.e2e-spec.ts`. |
 
 ---

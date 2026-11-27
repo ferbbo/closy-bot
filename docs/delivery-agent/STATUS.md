@@ -21,7 +21,7 @@ Un lock con más de 110 minutos se considera abandonado: se toma y se anota en e
 | Node 22 + pnpm 10 | ✅ | `pnpm install --frozen-lockfile` |
 | Postgres 16 local | ✅ (docker **no** corre) | `pg_ctlcluster 16 main start`; rol/db: `su postgres -c "psql -c \"CREATE ROLE closy LOGIN SUPERUSER PASSWORD 'closy_dev_password';\" -c 'CREATE DATABASE closy_dev OWNER closy;'"` (ignorar "already exists"). `DATABASE_URL=postgresql://closy:closy_dev_password@localhost:5432/closy_dev` |
 | Prisma engines (`binaries.prisma.sh`) | ❌ bloqueado por el proxy (403) a menos que el owner lo agregue a la allowlist de red | Ver "Generar cliente" |
-| Groq / Meta | ❌ sin credenciales; no se usan | `FakeLlmProvider` y mocks |
+| Groq / Meta | ❌ sin credenciales y **no se usan** (Tier 3) | `FakeLlmProvider` / fakes de media + **Meta Sandbox** (S1.5) |
 
 **Generar cliente (para tsc + unit), funciona sin engines:**
 ```bash
@@ -45,6 +45,7 @@ PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 npx prisma generate --no-engine --schem
 | S1.2 | B | TODO | | | | |
 | S1.3 | C | TODO | | | | |
 | S1.4 | A | TODO | | | | P0 mensajería + plantillas |
+| S1.5 | Integrador | TODO | | | | P0 Meta Sandbox (en paralelo con S1.2–S1.4) |
 | S2.1 | A | TODO | | | | |
 | S2.2 | B | TODO | | | | |
 | S2.3 | Integrador | TODO | | | | |
@@ -63,6 +64,14 @@ PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 npx prisma generate --no-engine --schem
 | S5.5 | Integrador | TODO | | | | P0 release |
 
 Estados: `TODO` · `IN_PROGRESS(run-id)` · `IN_REVIEW(PR#)` · `MERGED` · `BLOCKED-HUMAN(motivo)` · `BLOCKED-ENV(motivo)` · `CUT(P1 recortado)`
+
+## Post-desarrollo (por cliente, NO lo hace el agente)
+- [ ] Crear o vincular la app de Meta y el WABA del comercio (Embedded Signup existente, PR-13) y su número.
+- [ ] Suscribir el webhook a los campos `messages`, `message_template_status_update`, `template_category_update` y `phone_number_quality_update`.
+- [ ] Cargar `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN` y `META_*` reales en el entorno de producción.
+- [ ] `scripts/register-whatsapp-templates.ts --apply` en el WABA del comercio y esperar la aprobación de las 10 plantillas.
+- [ ] Verificación del negocio, medio de pago en Meta y prueba de humo con un número real.
+- [ ] `GROQ_API_KEY` real + revisar los modelos `DELIVERY_*_MODEL`.
 
 ## Bloqueos para el humano
 _(ninguno)_
