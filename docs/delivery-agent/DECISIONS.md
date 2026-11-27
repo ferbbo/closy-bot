@@ -37,3 +37,9 @@
 - **Decisión:** interfaz `PosAdapter` (push de pedido obligatorio; cancelar, catálogo y estados opcionales por capabilities), `PosAdapterRegistry` con fallback a `NoopPosAdapter`, `PosOrderSink` como segundo `OrderSink` (nunca bloquea la comanda por WhatsApp), campos aditivos `posProvider/posExternalId/posSyncStatus` en `Order` y kit `describePosAdapterContract()`. Las credenciales van por `secretRef` (nombre de una variable de entorno).
 - **Descartado:** cola o outbox genérico para POS (sobre-ingeniería sin un conector real); endpoint de webhook entrante del POS (queda solo `parseStatusEvent` en la interfaz).
 - **Reversión:** con `provider='none'` el puerto no tiene efecto.
+
+### D-010 · Voz y foto de producto son P0 (decisión del owner) · Tier 2 · plan · 2026-11-27
+- **Contexto:** el informe ponía la voz como P1 y la búsqueda de productos por imagen fuera del MVP. El owner pidió las dos capacidades explícitamente.
+- **Decisión:** las dos con Groq (Whisper y un modelo de visión con salida JSON), modelos configurables, media procesada en memoria sin persistir. La visión solo describe: la identificación de producto y el precio salen del catálogo, y siempre se confirma con el cliente antes de agregar (RN-25). Se agrega el slice S5.0 (propagación de media + `MediaFetcher`) para que voz, imagen y comprobante no se pisen.
+- **Descartado:** OCR de montos del comprobante (se puede falsificar; la validación es humana), embeddings de imagen contra fotos del catálogo (no hay fotos suficientes en un menú típico; queda para v2).
+- **Riesgo:** F5 crece de 4 a 6 slices. Si el tiempo no alcanza, se recorta primero el botón interactivo y luego el debounce.

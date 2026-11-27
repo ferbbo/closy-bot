@@ -14,7 +14,8 @@ Spec: `docs/delivery-agent/SPEC.md` · Contratos: `docs/delivery-agent/CONTRACTS
 5. **Tests:** cada `*.service.ts` tiene su `*.spec.ts`. Los e2e van en `apps/api/test/delivery-*.e2e-spec.ts`. LLM siempre con `test/utils/fake-llm.provider.ts`.
 6. **Textos al cliente:** español colombiano, cortos, máximo 1 emoji por mensaje, cifras con formato `$28.000`.
 7. **POS:** nunca llames a un POS desde el agente, el checkout o el ciclo de vida. Solo `PosOrderSink` habla con `PosAdapter`. Un conector nuevo = una clase en `pos/adapters/` + registro en `POS_ADAPTERS` + `describePosAdapterContract()`.
-8. **PII:** nada de texto del cliente ni teléfonos sin máscara en los logs.
+8. **Media:** la visión solo describe y nunca da precios ni ids. Todo match pasa por `CatalogMatcherService` y se confirma con el cliente. La media no se persiste ni se loguea.
+9. **PII:** nada de texto del cliente ni teléfonos sin máscara en los logs.
 
 ## Mapa del módulo
 ```
@@ -26,6 +27,7 @@ catalog/               CatalogMatcherService
 checkout/              DeliveryQuoteService (ShippingQuoteProvider)
 lifecycle/             DeliveryOrderLifecycleService, CustomerStatusNotifier
 sinks/                 OrderSink + WhatsAppKitchenSink + PosOrderSink
+media/                 MediaFetcher (Graph API), MediaRouter, Transcriber (voz), ImageInterpreter (foto de producto / comprobante)
 pos/                   Puerto POS: PosAdapterRegistry, NoopPosAdapter, kit de contrato, README "cómo agregar un POS"
 commands/              comandos del comercio (agotado, tienda, reporte)
 handler/               DeliveryVerticalHandler + guards (privacidad, horario, handoff, monto)

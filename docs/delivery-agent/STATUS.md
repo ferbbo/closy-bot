@@ -54,10 +54,11 @@ PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 npx prisma generate --no-engine --schem
 | S4.1 | A | TODO | | | | |
 | S4.2 | B | TODO | | | | |
 | S4.3 | C | TODO | | | | |
-| S5.1 | A | TODO | | | | P0 |
-| S5.2 | B | TODO | | | | P0 |
-| S5.3 | C | TODO | | | | P1 |
-| S5.4 | C | TODO | | | | P1 |
+| S5.0 | Integrador | TODO | | | | P0 media plumbing |
+| S5.1 | A | TODO | | | | P0 debounce |
+| S5.2 | B | TODO | | | | P0 voz |
+| S5.3 | C | TODO | | | | P0 imagen producto + comprobante |
+| S5.4 | C | TODO | | | | P1 botón |
 | S5.5 | Integrador | TODO | | | | P0 release |
 
 Estados: `TODO` · `IN_PROGRESS(run-id)` · `IN_REVIEW(PR#)` · `MERGED` · `BLOCKED-HUMAN(motivo)` · `BLOCKED-ENV(motivo)` · `CUT(P1 recortado)`

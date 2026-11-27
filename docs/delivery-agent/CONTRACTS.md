@@ -87,12 +87,12 @@ export interface VerticalContext {
   merchant: { id: string; name: string; industry: string | null; playbookConfig: unknown };
   customer: { id: string; phone: string };
   conversation: { id: string; metadata: unknown };
-  input: { messageId: string; text: string; timestamp: Date; mediaType?: string; mediaId?: string };
+  input: { messageId: string; text: string; timestamp: Date; mediaType?: 'audio' | 'image' | 'video' | 'document' | 'sticker'; mediaId?: string; mimeType?: string; caption?: string };
 }
 export interface VerticalResult { response: string; shouldSend: boolean; intent: string }
 export interface VerticalHandler { readonly name: string; canHandle(ctx: VerticalContext): Promise<boolean>; handle(ctx: VerticalContext): Promise<VerticalResult | null> } // null ⇒ cae a los flujos legacy
 
-// ===== Ciclo de vida (S4.1 produce, S4.2/S4.3/S5.2 consumen) ======
+// ===== Ciclo de vida (S4.1 produce, S4.2/S4.3/S5.3 consumen) ======
 export type DeliveryOrderStatus = 'pending_payment' | 'confirmed' | 'preparing' | 'on_the_way' | 'delivered' | 'cancelled';
 export const DELIVERY_TRANSITIONS: Record<DeliveryOrderStatus, DeliveryOrderStatus[]> = {
   pending_payment: ['confirmed', 'cancelled'],
@@ -147,6 +147,23 @@ export const POS_ADAPTERS = Symbol('POS_ADAPTERS'); // multi-provider: PosAdapte
 export interface PosAdapterRegistry { resolve(config: PosIntegrationConfig): PosAdapter } // fallback: NoopPosAdapter
 // Contract test kit: describePosAdapterContract(name: string, factory: () => PosAdapter): void
 
+// ===== Multimodal (S5.0 produce MediaFetcher; S5.2 Transcriber; S5.3 ImageInterpreter) ==
+export interface FetchedMedia { buffer: Buffer; mimeType: string; sizeBytes: number; durationSec?: number }
+export type MediaResult<T> = { ok: true; value: T } | { ok: false; reason: 'TOO_LARGE' | 'TOO_LONG' | 'DOWNLOAD_FAILED' | 'TIMEOUT' | 'UNSUPPORTED' | 'PROVIDER_ERROR' | 'EMPTY' };
+export interface MediaFetcher { fetch(merchantId: string, channelId: string | null, mediaId: string, limits: { maxBytes: number }): Promise<MediaResult<FetchedMedia>> }
+export const MEDIA_FETCHER = Symbol('MEDIA_FETCHER');
+export interface Transcriber { transcribe(media: FetchedMedia, opts: { language: 'es'; maxDurationSec: number }): Promise<MediaResult<{ text: string }>> }
+export const TRANSCRIBER = Symbol('TRANSCRIBER');
+export type ImageKind = 'product' | 'payment_receipt' | 'menu' | 'other';
+export interface ImageInterpretation {
+  kind: ImageKind;
+  items: Array<{ query: string; quantity: number | null }>; // solo si kind='product'; máximo 5; sin precios ni ids
+  confidence: 'HIGH' | 'MED' | 'LOW';
+}
+export interface ImageInterpreter { interpret(media: FetchedMedia, opts: { caption?: string; merchantCategories: string[] }): Promise<MediaResult<ImageInterpretation>> }
+export const IMAGE_INTERPRETER = Symbol('IMAGE_INTERPRETER');
+// Fakes: test/utils/fake-media.ts → FakeMediaFetcher, FakeTranscriber(text|failure), FakeImageInterpreter(interpretation|failure)
+
 // ===== Utilidades de prueba (S1.3) ================================
 // apps/api/test/utils/fake-llm.provider.ts
 // new FakeLlmProvider([{ toolCalls: [{ name: 'buscar_producto', arguments: { query: 'hamburguesa sencilla' } }] }, { text: 'Listo' }])
@@ -166,7 +183,7 @@ export interface PosAdapterRegistry { resolve(config: PosIntegrationConfig): Pos
 | `services/merchant-command-parser.service.ts`, `merchant-command.service.ts` | Delegar a `DeliveryCommandsService` cuando el comando no es legacy y el flag está activo | S4.1 Track A (S4.3 añade sus comandos en `DeliveryCommandsService`, no en legacy) |
 | `merchant-settings/*` | Aceptar `deliveryConfig` | S1.2 Track B |
 | `llm/interfaces/llm-provider.interface.ts`, `llm/providers/groq-llm.provider.ts`, `llm/llm.service.ts` | Métodos nuevos, sin cambiar los existentes | S1.3 Track C |
-| `channels/whatsapp/*` | Debounce (S5.1), media (S5.2/S5.3), interactive (S5.4) | Según el slice; solo uno a la vez |
+| `channels/whatsapp/*`, `OrchestratorInput` | Propagación de media (S5.0, Integrador) → luego debounce (S5.1) → interactive (S5.4) | Secuencial: S5.0 primero |
 | `docs/delivery-agent/STATUS.md`, `DECISIONS.md` | Escritura | **Solo el Integrador** |
 
 ## 3. Matriz de propiedad de archivos por fase
@@ -177,7 +194,7 @@ export interface PosAdapterRegistry { resolve(config: PosIntegrationConfig): Pos
 | F2 | `delivery/catalog/**`, `delivery/agent/tools/catalog.tools.ts`, `delivery/agent/fallback-parser.ts`, `delivery/presenters/menu.presenter.ts` | `services/cart.service.ts`, `services/checkout.service.ts` (extras), `delivery/agent/tools/cart.tools.ts`, `delivery/presenters/cart.presenter.ts` | — | S2.3: `delivery/agent/delivery-agent.*`, `delivery/handler/**`, `test/delivery-order.e2e-spec.ts` |
 | F3 | `delivery/checkout/**`, provider en `checkout.service.ts` + paso `ASK_NEIGHBORHOOD` en `checkout.flow.ts` | `delivery/handler/guards/opening-hours.guard.ts`, pasos `ASK_CASH_CHANGE` y pickup en `checkout.flow.ts` (después de S3.1), límite → handoff | S3.4: `delivery/pos/**`, `delivery/sinks/pos-order.sink(.spec).ts`, `test/utils/fake-pos.adapter.ts` | S3.3: resto de `delivery/sinks/**`, `presenters/kitchen-ticket.presenter.ts`, registro de `ORDER_SINKS`/`POS_ADAPTERS` en `delivery.module.ts`, `test/delivery-checkout.e2e-spec.ts` |
 | F4 | `delivery/lifecycle/**`, delegación en merchant-command legacy, `test/delivery-lifecycle.e2e-spec.ts` | `delivery/agent/tools/order.tools.ts`, `test/delivery-customer.e2e-spec.ts` | `delivery/commands/**` (stock, tienda, reporte) | integración + resolución de conflictos |
-| F5 | `channels/whatsapp/*` (debounce) + `delivery/burst/**` | `delivery/media/receipt.*` | `delivery/media/transcriber.*`, luego interactive | S5.5 |
+| F5 | S5.1: `channels/whatsapp/*` (debounce, después de S5.0) + `delivery/burst/**` | S5.2: `delivery/media/transcriber*`, casos de voz en `test/delivery-media.e2e-spec.ts` | S5.3: `delivery/media/image-interpreter*`, `delivery/media/receipt*`, `delivery/media/product-photo*`, casos de imagen en el e2e; luego S5.4 interactive | S5.0: `delivery/media/media-fetcher*`, `media-router*`, `test/utils/fake-media.ts`, propagación en `OrchestratorInput`/mapper; S5.5 |
 
 **Regla de conflicto:** si dos tracks necesitan el mismo archivo, el segundo se **serializa**: espera el merge del primero y rebasea. No se edita en paralelo.
 

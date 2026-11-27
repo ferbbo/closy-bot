@@ -34,9 +34,9 @@ Si la base de datos para e2e no está disponible (ver STATUS §Entorno), G-slice
 | F2 Toma de pedido IA | El agente arma el carrito desde lenguaje natural | (S2.1 ∥ S2.2) → S2.3 | 2 tracks + integración |
 | F3 Checkout domicilio | Zona, tarifa, horario, pago, confirmación, comanda y puerto POS | (S3.1 ∥ S3.2 ∥ S3.4) → S3.3 | 3 tracks + integración |
 | F4 Operación | Ciclo de cocina, autoservicio del cliente y comandos | S4.1 ∥ S4.2 ∥ S4.3 | 3 tracks |
-| F5 Robustez + release | Debounce y comprobante (P0), voz y botón (P1), hardening | S5.1 ∥ S5.2 ∥ S5.3 → S5.4 → S5.5 | 3 tracks + release |
+| F5 Multimodal + robustez + release | Media (voz, foto de producto, comprobante) y debounce (P0), botón (P1), hardening | S5.0 → (S5.1 ∥ S5.2 ∥ S5.3) → S5.4 → S5.5 | integración + 3 tracks + release |
 
-Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.1 + S5.2 + S5.5** (P0). S5.3 y S5.4 son P1 y se recortan primero.
+Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.0–S5.3 + S5.5** (P0). Solo S5.4 (botón) es P1 y se recorta primero. Si aun así no alcanza, se recorta S5.1 (debounce) antes que voz o imagen, y se registra el riesgo.
 
 ---
 
@@ -46,7 +46,7 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.1 + S5.2 + 
 | Tarea | Commit | Archivos | Verificación |
 |---|---|---|---|
 | T1 | Cambios aditivos de schema de SPEC §3.4 (Industry, OrderStatus, deliveryConfig, CartItem.notes + unique, OrderItem.notes, campos de Order) | `prisma/schema.prisma` | `prisma validate` + `db push` en la base local + tsc |
-| T2 | Flag `isDeliveryEnabled` + `DELIVERY_ENABLED` / `DELIVERY_LLM_MODEL` en Joi y `.env.example` + specs del flag (mvp=false) | `feature-flags.service(.spec).ts`, `env.validation.ts`, `.env.example` | unit |
+| T2 | Flag `isDeliveryEnabled` + `DELIVERY_ENABLED` / `DELIVERY_LLM_MODEL` / `DELIVERY_STT_MODEL` / `DELIVERY_VISION_MODEL` en Joi y `.env.example` + specs del flag (mvp=false) | `feature-flags.service(.spec).ts`, `env.validation.ts`, `.env.example` | unit |
 | T3 | `verticals/vertical.types.ts`, `vertical-router.service.ts` (registro vacío) y `delivery/contracts.ts` (copia literal de CONTRACTS.md), `delivery.module.ts`, `delivery/CLAUDE.md`, registro en `app.module.ts` | nuevos + `app.module.ts` | tsc + arranque del módulo (test de compilación del módulo) |
 | T4 | Hook en `ConversationOrchestrator`: después de resolver la conversación y antes del checkout activo, `const v = await this.verticalRouter.tryHandle(ctx); if (v) return v;`. Con el flag apagado retorna `null` sin consultas | `conversation.orchestrator.ts` + spec | spec del orquestador existente en verde + test nuevo "flag off → no delega" |
 | T5 | Seed demo `prisma/seed-delivery.ts`: comercio "Burger Barrio" (restaurante), 4 categorías (Hamburguesas, Perros, Bebidas, Adiciones), ~14 productos, 3 zonas (Cabecera, Provenza, Cañaveral) + script `db:seed:delivery` | seed + `package.json` | `pnpm db:seed:delivery` local |
@@ -154,9 +154,10 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.1 + S5.2 + 
 
 | Slice | Track | Prioridad | Tareas | AC |
 |---|---|---|---|---|
-| S5.1 Debounce | A | **P0** | T1 buffer en `Conversation.metadata.pendingBurst` + ventana `DELIVERY_DEBOUNCE_MS` (4000): el webhook guarda y responde 200, y un procesamiento diferido por conversación (timeout de `@nestjs/schedule`, re-armable) concatena los textos y llama al orquestador una vez · T2 tests de ráfaga + reinicio seguro (si el proceso muere, un barrido cada minuto procesa los buffers vencidos) | AC-25 |
-| S5.2 Comprobante | B | **P0** | T1 detectar mensaje `image` del cliente con un pedido `pending_payment` (el mapper ya trae `mediaType`) · T2 reenviar al encargado (media id/url + `ORD-x` + monto esperado) con `dedupeKey order:{id}:receipt:{wamid}` y responder al cliente "Recibimos tu comprobante, el local lo valida" | AC-27 |
-| S5.3 Voz | C | P1 | T1 `MediaService` (descarga desde Graph API con el token del canal) · T2 `Transcriber` (interfaz + Groq `audio.transcriptions` + fake) → mismo turno de texto | AC-26 |
+| S5.0 Media plumbing | Integrador | **P0** | T1 propagar `mediaType`, `mediaId`, `caption` y `mimeType` del mapper → `OrchestratorInput` (campos opcionales) → `VerticalContext.input` · T2 `MediaFetcher` (Graph API `GET /{media-id}` → url → descarga con el token del canal, límites RN-24) + `FakeMediaFetcher` · T3 `MediaRouter` en el handler: `audio` → `Transcriber`, `image` → `ImageInterpreter` (stubs con fallback "escríbelo" hasta que entren S5.2 y S5.3). Con el flag apagado, media = comportamiento legacy | — (base de AC-26/27/31) |
+| S5.1 Debounce | A | **P0** | T1 buffer en `Conversation.metadata.pendingBurst` + ventana `DELIVERY_DEBOUNCE_MS` (4000): el webhook guarda y responde 200, y un procesamiento diferido por conversación (timeout de `@nestjs/schedule`, re-armable) concatena los textos y llama al orquestador una vez. **Un mensaje de media vacía el buffer y se procesa como turno propio** · T2 tests de ráfaga + reinicio seguro (un barrido cada minuto procesa los buffers vencidos) | AC-25 |
+| S5.2 Voz | B | **P0** | T1 `Transcriber` (interfaz + `GroqWhisperTranscriber` vía SDK o REST + `FakeTranscriber`) · T2 audio → texto → mismo turno del agente con el eco "🎙️ Entendí: «…»" + fallos RN-24 + e2e `delivery-media.e2e-spec.ts` (caso voz) | AC-26 |
+| S5.3 Imagen: producto + comprobante | C | **P0** | T1 `ImageInterpreter` (interfaz + `GroqVisionInterpreter` con prompt de solo descripción → JSON `ImageInterpretation` validado + `FakeImageInterpreter`) · T2 `kind:'product'` → `CatalogMatcherService` → candidatos numerados (`delivery_disambiguation` existente, con cantidad) → el cliente elige → carrito (RN-25) · T3 `kind:'payment_receipt'` o caption de pago con `pending_payment` → reenvío al encargado (`dedupeKey order:{id}:receipt:{wamid}`) + respuesta al cliente (RN-26) · T4 casos e2e (producto, comprobante, other) | AC-27, AC-31 |
 | S5.4 Botón interactivo | C (después de S5.3) | P1 | T1 `OutboxMessageType.SEND_INTERACTIVE` (aditivo) + sender · T2 confirmación con botones Sí/No + mapeo de `button_reply` al mismo flujo | AC-28 |
 | S5.5 Hardening + release | Integrador | **P0** | T1 `delivery-journey.e2e-spec.ts` (AC-29) · T2 corrida `FEATURES_MODE=mvp` + fixes · T3 sección en `BACKEND-EXECUTION-GUIDE.md` (config, comandos, cURL) + `docs/delivery-agent/DEMO.md` (simular webhook) · T4 PR final `feat/delivery-agent → dev` con checklist §7 | AC-01, AC-29 |
 
@@ -170,7 +171,7 @@ S1.1 ──┬─► S1.2 ──┐
                                         ├─► S3.2 ──┤
                                         └─► S3.4 ──┴─► S3.3 ──┬─► S4.1 ─┐
                                                               ├─► S4.2 ─┤ (S4.2 usa el contrato de S4.1; stub hasta el merge)
-                                                              └─► S4.3 ─┴─► S5.1 ∥ S5.2 ∥ (S5.3 → S5.4) ─► S5.5
+                                                              └─► S4.3 ─┴─► S5.0 ─► S5.1 ∥ S5.2 ∥ (S5.3 → S5.4) ─► S5.5
 ```
 
 ## 4. Calendario objetivo (18 corridas, cada 2 h, desde vie 27-nov 18:00 hasta dom 29-nov 04:00, America/Bogota)
@@ -180,8 +181,8 @@ S1.1 ──┬─► S1.2 ──┐
 | 3–6 | F2 |
 | 7–10 | F3 (S3.4 corre en paralelo con S3.1 y S3.2) |
 | 11–14 | F4 |
-| 15–16 | S5.1 + S5.2 (P0) |
-| 17 | S5.3 / S5.4 (P1, lo que alcance) |
+| 15 | S5.0 media plumbing (rápido, del Integrador) + arranque de S5.1, S5.2 y S5.3 en paralelo |
+| 16–17 | S5.1, S5.2 y S5.3 (P0); S5.4 solo si sobra tiempo |
 | 18 | S5.5 release: PR final a `dev` y reporte |
 
 Si una corrida termina antes, sigue con el próximo slice desbloqueado. Si se atrasa, recorta P1 y **nunca** S5.5.
