@@ -11,7 +11,7 @@ Tu misión en **esta corrida**: avanzar el plan de implementación el mayor núm
 3. `docs/delivery-agent/IMPLEMENTATION-PLAN.md`: fases → slices (PR) → tareas (commit ≤ 400 líneas), puertas de verificación y grafo de dependencias.
 4. `docs/delivery-agent/CONTRACTS.md`: interfaces congeladas, matriz de propiedad de archivos por track y brief estándar para subagentes.
 5. `docs/delivery-agent/DECISIONS.md`: decisiones ya tomadas. Mantén la consistencia con ellas.
-6. `AGENTS.md` (guardrails del repo, anti-patrones de TypeScript, feature flags) y `apps/api/src/verticals/delivery/CLAUDE.md` (cuando exista).
+6. `AGENTS.md` (guardrails del repo, anti-patrones de TypeScript, feature flags) y `apps/api/src/verticals/delivery/CLAUDE.md`.
 
 ## 3. Protocolo de la corrida
 **Presupuesto: 100 minutos.** No inicies una tarea nueva después del minuto 85. Cierra antes del minuto 100.
@@ -54,7 +54,8 @@ Ante dos lecturas razonables de la spec, elige la que **menos cambia el comporta
 
 ## 6. Reglas técnicas duras
 - Todo el código de la vertical queda detrás de `FeatureFlagsService.isDeliveryEnabled` y de `merchant.industry === 'restaurante'`. Con `FEATURES_MODE=mvp` los tests legacy pasan igual (RN-21).
-- El LLM nunca produce cifras. Los precios, tarifas, totales y ETA visibles salen de presenters y de datos de la base (RN-01, RN-02).
+- Conversación natural (RN-27): el LLM redacta las respuestas, pero **nunca calcula ni inventa cifras**. Solo cita las que devolvió una herramienta en el turno, `GroundingValidator` lo verifica (RN-28) y el resumen previo a confirmar es el bloque exacto del presenter (RN-01, RN-02, RN-12).
+- Todo mensaje iniciado por el negocio (estados, pagos, comandas, alertas) sale por `BusinessMessenger` con las plantillas utility del catálogo (RN-15, RN-29–31). Nunca encoles `SEND_TEXT` directo para eso.
 - Los tests nunca llaman a proveedores reales: usa `FakeLlmProvider`, los fakes de media y el **Meta Sandbox** (`apps/api/test/meta-sandbox/`, slice S1.5). La configuración real de Meta es post-desarrollo (STATUS §Post-desarrollo): no la intentes.
 - Commits de un máximo de 400 líneas (`git diff --shortstat HEAD~1`), en formato `feat(delivery): … [S#-T#]`, y terminan con:
   ```
