@@ -67,4 +67,4 @@ _(ninguno)_
 ## Log de corridas
 | Run | Inicio | Fin | Slices tocados | Resultado | Siguiente |
 |---|---|---|---|---|---|
-| plan | 2026-11-27 16:40 | 2026-11-27 17:50 | docs | SPEC, PLAN, CONTRACTS, MASTER-PROMPT, CLAUDE.md | Run 1: S1.1 |
+| plan | 2026-11-27 16:40 | 2026-11-27 17:20 | docs | SPEC, PLAN, CONTRACTS, MASTER-PROMPT, CLAUDE.md · PR #137 (draft → dev) | Run 1: S1.1 |
