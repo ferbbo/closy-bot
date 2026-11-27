@@ -178,6 +178,16 @@ brief.md (REQ-01..N) -> Issue (#NN) -> PR AC checklist -> Evidencia (test)
 - Cada AC = evidencia documentada (test name, log, screenshot)
 - PR description SIEMPRE linkea al brief.md
 
+## 7.1 Vertical Delivery Agent (agentes autónomos)
+
+> Vertical B2: pedidos a domicilio para restaurantes. Todo el código va en `apps/api/src/verticals/delivery/` detrás de `isDeliveryEnabled`.
+
+- **Fuente de verdad:** `docs/delivery-agent/SPEC.md` (sustituye al brief.md para esta vertical) + `IMPLEMENTATION-PLAN.md` (slices = PR, tareas = commit ≤ 400 líneas).
+- **Roles autónomos:** un Integrador (único dueño de git y de los archivos compartidos) + subagentes por Track con propiedad de archivos según `CONTRACTS.md` §3.
+- **Gates:** BRIEF GATE ya aprobado por el owner (SPEC v1.0). VERIFICATION GATE = G-slice (auto-merge a `feat/delivery-agent`) y G-release (PR a `dev` con revisión humana).
+- **Escalera de decisión y tiers de riesgo:** `docs/delivery-agent/MASTER-PROMPT.md` §4–§5.
+- **Estado entre sesiones:** `docs/delivery-agent/STATUS.md`. Decisiones: `DECISIONS.md`.
+
 ## 8. References
 
 - SDD Flow: `docs/plan/SDD-FLOW.md`
