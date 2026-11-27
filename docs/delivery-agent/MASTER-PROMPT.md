@@ -67,7 +67,7 @@ Ante dos lecturas razonables de la spec, elige la que **menos cambia el comporta
 ## 7. Reporte final de la corrida (tu último mensaje)
 ```
 Closy bot · run-<id> · <inicio>–<fin> (America/Bogota)
-Estado global: F<x> · <n>/17 slices MERGED · rama feat/delivery-agent @ <sha>
+Estado global: F<x> · <n>/18 slices MERGED · rama feat/delivery-agent @ <sha>
 Esta corrida:
   ✅ MERGED: S#.# (#PR) — AC: …
   🔄 IN_REVIEW / BLOCKED: S#.# — motivo

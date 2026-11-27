@@ -31,3 +31,9 @@
 
 ### D-008 · Estados de pedido fuera de la ventana de 24 h no se envían · Tier 1 · plan · 2026-11-27
 - Las plantillas de utilidad están fuera de v1. Un domicilio normal ocurre dentro de la ventana. Lo que no se envía queda en el log.
+
+### D-009 · Puerto POS (Ports & Adapters) sin conector concreto · Tier 2 · plan · 2026-11-27
+- **Contexto:** el owner pidió dejar un Adapter para integrar un POS más adelante. El informe recomienda no depender de ningún POS en el MVP y construir el primer conector solo cuando 3 clientes pagos compartan POS (candidatos: Loggro; Siigo/Alegra para facturación).
+- **Decisión:** interfaz `PosAdapter` (push de pedido obligatorio; cancelar, catálogo y estados opcionales por capabilities), `PosAdapterRegistry` con fallback a `NoopPosAdapter`, `PosOrderSink` como segundo `OrderSink` (nunca bloquea la comanda por WhatsApp), campos aditivos `posProvider/posExternalId/posSyncStatus` en `Order` y kit `describePosAdapterContract()`. Las credenciales van por `secretRef` (nombre de una variable de entorno).
+- **Descartado:** cola o outbox genérico para POS (sobre-ingeniería sin un conector real); endpoint de webhook entrante del POS (queda solo `parseStatusEvent` en la interfaz).
+- **Reversión:** con `provider='none'` el puerto no tiene efecto.

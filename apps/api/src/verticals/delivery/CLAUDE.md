@@ -13,7 +13,8 @@ Spec: `docs/delivery-agent/SPEC.md` · Contratos: `docs/delivery-agent/CONTRACTS
 4. **Archivos legacy:** solo los puntos de extensión de CONTRACTS §2, y solo si tu track es dueño del archivo.
 5. **Tests:** cada `*.service.ts` tiene su `*.spec.ts`. Los e2e van en `apps/api/test/delivery-*.e2e-spec.ts`. LLM siempre con `test/utils/fake-llm.provider.ts`.
 6. **Textos al cliente:** español colombiano, cortos, máximo 1 emoji por mensaje, cifras con formato `$28.000`.
-7. **PII:** nada de texto del cliente ni teléfonos sin máscara en los logs.
+7. **POS:** nunca llames a un POS desde el agente, el checkout o el ciclo de vida. Solo `PosOrderSink` habla con `PosAdapter`. Un conector nuevo = una clase en `pos/adapters/` + registro en `POS_ADAPTERS` + `describePosAdapterContract()`.
+8. **PII:** nada de texto del cliente ni teléfonos sin máscara en los logs.
 
 ## Mapa del módulo
 ```
@@ -24,7 +25,8 @@ agent/                 DeliveryAgentService (bucle de herramientas), prompt, too
 catalog/               CatalogMatcherService
 checkout/              DeliveryQuoteService (ShippingQuoteProvider)
 lifecycle/             DeliveryOrderLifecycleService, CustomerStatusNotifier
-sinks/                 OrderSink + WhatsAppKitchenSink
+sinks/                 OrderSink + WhatsAppKitchenSink + PosOrderSink
+pos/                   Puerto POS: PosAdapterRegistry, NoopPosAdapter, kit de contrato, README "cómo agregar un POS"
 commands/              comandos del comercio (agotado, tienda, reporte)
 handler/               DeliveryVerticalHandler + guards (privacidad, horario, handoff, monto)
 presenters/            cart, menu, kitchen-ticket

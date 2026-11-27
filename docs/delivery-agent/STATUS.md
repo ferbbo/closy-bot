@@ -49,7 +49,8 @@ PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 npx prisma generate --no-engine --schem
 | S2.3 | Integrador | TODO | | | | |
 | S3.1 | A | TODO | | | | |
 | S3.2 | B | TODO | | | | |
-| S3.3 | Integrador | TODO | | | | |
+| S3.4 | C | TODO | | | | Puerto POS (P0) |
+| S3.3 | Integrador | TODO | | | | después de S3.1, S3.2 y S3.4 |
 | S4.1 | A | TODO | | | | |
 | S4.2 | B | TODO | | | | |
 | S4.3 | C | TODO | | | | |

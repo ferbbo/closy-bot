@@ -31,6 +31,7 @@ export interface DeliveryConfig {
   maxOrderAmountWithoutHuman: number;
   privacyPolicyUrl: string | null;
   menuImageUrl: string | null;
+  pos: PosIntegrationConfig;               // ver Puerto POS; por defecto { provider: 'none', enabled: false, settings: {}, secretRef: null }
 }
 export type ConfigValidation = { ok: true; value: DeliveryConfig } | { ok: false; errors: Array<{ path: string; message: string }> };
 export interface OpenStatus { open: boolean; nextOpening?: { day: number; time: string } }
@@ -121,6 +122,31 @@ export interface KitchenTicket {
 export interface OrderSink { readonly name: string; publish(merchantId: string, ticket: KitchenTicket): Promise<void> } // idempotente por orderId
 export const ORDER_SINKS = Symbol('ORDER_SINKS'); // multi-provider: OrderSink[]
 
+// ===== Puerto POS (S3.4) — Ports & Adapters ======================
+export type PosProvider = 'none' | 'loggro' | 'siigo' | 'alegra' | 'fudo' | 'webhook' | (string & {});
+export interface PosIntegrationConfig {           // vive en DeliveryConfig.pos
+  provider: PosProvider;                          // 'none' por defecto
+  enabled: boolean;
+  settings: Record<string, string>;               // no secretos (ej. storeId, branchId)
+  secretRef: string | null;                       // NOMBRE de la variable de entorno con la credencial; nunca el valor
+}
+export interface PosCapabilities { pushOrder: boolean; cancelOrder: boolean; pullCatalog: boolean; statusUpdates: boolean }
+export interface PosContext { merchantId: string; config: PosIntegrationConfig; resolveSecret: () => string | null }
+export type PosResult<T = void> = { ok: true; value: T } | { ok: false; retryable: boolean; error: string };
+export interface PosCatalogItem { externalId: string; name: string; variantName?: string; price: number; active: boolean; category?: string }
+export interface PosStatusEvent { externalOrderId: string; status: DeliveryOrderStatus; etaMinutes?: number; occurredAt: Date }
+export interface PosAdapter {
+  readonly provider: PosProvider;
+  capabilities(): PosCapabilities;
+  pushOrder(ticket: KitchenTicket, ctx: PosContext): Promise<PosResult<{ externalId: string }>>; // idempotente por ticket.orderId
+  cancelOrder?(externalId: string, reason: string, ctx: PosContext): Promise<PosResult>;
+  pullCatalog?(ctx: PosContext): Promise<PosResult<PosCatalogItem[]>>;                      // futuro: sincronizar menú
+  parseStatusEvent?(payload: unknown, headers: Record<string, string>, ctx: PosContext): PosStatusEvent | null; // futuro: webhook POS → lifecycle
+}
+export const POS_ADAPTERS = Symbol('POS_ADAPTERS'); // multi-provider: PosAdapter[]
+export interface PosAdapterRegistry { resolve(config: PosIntegrationConfig): PosAdapter } // fallback: NoopPosAdapter
+// Contract test kit: describePosAdapterContract(name: string, factory: () => PosAdapter): void
+
 // ===== Utilidades de prueba (S1.3) ================================
 // apps/api/test/utils/fake-llm.provider.ts
 // new FakeLlmProvider([{ toolCalls: [{ name: 'buscar_producto', arguments: { query: 'hamburguesa sencilla' } }] }, { text: 'Listo' }])
@@ -149,7 +175,7 @@ export const ORDER_SINKS = Symbol('ORDER_SINKS'); // multi-provider: OrderSink[]
 |---|---|---|---|---|
 | F1 | — | `delivery/config/**`, `merchant-settings/**` (deliveryConfig), `test/delivery-config.e2e-spec.ts` | `llm/**`, `test/utils/fake-llm.provider.ts` | S1.1 completo + archivos compartidos |
 | F2 | `delivery/catalog/**`, `delivery/agent/tools/catalog.tools.ts`, `delivery/agent/fallback-parser.ts`, `delivery/presenters/menu.presenter.ts` | `services/cart.service.ts`, `services/checkout.service.ts` (extras), `delivery/agent/tools/cart.tools.ts`, `delivery/presenters/cart.presenter.ts` | — | S2.3: `delivery/agent/delivery-agent.*`, `delivery/handler/**`, `test/delivery-order.e2e-spec.ts` |
-| F3 | `delivery/checkout/**`, provider en `checkout.service.ts` + paso `ASK_NEIGHBORHOOD` en `checkout.flow.ts` | `delivery/handler/guards/opening-hours.guard.ts`, pasos `ASK_CASH_CHANGE` y pickup en `checkout.flow.ts` (después de S3.1), límite → handoff | — | S3.3: `delivery/sinks/**`, `presenters/kitchen-ticket.presenter.ts`, `test/delivery-checkout.e2e-spec.ts` |
+| F3 | `delivery/checkout/**`, provider en `checkout.service.ts` + paso `ASK_NEIGHBORHOOD` en `checkout.flow.ts` | `delivery/handler/guards/opening-hours.guard.ts`, pasos `ASK_CASH_CHANGE` y pickup en `checkout.flow.ts` (después de S3.1), límite → handoff | S3.4: `delivery/pos/**`, `delivery/sinks/pos-order.sink(.spec).ts`, `test/utils/fake-pos.adapter.ts` | S3.3: resto de `delivery/sinks/**`, `presenters/kitchen-ticket.presenter.ts`, registro de `ORDER_SINKS`/`POS_ADAPTERS` en `delivery.module.ts`, `test/delivery-checkout.e2e-spec.ts` |
 | F4 | `delivery/lifecycle/**`, delegación en merchant-command legacy, `test/delivery-lifecycle.e2e-spec.ts` | `delivery/agent/tools/order.tools.ts`, `test/delivery-customer.e2e-spec.ts` | `delivery/commands/**` (stock, tienda, reporte) | integración + resolución de conflictos |
 | F5 | `channels/whatsapp/*` (debounce) + `delivery/burst/**` | `delivery/media/receipt.*` | `delivery/media/transcriber.*`, luego interactive | S5.5 |
 

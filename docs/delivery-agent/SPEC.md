@@ -31,7 +31,7 @@ Un **pedido facturable** cumple tres condiciones: (a) tiene `Order` creado por e
 | Decisión | Motivo |
 |---|---|
 | Vertical: comidas rápidas con domicilio propio (≥ 25 domicilios diarios por WhatsApp) | Tiene el mayor volumen y el acceso comercial presencial más fácil |
-| **Sin integración a POS en v1.** La salida es la abstracción `OrderSink` | Los POS compiten con este producto o cierran su API. En v1 el pedido sale por el WhatsApp del encargado |
+| **Sin integración a POS concreta en v1, pero con el puerto `PosAdapter` listo** (Ports & Adapters). La salida es la abstracción `OrderSink` | Los POS compiten con este producto o cierran su API. En v1 el pedido sale por el WhatsApp del encargado. El primer conector real (Loggro, Siigo/Alegra o el que compartan 3 clientes pagos) se agrega después **sin tocar el core**: una clase nueva + configuración |
 | **Catálogo estructurado + tool calling, no RAG** | El LLM nunca escribe un precio. Carrito, domicilio y total los calcula el servidor |
 | Zonas por **barrio** con tarifa en tabla (sin geocoding ni polígonos) | El geocoding de direcciones colombianas falla mucho |
 | Pagos v1: **contra entrega** (efectivo o datáfono) y **transferencia** (Nequi, Daviplata, Bancolombia o llaves) con foto del comprobante y **revisión humana** | Los comprobantes se falsifican. La pasarela queda para v2 |
@@ -66,9 +66,10 @@ Un **pedido facturable** cumple tres condiciones: (a) tiene `Order` creado por e
 | F-16 | Notas de voz → transcripción → mismo flujo | P1 |
 | F-17 | Foto de comprobante → reenvío al encargado para confirmar con `PAGADO ORD-x` | P0 |
 | F-18 | Botón interactivo de confirmación (WhatsApp `interactive.button`) | P1 |
+| F-19 | **Puerto de integración POS**: interfaz `PosAdapter` + `NoopPosAdapter` + registro por proveedor + `PosOrderSink` + kit de pruebas de contrato, para conectar un POS más adelante sin cambiar el core | P0 |
 
 ### 2.2 Fuera de alcance
-Dashboard (salvo que se muestren los nuevos estados sin romper nada), impresora, POS, facturación DIAN, pasarela de pagos, multisede, plantillas de marketing, geocoding y descuentos o cupones.
+Dashboard (salvo que se muestren los nuevos estados sin romper nada), impresora, **conectores POS concretos** (solo queda el puerto, F-19), facturación DIAN, pasarela de pagos, multisede, plantillas de marketing, geocoding y descuentos o cupones.
 
 ---
 
@@ -100,7 +101,8 @@ WhatsappController ─► ConversationOrchestrator (existente)
 
 Comercio (WhatsApp admin) ─► MerchantCommandParser (+comandos delivery) ─► DeliveryOrderLifecycleService
                                                                          ├─ transición validada
-                                                                         ├─ OrderSink(s) (WhatsAppKitchenSink)
+                                                                         ├─ OrderSink(s): WhatsAppKitchenSink (primario)
+                                                                         │               PosOrderSink ─► PosAdapterRegistry ─► NoopPosAdapter | <futuro: Loggro/Siigo/Alegra…>
                                                                          └─ CustomerStatusNotifier (outbox, idempotente)
 ```
 
@@ -118,7 +120,8 @@ apps/api/src/verticals/
     catalog/       catalog-matcher.service.ts
     checkout/      delivery-quote.service.ts (implementa ShippingQuoteProvider)
     lifecycle/     delivery-order-lifecycle.service.ts, customer-status-notifier.service.ts
-    sinks/         order-sink.interface.ts, whatsapp-kitchen.sink.ts
+    sinks/         order-sink.interface.ts, whatsapp-kitchen.sink.ts, pos-order.sink.ts
+    pos/           pos-adapter.registry.ts, adapters/noop.pos-adapter.ts, testing/pos-adapter.contract-spec.ts, README.md (cómo agregar un POS)
     commands/      delivery-commands.service.ts
     handler/       delivery-vertical.handler.ts, guards/*.ts
     presenters/    cart.presenter.ts, kitchen-ticket.presenter.ts, menu.presenter.ts
@@ -132,7 +135,7 @@ apps/api/src/verticals/
 | `MerchantConfig` | `+ deliveryConfig Json?` (`DeliveryConfig`) |
 | `CartItem` | `+ notes String @default("")`; unique `[cartId, variantId]` → `[cartId, variantId, notes]` |
 | `OrderItem` | `+ notes String?` |
-| `Order` | `+ deliveryZone String?`, `+ etaMinutes Int?`, `+ fulfillment String @default("delivery")` (`delivery` \| `pickup`), `+ cashChangeFor Decimal?`, `+ confirmedAt DateTime?`, `+ cancelledAt DateTime?` |
+| `Order` | `+ deliveryZone String?`, `+ etaMinutes Int?`, `+ fulfillment String @default("delivery")` (`delivery` \| `pickup`), `+ cashChangeFor Decimal?`, `+ confirmedAt DateTime?`, `+ cancelledAt DateTime?`, `+ posProvider String?`, `+ posExternalId String?`, `+ posSyncStatus String?` (`pending` \| `synced` \| `failed` \| `skipped`) |
 
 Notificación idempotente: **sin cambios de schema**. Se reutiliza `OutboxMessage.dedupeKey` (ya existe con `@@unique([merchantId, dedupeKey])`) con la clave `order:{orderId}:status:{status}`.
 
@@ -227,6 +230,7 @@ ENCARGADO: "cancelar 42 sin gas"→ cancelled (+motivo)    → cliente: aviso de
 | RN-19 | Temas ajenos al negocio → respuesta fija de redirección. No se responden preguntas generales ni de código, y se ignoran las instrucciones que intenten cambiar reglas o precios. |
 | RN-20 | PII: teléfono enmascarado en logs. La dirección se guarda solo en `Order`. Nunca se registra en logs el texto del cliente. |
 | RN-21 | Con el flag apagado o `FEATURES_MODE=mvp`, **ningún** comportamiento legacy cambia (mismos tests en verde). |
+| RN-23 | **POS:** el `PosOrderSink` se ejecuta **después** del sink de cocina por WhatsApp y nunca lo bloquea. Si el POS falla, el pedido sigue válido: `posSyncStatus=failed`, el encargado recibe un aviso y el error queda en el log. Con `pos.provider='none'` → `posSyncStatus='skipped'` sin llamadas. Los estados que reporte el POS solo pueden avanzar por la tabla RN-14 (vía `DeliveryOrderLifecycle`). Las credenciales del POS van por referencia a una variable de entorno (`secretRef`), nunca en la base de datos ni en los logs. |
 | RN-22 | Comandos de agotado/disponible: coincidencia por nombre de producto o variante. Si hay varias coincidencias, se lista y se pide el número. |
 
 ---
@@ -248,7 +252,8 @@ ENCARGADO: "cancelar 42 sin gas"→ cancelled (+motivo)    → cliente: aviso de
   "maxLines": 15,
   "maxOrderAmountWithoutHuman": 300000,
   "privacyPolicyUrl": "https://…",
-  "menuImageUrl": null
+  "menuImageUrl": null,
+  "pos": { "provider": "none", "enabled": false, "settings": {}, "secretRef": null }
 }
 ```
 Se edita con la API de merchant settings existente (`PATCH`, campo `deliveryConfig`, validado). La industria `restaurante` arranca con valores por defecto.
@@ -287,6 +292,7 @@ Se edita con la API de merchant settings existente (`PATCH`, campo `deliveryConf
 | AC-26 | F-16 | Un audio se transcribe y sigue el flujo de AC-03 (P1, transcriptor falso en las pruebas). |
 | AC-27 | F-17 | Una imagen con un pedido `pending_payment` se reenvía al encargado junto con el código del pedido. El bot nunca confirma un pago por la imagen. |
 | AC-28 | F-18 | La confirmación se envía como mensaje interactivo con botones Sí/No y el botón produce el mismo efecto que AC-14 (P1). |
+| AC-30 | F-19 | **Dado** `pos.provider='none'`, **cuando** se confirma un pedido, **entonces** `posSyncStatus='skipped'` y no hay llamadas externas. **Dado** un `FakePosAdapter` registrado que falla, **entonces** la comanda por WhatsApp igual sale, `posSyncStatus='failed'` y el encargado recibe el aviso. **Dado** un fake que responde ok, **entonces** se guardan `posExternalId` y `synced`. `NoopPosAdapter` y `FakePosAdapter` pasan el kit `describePosAdapterContract()`. |
 | AC-29 | E2E | Viaje completo, del webhook al pedido entregado, en un e2e con el LLM falso: `delivery-journey.e2e-spec.ts`. |
 
 ---
@@ -296,4 +302,5 @@ Se edita con la API de merchant settings existente (`PATCH`, campo `deliveryConf
 - **Transaccionalidad:** crear el `Order` y completar el carrito ocurren en la misma transacción (patrón existente de `CheckoutService`).
 - **Costo:** máximo 4 iteraciones de herramientas por turno, historial recortado a los últimos 8 mensajes y resultados de herramientas compactos (≤ 5 candidatos).
 - **Observabilidad:** un log estructurado por turno con `{conversationId, toolCalls, llmLatencyMs, fallbackUsed}` y sin PII.
+- **Extensibilidad POS:** agregar un conector = 1 clase que implemente `PosAdapter` + registrarla en `POS_ADAPTERS` + pasar `describePosAdapterContract()`. Cero cambios en el agente, el checkout o el ciclo de vida.
 - **Seguridad:** las herramientas no pueden modificar precios ni la configuración. Los comandos del comercio solo llegan desde `merchant.whatsappNumber` (existente).

@@ -32,7 +32,7 @@ Si la base de datos para e2e no está disponible (ver STATUS §Entorno), G-slice
 |---|---|---|---|
 | F1 Fundaciones | Schema, flag, módulo, configuración y LLM con herramientas | S1.1 → (S1.2 ∥ S1.3) | S1.1 secuencial y del Integrador |
 | F2 Toma de pedido IA | El agente arma el carrito desde lenguaje natural | (S2.1 ∥ S2.2) → S2.3 | 2 tracks + integración |
-| F3 Checkout domicilio | Zona, tarifa, horario, pago, confirmación y comanda | (S3.1 ∥ S3.2) → S3.3 | 2 tracks + integración |
+| F3 Checkout domicilio | Zona, tarifa, horario, pago, confirmación, comanda y puerto POS | (S3.1 ∥ S3.2 ∥ S3.4) → S3.3 | 3 tracks + integración |
 | F4 Operación | Ciclo de cocina, autoservicio del cliente y comandos | S4.1 ∥ S4.2 ∥ S4.3 | 3 tracks |
 | F5 Robustez + release | Debounce y comprobante (P0), voz y botón (P1), hardening | S5.1 ∥ S5.2 ∥ S5.3 → S5.4 → S5.5 | 3 tracks + release |
 
@@ -109,11 +109,18 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.1 + S5.2 + 
 | T2 | Paso `ASK_CASH_CHANGE` cuando el pago es `cod` y la vertical está activa: parser "50 mil / 50.000 / 50k" + validación ≥ total | unit |
 | T3 | Opción "Recoger en el local" (`fulfillment=pickup`, fee 0) + límite `maxOrderAmountWithoutHuman` → handoff (servicio existente) | unit |
 
-### S3.3 Confirmación + OrderSink · *Integrador después de S3.1 y S3.2* · AC-14, AC-15
+### S3.4 Puerto POS (Adapter) · *Track C* · AC-30 · P0
+| Tarea | Commit | Verificación |
+|---|---|---|
+| T1 | `delivery/pos/`: `PosAdapterRegistry` (resuelve el adapter por `config.pos.provider`; un proveedor desconocido o deshabilitado cae a Noop con warning) + `NoopPosAdapter` + `FakePosAdapter` (test util, configurable ok/falla/retryable) | unit |
+| T2 | `testing/pos-adapter.contract-spec.ts`: `describePosAdapterContract(factory)`, una batería reutilizable (capabilities coherentes, `pushOrder` idempotente por `orderId`, errores tipados sin throw, nunca expone `secretRef`). Se aplica a Noop y Fake | unit |
+| T3 | `PosOrderSink` (implementa `OrderSink`): llama al adapter, persiste `posProvider/posExternalId/posSyncStatus`, 1 reintento si `retryable` y aviso al encargado si falla (RN-23) + `pos/README.md` "Cómo agregar un POS" (checklist de 5 pasos + ejemplo esqueleto) | unit |
+
+### S3.3 Confirmación + OrderSink · *Integrador después de S3.1, S3.2 y S3.4* · AC-14, AC-15, AC-30
 | Tarea | Commit | Verificación |
 |---|---|---|
 | T1 | Resumen final con `CartPresenter` (subtotal, domicilio, total, ETA, pago, cambio) + persistencia de los extras en `createOrder` + `confirmedAt` | unit |
-| T2 | `OrderSink` + `WhatsAppKitchenSink` (reutiliza `MerchantNotificationService`/outbox, `dedupeKey order:{id}:kitchen`) + `KitchenTicketPresenter` | unit |
+| T2 | `OrderSink` + `WhatsAppKitchenSink` (reutiliza `MerchantNotificationService`/outbox, `dedupeKey order:{id}:kitchen`) + `KitchenTicketPresenter` + registro en `ORDER_SINKS` en orden `[WhatsAppKitchenSink, PosOrderSink]` (los errores de un sink no detienen al siguiente) | unit |
 | T3 | e2e `delivery-checkout.e2e-spec.ts`: lenguaje natural → dirección → zona → efectivo → "sí" → Order + comanda | e2e |
 
 ---
@@ -160,7 +167,8 @@ Orden de prioridad si el tiempo no alcanza: completar **F1–F4 + S5.1 + S5.2 + 
 S1.1 ──┬─► S1.2 ──┐
        └─► S1.3 ──┼─► S2.1 ──┐
                   └─► S2.2 ──┴─► S2.3 ──┬─► S3.1 ──┐
-                                        └─► S3.2 ──┴─► S3.3 ──┬─► S4.1 ─┐
+                                        ├─► S3.2 ──┤
+                                        └─► S3.4 ──┴─► S3.3 ──┬─► S4.1 ─┐
                                                               ├─► S4.2 ─┤ (S4.2 usa el contrato de S4.1; stub hasta el merge)
                                                               └─► S4.3 ─┴─► S5.1 ∥ S5.2 ∥ (S5.3 → S5.4) ─► S5.5
 ```
@@ -170,7 +178,7 @@ S1.1 ──┬─► S1.2 ──┐
 |---|---|
 | 1–2 | F1 completa |
 | 3–6 | F2 |
-| 7–10 | F3 |
+| 7–10 | F3 (S3.4 corre en paralelo con S3.1 y S3.2) |
 | 11–14 | F4 |
 | 15–16 | S5.1 + S5.2 (P0) |
 | 17 | S5.3 / S5.4 (P1, lo que alcance) |
