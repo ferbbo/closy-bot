@@ -65,6 +65,18 @@ PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 npx prisma generate --no-engine --schem
 
 Estados: `TODO` · `IN_PROGRESS(run-id)` · `IN_REVIEW(PR#)` · `MERGED` · `BLOCKED-HUMAN(motivo)` · `BLOCKED-ENV(motivo)` · `CUT(P1 recortado)`
 
+## App de prueba de Meta (para smoke tests manuales; las corridas NO la usan)
+| Dato | Valor |
+|---|---|
+| App | **Closy-bot-qa** · App ID `1579465619796698` · modo desarrollo · el owner es admin |
+| Portfolio | `927651103585574` ("Closy App") |
+| Caso de uso | `WHATSAPP_BUSINESS_MESSAGING` configurado (número de prueba de Meta) |
+| Webhook `whatsapp_business_account` | campos: `messages`, `account_update`, `message_template_status_update`, `template_category_update`, `phone_number_quality_update`, `message_template_quality_update` (los 4 últimos agregados el 2026-11-27 vía MCP Meta Social Technologies) |
+| Callback | apunta a una URL ngrok antigua: hay que cambiarla a la URL pública vigente cuando se haga la prueba de humo |
+| Secretos | App Secret, access token, WABA ID y Phone Number ID **no van en el repo**. El owner los carga como variables de entorno solo en su entorno local de prueba |
+
+Las corridas programadas siguen usando **solo el Meta Sandbox (S1.5)**: no tienen ni deben tener credenciales reales. La prueba de humo contra Closy-bot-qa es manual y está en `DEMO.md` §"Prueba real con Closy-bot-qa" (la escribe S1.5-T4).
+
 ## Post-desarrollo (por cliente, NO lo hace el agente)
 - [ ] Crear o vincular la app de Meta y el WABA del comercio (Embedded Signup existente, PR-13) y su número.
 - [ ] Suscribir el webhook a los campos `messages`, `message_template_status_update`, `template_category_update` y `phone_number_quality_update`.

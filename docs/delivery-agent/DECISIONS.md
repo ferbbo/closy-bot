@@ -59,3 +59,8 @@
 - **Contexto:** la app, el WABA, el número y las plantillas son por cliente, y todavía no hay cliente. El owner pidió diferir esa configuración y usar una app de prueba para los tests.
 - **Decisión:** slice S1.5 con una identidad de app de prueba ficticia + un Graph API falso local (mensajes, plantillas, media, errores) + webhooks firmados. Todos los e2e y la demo local lo usan. `WHATSAPP_API_URL` (ya configurable en `WhatsAppOutboundService`) apunta al sandbox. La configuración real queda como checklist en STATUS §Post-desarrollo.
 - **Descartado:** una app de desarrollador real de Meta con número de prueba (requiere la cuenta del owner; se puede agregar después para smoke tests manuales sin cambiar código).
+
+### D-014 · App de prueba real: Closy-bot-qa, solo para smoke tests manuales · Tier 1 · plan · 2026-11-27
+- **Contexto:** el owner conectó el MCP de Meta (Meta Social Technologies) y eligió la app existente **Closy-bot-qa** (`1579465619796698`, portfolio `927651103585574`) como app de prueba. Ya tenía el caso de uso de WhatsApp y el webhook `whatsapp_business_account`.
+- **Decisión:** se agregaron por MCP los campos de webhook que exige F-22 (`message_template_status_update`, `template_category_update`, `phone_number_quality_update`, `message_template_quality_update`). La app se usa solo en la prueba de humo manual (DEMO.md). Los e2e y las corridas programadas siguen 100 % contra el Meta Sandbox: sin credenciales reales en el repo ni en el entorno de las corridas.
+- **Pendiente humano:** actualizar el callback (hoy es una URL ngrok antigua), cargar los secretos localmente y registrar las plantillas en el WABA de prueba.
