@@ -14,6 +14,10 @@ import { CatalogMatcherService } from '../catalog/catalog-matcher.service';
 import { BusinessInfoTool } from './tools/business-info.tool';
 import { CartTools } from './tools/cart.tools';
 import { CatalogTools } from './tools/catalog.tools';
+import { DeliveryTools } from './tools/delivery.tools';
+import { PaymentTools } from './tools/payment.tools';
+import { ConfirmTools } from './tools/confirm.tools';
+import { OpeningHoursGuard } from '../handler/guards/opening-hours.guard';
 import { parseOrderText } from './fallback-parser';
 import { buildDeliverySystemPrompt, DELIVERY_TEXTS } from './delivery-agent.prompt';
 import { collectAllowedFromToolData, GroundingValidator } from './grounding-validator';
@@ -68,6 +72,10 @@ export class DeliveryAgentService {
     private readonly cartTools: CartTools,
     private readonly matcher: CatalogMatcherService,
     private readonly grounding: GroundingValidator,
+    private readonly deliveryTools: DeliveryTools,
+    private readonly paymentTools: PaymentTools,
+    private readonly confirmTools: ConfirmTools,
+    private readonly openingHours: OpeningHoursGuard,
     @Optional() @Inject(DELIVERY_LLM_PROVIDER) private readonly providerOverride?: LlmProvider,
   ) {}
 
@@ -78,11 +86,13 @@ export class DeliveryAgentService {
     const toolData: unknown[] = [];
     const presented: string[] = [];
     let candidates: VariantCandidate[] | null = null;
+    let summaryBlock: string | null = null;
     const handlers = this.instrument(this.allHandlers(), (name, result) => {
       if (!result.ok || result.data === undefined) return;
       toolData.push(result.data);
       const data = result.data as { text?: unknown; status?: unknown; candidates?: unknown };
       if (typeof data.text === 'string') presented.push(data.text);
+      if (name === 'resumen_pedido' && typeof data.text === 'string') summaryBlock = data.text;
       if (
         name === 'buscar_producto' &&
         data.status === 'AMBIGUOUS' &&
@@ -155,6 +165,8 @@ export class DeliveryAgentService {
           : DELIVERY_TEXTS.retryFallback;
       }
     }
+    // RN-12: the pre-confirmation summary is the presenter's exact block, never LLM-written
+    if (summaryBlock && !text.includes(summaryBlock)) text = `${text}\n${summaryBlock}`;
     return this.done(ctx, {
       text,
       toolTrace: loop.toolTrace,
@@ -190,15 +202,22 @@ export class DeliveryAgentService {
       ...this.catalogTools.definitions,
       ...this.businessInfo.definitions,
       ...this.cartTools.definitions,
+      ...this.deliveryTools.definitions,
+      ...this.paymentTools.definitions,
+      ...this.confirmTools.definitions,
     ];
   }
 
+  /** Todas las herramientas; las que modifican carrito/checkout pasan por el guard de horario (RN-07). */
   private allHandlers(): Record<string, ToolHandler> {
-    return {
+    return this.openingHours.wrap({
       ...this.catalogTools.handlers(),
       ...this.businessInfo.handlers(),
       ...this.cartTools.handlers(),
-    };
+      ...this.deliveryTools.handlers(),
+      ...this.paymentTools.handlers(),
+      ...this.confirmTools.handlers(),
+    });
   }
 
   private instrument(

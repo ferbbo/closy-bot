@@ -13,6 +13,10 @@ import { GroundingValidator } from './agent/grounding-validator';
 import { DeliveryAgentService, DELIVERY_LLM_PROVIDER } from './agent/delivery-agent.service';
 import { DeliveryVerticalHandler } from './handler/delivery-vertical.handler';
 import { POS_PROVIDERS } from './pos/pos.providers';
+import { ConfirmTools } from './agent/tools/confirm.tools';
+import { OrderSummaryPresenter } from './presenters/order-summary.presenter';
+import { KitchenTicketPresenter } from './presenters/kitchen-ticket.presenter';
+import { OrderSinkRunner, WhatsAppKitchenSink } from './sinks/whatsapp-kitchen.sink';
 import { PAYMENT_TOOLS_PROVIDERS } from './agent/tools/payment-tools.providers';
 import { DELIVERY_GUARDS_PROVIDERS } from './handler/guards/guards.providers';
 import {
@@ -20,7 +24,7 @@ import {
   DELIVERY_TOOLS_PROVIDERS,
 } from './checkout/checkout.providers';
 import { PosOrderSink } from './sinks/pos-order.sink';
-import { POS_ADAPTERS } from './contracts';
+import { ORDER_SINKS, POS_ADAPTERS } from './contracts';
 import { ServicesModule } from '../../services/services.module';
 import { BusinessMessengerService } from './messaging/business-messenger.service';
 import { CustomerServiceWindowService } from './messaging/customer-service-window.service';
@@ -55,6 +59,17 @@ import { CustomerServiceWindowService } from './messaging/customer-service-windo
     // Payment, opening hours and amount limit (S3.2)
     ...PAYMENT_TOOLS_PROVIDERS,
     ...DELIVERY_GUARDS_PROVIDERS,
+    // Confirmation + kitchen output (S3.3): sinks run in order, a failure never stops the next
+    ConfirmTools,
+    OrderSummaryPresenter,
+    KitchenTicketPresenter,
+    WhatsAppKitchenSink,
+    OrderSinkRunner,
+    {
+      provide: ORDER_SINKS,
+      useFactory: (kitchen: WhatsAppKitchenSink, pos: PosOrderSink) => [kitchen, pos],
+      inject: [WhatsAppKitchenSink, PosOrderSink],
+    },
   ],
   exports: [
     DeliveryConfigService,

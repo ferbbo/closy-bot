@@ -7,6 +7,10 @@ import type { CatalogMatcherService } from '../catalog/catalog-matcher.service';
 import type { BusinessInfoTool } from './tools/business-info.tool';
 import type { CartTools } from './tools/cart.tools';
 import type { CatalogTools } from './tools/catalog.tools';
+import type { DeliveryTools } from './tools/delivery.tools';
+import type { PaymentTools } from './tools/payment.tools';
+import type { ConfirmTools } from './tools/confirm.tools';
+import type { OpeningHoursGuard } from '../handler/guards/opening-hours.guard';
 import { DeliveryAgentService, freshCandidateIds } from './delivery-agent.service';
 import { GroundingValidator } from './grounding-validator';
 import { DELIVERY_TEXTS } from './delivery-agent.prompt';
@@ -120,6 +124,7 @@ function build(provider: FakeLlmProvider, matchStatus: 'MATCHED' | 'NOT_FOUND' =
     runToolLoop: (p: RunToolLoopParams & { provider?: LlmProvider }) =>
       runToolLoop(p.provider ?? provider, p),
   } as unknown as LlmService;
+  const passthrough = { definitions: [], handlers: () => ({}) };
   const service = new DeliveryAgentService(
     llm,
     catalogTools,
@@ -127,6 +132,10 @@ function build(provider: FakeLlmProvider, matchStatus: 'MATCHED' | 'NOT_FOUND' =
     cartTools,
     matcher,
     new GroundingValidator(),
+    passthrough as unknown as DeliveryTools,
+    passthrough as unknown as PaymentTools,
+    passthrough as unknown as ConfirmTools,
+    { wrap: (h: Record<string, unknown>) => h } as unknown as OpeningHoursGuard,
     provider,
   );
   return { service, added, matcher };
