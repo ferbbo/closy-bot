@@ -6,7 +6,7 @@ import { FeatureFlagsService } from '../../../common/feature-flags/feature-flags
 import { maskPhone } from '../../../common/utils/pii.util';
 import type { BusinessMessenger, NotifyRequest, NotifyResult } from '../contracts';
 import { CustomerServiceWindowService, phoneVariants } from './customer-service-window.service';
-import { resolveNotificationSettings } from './notification-settings';
+import { DeliveryConfigService } from '../config/delivery-config.service';
 import {
   getTemplateDefinition,
   renderTemplateBody,
@@ -38,6 +38,7 @@ export class BusinessMessengerService implements BusinessMessenger {
     private readonly outbox: OutboxService,
     private readonly window: CustomerServiceWindowService,
     private readonly featureFlags: FeatureFlagsService,
+    private readonly deliveryConfig: DeliveryConfigService,
   ) {}
 
   async notify(req: NotifyRequest): Promise<NotifyResult> {
@@ -63,7 +64,11 @@ export class BusinessMessengerService implements BusinessMessenger {
       where: { merchantId: req.merchantId },
       select: { deliveryConfig: true },
     });
-    const settings = resolveNotificationSettings(merchantConfig?.deliveryConfig);
+    // Validated config (technical defaults if missing/invalid) — single source: DeliveryConfigService
+    const settings = this.deliveryConfig.parseStored(
+      req.merchantId,
+      merchantConfig?.deliveryConfig ?? null,
+    ).notifications;
 
     if (req.orderId) {
       const prefix = `order:${req.orderId}:`;

@@ -41,7 +41,9 @@ export class WhatsAppOutboundService {
     this.phoneNumberId = this.configService.get<string>('WHATSAPP_PHONE_NUMBER_ID', '');
     this.apiVersion = this.configService.get<string>('WHATSAPP_API_VERSION', 'v18.0');
     this.apiUrl = this.configService.get<string>('WHATSAPP_API_URL', 'https://graph.facebook.com');
-    this.dryRun = this.configService.get<string>('NODE_ENV') === 'test';
+    // Delivery S1.5: with WHATSAPP_SANDBOX=true (fake Graph API) tests really send over HTTP
+    const sandbox = String(this.configService.get('WHATSAPP_SANDBOX') ?? 'false') === 'true';
+    this.dryRun = this.configService.get<string>('NODE_ENV') === 'test' && !sandbox;
 
     if (!this.accessToken || !this.phoneNumberId) {
       this.logger.warn(

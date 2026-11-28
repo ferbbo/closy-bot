@@ -4,6 +4,9 @@ import { VerticalsModule } from '../verticals.module';
 import { PersistenceModule } from '../../persistence/persistence.module';
 import { DELIVERY_CONFIG_PROVIDERS } from './config/delivery-config.providers';
 import { DeliveryConfigService } from './config/delivery-config.service';
+import { MESSAGING_PROVIDERS } from './messaging/messaging.providers';
+import { BusinessMessengerService } from './messaging/business-messenger.service';
+import { CustomerServiceWindowService } from './messaging/customer-service-window.service';
 
 /**
  * DeliveryModule — Closy Delivery Agent (vertical B2, restaurantes).
@@ -15,7 +18,7 @@ import { DeliveryConfigService } from './config/delivery-config.service';
  */
 @Module({
   imports: [FeatureFlagsModule, VerticalsModule, PersistenceModule],
-  providers: [...DELIVERY_CONFIG_PROVIDERS],
-  exports: [DeliveryConfigService],
+  providers: [...DELIVERY_CONFIG_PROVIDERS, ...MESSAGING_PROVIDERS],
+  exports: [DeliveryConfigService, BusinessMessengerService, CustomerServiceWindowService],
 })
 export class DeliveryModule {}

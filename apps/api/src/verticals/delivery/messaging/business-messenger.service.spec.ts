@@ -1,4 +1,5 @@
 import { PrismaService } from '../../../persistence/prisma/prisma.service';
+import { DeliveryConfigService } from '../config/delivery-config.service';
 import { OutboxService } from '../../../persistence/outbox/outbox.service';
 import { FeatureFlagsService } from '../../../common/feature-flags/feature-flags.service';
 import type { NotifyRequest } from '../contracts';
@@ -68,6 +69,7 @@ describe('BusinessMessengerService (S1.4-T3) — decision matrix', () => {
       outbox as unknown as OutboxService,
       window as unknown as CustomerServiceWindowService,
       flags as unknown as FeatureFlagsService,
+      new DeliveryConfigService(prisma as unknown as PrismaService),
     );
   });
 
