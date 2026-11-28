@@ -13,6 +13,10 @@ import { GroundingValidator } from './agent/grounding-validator';
 import { DeliveryAgentService, DELIVERY_LLM_PROVIDER } from './agent/delivery-agent.service';
 import { DeliveryVerticalHandler } from './handler/delivery-vertical.handler';
 import { POS_PROVIDERS } from './pos/pos.providers';
+import { LIFECYCLE_PROVIDERS } from './lifecycle/lifecycle.providers';
+import { LifecycleCommandsService } from './lifecycle/lifecycle-commands';
+import { DeliveryOrderLifecycleService } from './lifecycle/delivery-order-lifecycle.service';
+import { DELIVERY_MERCHANT_COMMANDS } from './lifecycle/merchant-commands.token';
 import { DELIVERY_COMMANDS_PROVIDERS } from './commands/commands.providers';
 import { DeliveryCommandsService } from './commands/delivery-commands.service';
 import { ConfirmTools } from './agent/tools/confirm.tools';
@@ -69,6 +73,16 @@ import { CustomerServiceWindowService } from './messaging/customer-service-windo
     OrderSinkRunner,
     // Merchant operation commands (S4.3): agotado/disponible, cerrar/abrir tienda, reporte
     ...DELIVERY_COMMANDS_PROVIDERS,
+    // Kitchen lifecycle (S4.1) + merchant command delegation: first handler that answers wins
+    ...LIFECYCLE_PROVIDERS,
+    {
+      provide: DELIVERY_MERCHANT_COMMANDS,
+      useFactory: (lifecycle: LifecycleCommandsService, commands: DeliveryCommandsService) => [
+        lifecycle,
+        commands,
+      ],
+      inject: [LifecycleCommandsService, DeliveryCommandsService],
+    },
     {
       provide: ORDER_SINKS,
       useFactory: (kitchen: WhatsAppKitchenSink, pos: PosOrderSink) => [kitchen, pos],
@@ -81,6 +95,7 @@ import { CustomerServiceWindowService } from './messaging/customer-service-windo
     CustomerServiceWindowService,
     CatalogMatcherService,
     DeliveryCommandsService,
+    DeliveryOrderLifecycleService,
   ],
 })
 export class DeliveryModule {}

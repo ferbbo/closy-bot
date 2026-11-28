@@ -1,4 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { isDeliveryEnabledVia } from '../verticals/delivery/lifecycle/merchant-commands.token';
+
+/** S4.1: comando no legacy que se delega a los handlers de DELIVERY_MERCHANT_COMMANDS. */
+export const DELIVERY_PASSTHROUGH_COMMAND = 'delivery_passthrough';
 
 // ---------------------------------------------------------------------------
 // ParsedCommand — output of MerchantCommandParser.parse()
@@ -24,6 +29,8 @@ export interface ParsedCommand {
  */
 @Injectable()
 export class MerchantCommandParserService {
+  constructor(@Optional() private readonly moduleRef?: ModuleRef) {}
+
   /**
    * Normalize text for case-insensitive, accent-insensitive matching.
    * AC-04: "Confirmar ORD-001" === "confirmar ORD-001"
@@ -137,7 +144,16 @@ export class MerchantCommandParserService {
       return null;
     }
 
-    // Unknown command → null (AC-05)
-    return null;
+    // Unknown command → null (AC-05); con delivery activo se delega (S4.1)
+    return this.deliveryPassthrough(text);
+  }
+
+  /**
+   * S4.1: solo con `isDeliveryEnabled`, un comando no legacy pasa a MerchantCommandService, que
+   * consulta los handlers de la vertical; si ninguno responde, la respuesta es la legacy.
+   */
+  private deliveryPassthrough(text: string): ParsedCommand | null {
+    if (!text.trim() || !isDeliveryEnabledVia(this.moduleRef)) return null;
+    return { command: DELIVERY_PASSTHROUGH_COMMAND, args: { text: text.trim() } };
   }
 }
