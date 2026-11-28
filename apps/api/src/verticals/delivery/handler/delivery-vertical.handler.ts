@@ -16,6 +16,7 @@ import { DeliveryConfigService } from '../config/delivery-config.service';
 import { DeliveryAgentService } from '../agent/delivery-agent.service';
 import { DELIVERY_TEXTS, isInfoQuery, isOffTopic, isOptOut } from '../agent/delivery-agent.prompt';
 import { MediaRouter } from '../media/media-router.service';
+import { photoQuantityHint, withoutSuggestedQuantity } from '../media/product-photo.service';
 
 interface DeliveryMeta {
   privacyNoticeAt?: string;
@@ -63,6 +64,8 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
     }
     const text = media.action === 'continue' ? media.text : (ctx.input.text ?? '');
     const echoPrefix = media.action === 'continue' ? media.echoPrefix : '';
+    // S5.3-T2: candidatos de una foto de producto (RN-02/RN-25); el cliente elige en el próximo turno.
+    const photoCandidates = media.action === 'continue' ? (media.candidates ?? []) : [];
     // Wall clock (ms): the webhook timestamp has 1 s precision and RN-12 compares turns
     const now = new Date();
     const conv = await this.prisma.conversation.findUnique({
@@ -71,6 +74,12 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
     });
     const metadata = (conv?.metadata ?? {}) as Record<string, unknown>;
     const delivery: DeliveryMeta = { ...((metadata.delivery as DeliveryMeta | undefined) ?? {}) };
+    if (photoCandidates.length) {
+      delivery.lastCandidates = { items: photoCandidates, createdAt: now.toISOString() };
+    }
+    // Turno de elección tras una foto: la cantidad sugerida llega al agente (RN-25).
+    const photoHint =
+      media.action === 'none' ? photoQuantityHint(delivery.lastCandidates, now) : '';
 
     // RN-29: opt-out de mensajes iniciados por el negocio
     if (isOptOut(text)) {
@@ -121,13 +130,29 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
             seenVariantIds: new Set<string>(),
           },
           merchantName: ctx.merchant.name,
-          history: await this.history(ctx),
+          // fuera de ctx.text para que el parser de respaldo (AC-07) no lo lea como pedido
+          history: [
+            ...(await this.history(ctx)),
+            ...(photoHint ? [{ role: 'assistant' as const, content: photoHint }] : []),
+          ],
           lastCandidates: delivery.lastCandidates ?? null,
         });
         if (turn.candidates?.length) {
-          delivery.lastCandidates = { items: turn.candidates, createdAt: now.toISOString() };
+          const extra = turn.candidates.filter(
+            (c) => !photoCandidates.some((p) => p.variantId === c.variantId),
+          );
+          delivery.lastCandidates = {
+            items: [...photoCandidates, ...extra],
+            createdAt: now.toISOString(),
+          };
         }
         reactivate = turn.toolTrace.some((t) => t.name === 'agregar_al_carrito' && t.ok);
+        if (photoHint && reactivate && delivery.lastCandidates) {
+          delivery.lastCandidates = {
+            ...delivery.lastCandidates,
+            items: withoutSuggestedQuantity(delivery.lastCandidates.items),
+          };
+        }
         out = { text: turn.text, intent: 'DELIVERY_ORDER' };
       }
     }

@@ -81,16 +81,30 @@ export class FakeTranscriber implements Transcriber {
  *   new FakeImageInterpreter({ ok: false, reason: 'UNSUPPORTED' })
  */
 export class FakeImageInterpreter implements ImageInterpreter {
-  private readonly response: MediaResult<ImageInterpretation>;
+  private response!: MediaResult<ImageInterpretation>;
+  /** Opciones recibidas por llamada (S5.3: verificar que nunca llegan precios al intérprete). */
+  public readonly calls: Array<{ caption?: string; merchantCategories: string[] }> = [];
 
   constructor(interpretationOrFailure: ImageInterpretation | MediaResult<ImageInterpretation>) {
+    this.respondWith(interpretationOrFailure);
+  }
+
+  /** S5.3: cambia la respuesta entre casos de un mismo e2e (una sola instancia en el módulo). */
+  respondWith(
+    interpretationOrFailure: ImageInterpretation | MediaResult<ImageInterpretation>,
+  ): this {
     this.response =
       'ok' in interpretationOrFailure
         ? (interpretationOrFailure as MediaResult<ImageInterpretation>)
         : { ok: true, value: interpretationOrFailure as ImageInterpretation };
+    return this;
   }
 
-  async interpret(): Promise<MediaResult<ImageInterpretation>> {
+  async interpret(
+    _media?: unknown,
+    opts?: { caption?: string; merchantCategories: string[] },
+  ): Promise<MediaResult<ImageInterpretation>> {
+    if (opts) this.calls.push(opts);
     return this.response;
   }
 }

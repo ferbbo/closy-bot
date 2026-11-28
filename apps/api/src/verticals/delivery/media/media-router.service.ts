@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   IMAGE_INTERPRETER,
   MEDIA_FETCHER,
@@ -9,6 +9,8 @@ import {
   type VerticalContext,
 } from '../contracts';
 import { DELIVERY_TEXTS } from '../agent/delivery-agent.prompt';
+import { PHOTO_TEXTS, ProductPhotoResolver, type PhotoCandidate } from './product-photo.service';
+import { ReceiptForwarder } from './receipt.service';
 
 const AUDIO_MAX_BYTES = 16 * 1024 * 1024; // RN-24
 const AUDIO_MAX_DURATION_SEC = 120; // RN-24
@@ -17,7 +19,7 @@ const ECHO_MAX_CHARS = 200; // RN-24
 
 export type MediaRouteResult =
   | { action: 'none' }
-  | { action: 'continue'; text: string; echoPrefix: string }
+  | { action: 'continue'; text: string; echoPrefix: string; candidates?: PhotoCandidate[] }
   | { action: 'reply'; response: string };
 
 /**
@@ -32,6 +34,10 @@ export class MediaRouter {
     @Inject(MEDIA_FETCHER) private readonly mediaFetcher: MediaFetcher,
     @Inject(TRANSCRIBER) private readonly transcriber: Transcriber,
     @Inject(IMAGE_INTERPRETER) private readonly imageInterpreter: ImageInterpreter,
+    // S5.3: opcional para no romper construcciones de 3 args (spec compartido con S5.2);
+    // en el módulo siempre se inyecta (MEDIA_PROVIDERS).
+    @Optional() private readonly productPhoto?: ProductPhotoResolver,
+    @Optional() private readonly receipts?: ReceiptForwarder,
   ) {}
 
   async route(ctx: VerticalContext): Promise<MediaRouteResult> {
@@ -72,11 +78,33 @@ export class MediaRouter {
         caption: ctx.input.caption,
         merchantCategories: [],
       });
+      // S5.3-T3 (RN-26): comprobante por visión o por caption de pago, aunque la visión falle.
+      const receipt = await this.receipts?.handle(
+        ctx,
+        interpretation.ok ? interpretation.value.kind : null,
+      );
+      if (receipt) {
+        return { action: 'reply', response: receipt };
+      }
       if (!interpretation.ok) {
         return { action: 'reply', response: DELIVERY_TEXTS.mediaFallback };
       }
-      // S5.0 base: la vision no tiene consumidor todavía (S5.3 lo agrega: producto/comprobante).
-      return { action: 'reply', response: DELIVERY_TEXTS.mediaFallback };
+      const { kind, items } = interpretation.value;
+      // S5.3-T2 (RN-25): foto de producto → candidatos del catálogo; el agente pide la elección.
+      if (kind === 'product' && items.length > 0 && this.productPhoto) {
+        const photo = await this.productPhoto.resolve(ctx.merchant.id, items, ctx.input.caption);
+        if (photo.status === 'NOT_FOUND') {
+          return { action: 'reply', response: PHOTO_TEXTS.notFound };
+        }
+        return {
+          action: 'continue',
+          text: photo.agentText,
+          echoPrefix: `${photo.echo}\n\n`,
+          candidates: photo.candidates,
+        };
+      }
+      // menu / other / producto sin consultas → que lo describa con texto
+      return { action: 'reply', response: PHOTO_TEXTS.describe };
     }
 
     // video/document/sticker: sin soporte en v1.

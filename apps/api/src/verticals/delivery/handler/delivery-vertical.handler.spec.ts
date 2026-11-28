@@ -131,6 +131,77 @@ describe('DeliveryVerticalHandler (S2.3-T3)', () => {
     );
   });
 
+  it('S5.3-T2: product photo candidates seed lastCandidates (with quantity) before the agent turn', async () => {
+    const { handler, agent, mediaRouter, prisma } = setup();
+    const photo = {
+      variantId: 'v-toc',
+      productId: 'p-toc',
+      label: 'Hamburguesa de tocineta',
+      unitPrice: 19000,
+      score: 1,
+      suggestedQuantity: 2,
+    };
+    (mediaRouter.route as jest.Mock).mockResolvedValue({
+      action: 'continue',
+      text: '[foto de producto] …',
+      echoPrefix: '📷 En tu foto veo: hamburguesa tocineta ×2\n\n',
+      candidates: [photo],
+    });
+    const ctx = vctx('');
+    ctx.input.mediaType = 'image';
+    ctx.input.mediaId = 'wamid.media.2';
+
+    const res = await handler.handle(ctx);
+
+    expect(res?.response.startsWith('📷 En tu foto veo: hamburguesa tocineta ×2')).toBe(true);
+    expect(agent.handleTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lastCandidates: expect.objectContaining({ items: [photo] }),
+      }),
+    );
+    // photo candidates first, then the turn's AMBIGUOUS candidates (v1 from the agent mock)
+    const saved = prisma.conversation.update.mock.calls.at(-1)[0].data.metadata.delivery;
+    expect(saved.lastCandidates.items.map((c: { variantId: string }) => c.variantId)).toEqual([
+      'v-toc',
+      'v1',
+    ]);
+    expect(saved.lastCandidates.items[0].suggestedQuantity).toBe(2);
+  });
+
+  it('S5.3-T2: choosing turn after a photo gets the suggested quantity in history, then it is cleared', async () => {
+    const createdAt = new Date().toISOString();
+    const photo = {
+      variantId: 'v-toc',
+      productId: 'p-toc',
+      label: 'Hamburguesa de tocineta',
+      unitPrice: 19000,
+      score: 1,
+      suggestedQuantity: 2,
+    };
+    const { handler, agent, prisma } = setup({
+      metadata: { delivery: { lastCandidates: { items: [photo], createdAt } } },
+    });
+    agent.handleTurn.mockResolvedValueOnce({
+      text: 'Listo',
+      toolTrace: [{ name: 'agregar_al_carrito', ok: true }],
+      candidates: null,
+      fallbackUsed: null,
+      groundingFailures: 0,
+    });
+
+    await handler.handle(vctx('la primera'));
+
+    const input = agent.handleTurn.mock.calls[0][0];
+    expect(input.ctx.text).toBe('la primera'); // the fallback parser never sees the hint
+    expect(input.history.at(-1)).toEqual({
+      role: 'assistant',
+      content: expect.stringContaining('Hamburguesa de tocineta ×2'),
+    });
+    const saved = prisma.conversation.update.mock.calls.at(-1)[0].data.metadata.delivery;
+    expect(saved.lastCandidates.items[0]).not.toHaveProperty('suggestedQuantity');
+    expect(saved.lastCandidates.items[0].variantId).toBe('v-toc');
+  });
+
   it('RN-21: flag off → canHandle false without touching the DB', async () => {
     const { handler, prisma } = setup({ enabled: false });
     await expect(handler.canHandle(vctx('hola'))).resolves.toBe(false);
