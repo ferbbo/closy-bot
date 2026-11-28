@@ -123,10 +123,25 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
       }
     }
 
+    // Re-read: tools may have written metadata.delivery.checkout during the turn (S3.x).
+    // Only the handler's own keys are merged over the fresh state.
+    const fresh = await this.prisma.conversation.findUnique({
+      where: { id: ctx.conversation.id },
+      select: { metadata: true },
+    });
+    const freshMeta = (fresh?.metadata ?? {}) as Record<string, unknown>;
+    const freshDelivery = (freshMeta.delivery as DeliveryMeta | undefined) ?? {};
     await this.prisma.conversation.update({
       where: { id: ctx.conversation.id },
       data: {
-        metadata: { ...metadata, delivery } as unknown as Prisma.InputJsonValue,
+        metadata: {
+          ...freshMeta,
+          delivery: {
+            ...freshDelivery,
+            privacyNoticeAt: delivery.privacyNoticeAt,
+            lastCandidates: delivery.lastCandidates ?? freshDelivery.lastCandidates ?? null,
+          },
+        } as unknown as Prisma.InputJsonValue,
         // RN-29: un nuevo pedido del cliente reactiva los mensajes del negocio
         ...(reactivate && conv?.optedOutAt ? { optedOutAt: null } : {}),
       },

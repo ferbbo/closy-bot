@@ -176,4 +176,18 @@ describe('DeliveryVerticalHandler (S2.3-T3)', () => {
     expect(metadata.other).toBe(1);
     expect(metadata.delivery.lastCandidates.items[0].variantId).toBe('v1');
   });
+  it('keeps checkout draft written by tools during the turn (re-reads metadata before saving)', async () => {
+    const { handler, prisma } = setup({ metadata: { delivery: { privacyNoticeAt: 'x' } } });
+    prisma.conversation.findUnique
+      .mockResolvedValueOnce({ metadata: { delivery: { privacyNoticeAt: 'x' } }, optedOutAt: null })
+      .mockResolvedValueOnce({
+        metadata: {
+          delivery: { privacyNoticeAt: 'x', checkout: { cartId: 'cart1', paymentMethod: 'cod' } },
+        },
+      });
+    await handler.handle(vctx('pago en efectivo'));
+    const saved = prisma.conversation.update.mock.calls[0][0].data.metadata.delivery;
+    expect(saved.checkout).toEqual({ cartId: 'cart1', paymentMethod: 'cod' });
+    expect(saved.lastCandidates.items[0].variantId).toBe('v1');
+  });
 });
