@@ -146,3 +146,16 @@
 
 ### D-040 · Reloj del turno y metadata del handler · Tier 1 · run-20261127-2008 · 2026-11-27
 - `now = new Date()` (ms): el timestamp del webhook tiene precisión de 1 s y hacía fallar la regla de "turno anterior". El handler relee la metadata antes de guardar y fusiona solo sus claves (`privacyNoticeAt`, `lastCandidates`) para no pisar el draft escrito por las herramientas.
+
+### D-041 · Comandos de operación y criterio de facturable · Tier 2 (criterio) · run-20261127-2008 · 2026-11-27
+- Desambiguación `agotado/disponible` en memoria (TTL 10 min por comercio); un número suelto solo es comando si hay lista pendiente; búsqueda por prefijos normalizados con `updateMany` filtrado por comercio. `cerrar/abrir tienda` cambia solo `temporarilyClosed`.
+- ⚠️ **Facturable (§0.2):** sin campo de "confirmado por el cliente", todo `Order` se considera confirmado por el cliente (lo crea `confirmar_pedido`); período por `createdAt`; se excluyen los cancelados dentro de 24 h desde la creación (y los cancelados sin `cancelledAt`); los de las últimas 24 h no cancelados cuentan de forma provisional. **Revisión humana.**
+
+### D-042 · Delegación de comandos del encargado en el legacy · Tier 2 · run-20261127-2008 · 2026-11-27
+- `merchant-command-parser` devuelve `delivery_passthrough` solo con el flag activo; `merchant-command.service` consulta `DELIVERY_MERCHANT_COMMANDS` ([comandos de cocina, comandos de operación]) y, si nadie responde, devuelve el mismo "Comando no reconocido". Flag y handlers vía `ModuleRef` (`strict:false`), sin imports entre módulos. Con el flag apagado, legacy idéntico.
+
+### D-043 · Ciclo de vida · Tier 1 · run-20261127-2008 · 2026-11-27
+- `paid` ≈ `confirmed`, `shipped` ≈ `on_the_way`; referencia por `orderCode` exacto o número final (sin falsos positivos tipo 42 vs 142); escritura compare-and-set; `pedido_confirmado` comparte `dedupeKey order:{id}:status:confirmed` con `confirmar_pedido` (sin doble envío).
+
+### D-044 · Autoservicio del cliente · Tier 1 · run-20261127-2008 · 2026-11-27
+- Lectura directa con Prisma; `cancelar_pedido` sin código usa el último activo; ya cancelado → ok `yaCancelado`; `repetir_pedido` conserva notas, recorta a `maxQtyPerLine` y reporta inactivos o fallidos como agotados; precio actual vía `CartService.addItem` (RN-00).

@@ -5,7 +5,7 @@
 
 ## Lock
 ```
-LOCK: run-20261127-2008 since 2026-11-27T20:08:43-05:00
+LOCK: free
 ```
 Formato cuando está tomado: `LOCK: run-<YYYYMMDD-HHmm> since <ISO-8601 -05:00>`.
 Si existe un lock con menos de 110 minutos de antigüedad, la corrida nueva **no trabaja**: reporta "corrida anterior activa" y termina.
@@ -20,7 +20,7 @@ Un lock con más de 110 minutos se considera abandonado: se toma y se anota en e
 |---|---|---|
 | Node 22 + pnpm 10 | ✅ | `pnpm install --frozen-lockfile` |
 | Postgres 16 local | ✅ (docker **no** corre) | `pg_ctlcluster 16 main start`; rol/db: `su postgres -c "psql -c \"CREATE ROLE closy LOGIN SUPERUSER PASSWORD 'closy_dev_password';\" -c 'CREATE DATABASE closy_dev OWNER closy;'"` (ignorar "already exists"). `DATABASE_URL=postgresql://closy:closy_dev_password@localhost:5432/closy_dev` |
-| Prisma engines (`binaries.prisma.sh`) | ❌ bloqueado por el proxy (403) a menos que el owner lo agregue a la allowlist de red | Ver "Generar cliente" |
+| Prisma engines (`binaries.prisma.sh`) | ✅ disponibles desde run-20261127-2008 (`pnpm db:generate` y `db push` funcionan) | Si vuelve a fallar: ver "Generar cliente" |
 | Groq / Meta | ❌ sin credenciales y **no se usan** (Tier 3). Conectores MCP de Meta (Social Technologies y WhatsApp Business Tools) disponibles **solo** en la sesión de planeación del owner, no en las corridas | `FakeLlmProvider` / fakes de media + **Meta Sandbox** (S1.5) |
 
 **Generar cliente (para tsc + unit), funciona sin engines:**
@@ -29,6 +29,7 @@ touch /tmp/fake-engine && chmod +x /tmp/fake-engine
 PRISMA_SCHEMA_ENGINE_BINARY=/tmp/fake-engine PRISMA_QUERY_ENGINE_LIBRARY=/tmp/fake-engine \
 PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 npx prisma generate --no-engine --schema=prisma/schema.prisma
 ```
+**`.env` local para e2e (no se commitea):** copiar `apps/api/.env.example` a `apps/api/.env` y a `.env`, poner valores ficticios a las variables vacías (`sed -E 's/^([A-Z_]+)=$/\1=dummy-test-value/'`), borrar las líneas `R2_*` y `NODE_ENV=test`. Correr cada G-slice sobre una BD nueva (`DROP/CREATE DATABASE`, `prisma db push --skip-generate`) y con `--runInBand --forceExit` y un sequencer alfabético para que la lista de fallos sea comparable.
 **E2E:** primero intenta `pnpm db:generate && pnpm db:push`. Si falla con 403 de `binaries.prisma.sh`, los e2e son `BLOCKED-ENV`: aplica la degradación de IMPLEMENTATION-PLAN §1 y anótalo en el log.
 
 ## Baseline (rama `dev` @ dcd6783, 2026-11-27)
@@ -36,7 +37,8 @@ PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 npx prisma generate --no-engine --schem
 - Unit: 87/89 suites, 991/996 tests. **Fallos preexistentes (no son de esta vertical, no se arreglan salvo que bloqueen):**
   - `src/onboarding/onboarding.service.spec.ts`: 4 tests de `getProgress`/percentage
   - `src/persistence/repositories/outbox.repository.spec.ts`: `claimBatch › SKIP LOCKED`
-- E2E: no ejecutado (engines bloqueados).
+- E2E (medido en run-20261127-2008, engines disponibles, BD nueva con `db push`, orden alfabético determinista): 9/27 suites, 164/288 tests, **121 fallos preexistentes** (limpieza con FK `categories_merchant_id_fkey`, `api_key` duplicada entre suites, FTS legacy `search_text_weighted` sin trigger/tsvector no deserializable). Con orden por defecto de jest los fallos varían (115–124) por contaminación entre suites. Comparación de G-slice: lista de tests fallidos idéntica a esta baseline.
+- Al cierre de run-20261127-2008: unit 1621/1626 (mismos 5 fallos), e2e 199/323 (mismos 121 fallos + 35 tests nuevos de la vertical en verde), idéntico con `FEATURES_MODE=mvp` y con `FEATURES_MODE=dev DELIVERY_ENABLED=true`.
 
 ## Slices
 | Slice | Track | Estado | PR | Commits | AC cubiertos | Notas |
@@ -53,9 +55,9 @@ PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 npx prisma generate --no-engine --schem
 | S3.2 | B | MERGED | #148 | 5 | AC-10, AC-13, AC-24 (base) | fijar_pago, guard de horario, AmountLimitGuard |
 | S3.4 | C | MERGED | #146 | 5 | AC-30 | registry + Noop/Fake + kit de contrato + PosOrderSink |
 | S3.3 | Integrador | MERGED | #149 | 7 | AC-14, AC-15, AC-24, AC-30, AC-32, AC-37 | resumen/confirmar, comanda, ORDER_SINKS, e2e delivery-checkout |
-| S4.1 | A | TODO | | | | |
-| S4.2 | B | TODO | | | | |
-| S4.3 | C | TODO | | | | |
+| S4.1 | A | MERGED | #151 | 5 | AC-16, AC-34 (notifier), AC-20 (cableado) | lifecycle + notifier + delegación de comandos (D-042); e2e lifecycle pendiente |
+| S4.2 | B | MERGED | #152 | 3 | AC-17, AC-18, AC-19 | estado/cancelar/repetir; e2e customer pendiente |
+| S4.3 | C | MERGED | #150 | 4 | AC-20, AC-21 | ⚠️ criterio de facturable (§0.2) a revisar (D-041) |
 | S5.0 | Integrador | TODO | | | | P0 media plumbing |
 | S5.1 | A | TODO | | | | P0 debounce |
 | S5.2 | B | TODO | | | | P0 voz |
@@ -86,9 +88,13 @@ Las corridas programadas siguen usando **solo el Meta Sandbox (S1.5)**: no tiene
 - [ ] `GROQ_API_KEY` real + revisar los modelos `DELIVERY_*_MODEL`.
 
 ## Bloqueos para el humano
-_(ninguno)_
+_(ninguno bloqueante)_. Revisar en el PR final (⚠️ Tier 2/criterio):
+- D-041: criterio de "pedido facturable" usado por `reporte` (§0.2 no tiene campo de confirmación explícita; se usa `createdAt` y cancelación < 24 h).
+- D-016: `db push` en producción pedirá `--accept-data-loss` por el unique nuevo de `cart_items` (superconjunto del anterior, no hay pérdida real).
+- Deuda: los e2e `delivery-lifecycle` y `delivery-customer` están pendientes; unit spec dedicado de `confirm.tools`; `formatCop`/`paymentInstructions`/helper de draft duplicados; logs legacy de búsqueda con texto del cliente (PII) en `CatalogService`/`ProductRepository`.
 
 ## Log de corridas
 | Run | Inicio | Fin | Slices tocados | Resultado | Siguiente |
 |---|---|---|---|---|---|
 | plan | 2026-11-27 16:40 | 2026-11-27 17:20 | docs | SPEC, PLAN, CONTRACTS, MASTER-PROMPT, CLAUDE.md · PR #137 (draft → dev) | Run 1: S1.1 |
+| run-20261127-2008 | 2026-11-27 20:08 | 2026-11-27 21:30 | S1.1–S1.5, S2.1–S2.3, S3.1–S3.4, S4.1–S4.3 (15 slices, PR #138–#152) | ✅ F1–F4 MERGED. Lock previo (run-20261127-1801) abandonado >110 min. Engines Prisma disponibles → e2e reales; baseline e2e medida (121 fallos preexistentes) | Run siguiente: S5.0 (Integrador) → S5.1 ∥ S5.2 ∥ S5.3; pendientes e2e lifecycle/customer |
