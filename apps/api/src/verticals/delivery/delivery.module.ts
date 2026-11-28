@@ -13,6 +13,8 @@ import { GroundingValidator } from './agent/grounding-validator';
 import { DeliveryAgentService, DELIVERY_LLM_PROVIDER } from './agent/delivery-agent.service';
 import { DeliveryVerticalHandler } from './handler/delivery-vertical.handler';
 import { POS_PROVIDERS } from './pos/pos.providers';
+import { PAYMENT_TOOLS_PROVIDERS } from './agent/tools/payment-tools.providers';
+import { DELIVERY_GUARDS_PROVIDERS } from './handler/guards/guards.providers';
 import {
   DELIVERY_CHECKOUT_PROVIDERS,
   DELIVERY_TOOLS_PROVIDERS,
@@ -50,6 +52,9 @@ import { CustomerServiceWindowService } from './messaging/customer-service-windo
     // Checkout (S3.1): draft store, quote provider and delivery tools
     ...DELIVERY_CHECKOUT_PROVIDERS,
     ...DELIVERY_TOOLS_PROVIDERS,
+    // Payment, opening hours and amount limit (S3.2)
+    ...PAYMENT_TOOLS_PROVIDERS,
+    ...DELIVERY_GUARDS_PROVIDERS,
   ],
   exports: [
     DeliveryConfigService,
