@@ -13,6 +13,8 @@ import { GroundingValidator } from './agent/grounding-validator';
 import { DeliveryAgentService, DELIVERY_LLM_PROVIDER } from './agent/delivery-agent.service';
 import { DeliveryVerticalHandler } from './handler/delivery-vertical.handler';
 import { POS_PROVIDERS } from './pos/pos.providers';
+import { DELIVERY_COMMANDS_PROVIDERS } from './commands/commands.providers';
+import { DeliveryCommandsService } from './commands/delivery-commands.service';
 import { ConfirmTools } from './agent/tools/confirm.tools';
 import { OrderSummaryPresenter } from './presenters/order-summary.presenter';
 import { KitchenTicketPresenter } from './presenters/kitchen-ticket.presenter';
@@ -65,6 +67,8 @@ import { CustomerServiceWindowService } from './messaging/customer-service-windo
     KitchenTicketPresenter,
     WhatsAppKitchenSink,
     OrderSinkRunner,
+    // Merchant operation commands (S4.3): agotado/disponible, cerrar/abrir tienda, reporte
+    ...DELIVERY_COMMANDS_PROVIDERS,
     {
       provide: ORDER_SINKS,
       useFactory: (kitchen: WhatsAppKitchenSink, pos: PosOrderSink) => [kitchen, pos],
@@ -76,6 +80,7 @@ import { CustomerServiceWindowService } from './messaging/customer-service-windo
     BusinessMessengerService,
     CustomerServiceWindowService,
     CatalogMatcherService,
+    DeliveryCommandsService,
   ],
 })
 export class DeliveryModule {}
