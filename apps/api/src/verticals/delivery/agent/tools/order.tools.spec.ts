@@ -1,5 +1,9 @@
 import { Decimal } from '@prisma/client/runtime/library';
+import { BadRequestException } from '@nestjs/common';
 import type { PrismaService } from '../../../../persistence/prisma/prisma.service';
+import type { CartWithItems } from '../../../../persistence/repositories/cart.repository';
+import type { CartService } from '../../../../services/cart.service';
+import { CartPresenter } from '../../presenters/cart.presenter';
 import { buildRestauranteDefaults } from '../../config/restaurante.defaults';
 import type { DeliveryOrderLifecycle, DeliveryTurnContext } from '../../contracts';
 import { OrderTools, remainingEtaMinutes } from './order.tools';
@@ -19,6 +23,7 @@ const order = (overrides: Record<string, unknown> = {}) => ({
 describe('OrderTools (S4.2-T1)', () => {
   let prisma: { order: { findFirst: jest.Mock; findMany: jest.Mock } };
   let lifecycle: { transition: jest.Mock };
+  let cartService: { addItem: jest.Mock; createOrGetActiveCart: jest.Mock };
   let tools: OrderTools;
   let ctx: DeliveryTurnContext;
 
@@ -34,9 +39,12 @@ describe('OrderTools (S4.2-T1)', () => {
         notified: true,
       }),
     };
+    cartService = { addItem: jest.fn(), createOrGetActiveCart: jest.fn() };
     tools = new OrderTools(
       prisma as unknown as PrismaService,
       lifecycle as unknown as DeliveryOrderLifecycle,
+      cartService as unknown as CartService,
+      new CartPresenter(),
     );
     ctx = {
       merchantId: 'm-1',
@@ -171,6 +179,115 @@ describe('OrderTools (S4.2-T1)', () => {
         data: { codigo: 'ORD-0042', estado: 'cancelled', yaCancelado: true },
       });
       expect(lifecycle.transition).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('repetir_pedido (AC-19, RN-00)', () => {
+    const item = (
+      variantId: string,
+      productName: string,
+      overrides: { isActive?: boolean; productActive?: boolean; notes?: string | null } = {},
+    ) => ({
+      variantId,
+      quantity: 2,
+      notes: overrides.notes === undefined ? 'sin cebolla' : overrides.notes,
+      snapshotName: `${productName} - Única`,
+      variant: {
+        name: 'Única',
+        isActive: overrides.isActive ?? true,
+        product: {
+          name: productName,
+          isActive: overrides.productActive ?? true,
+          merchantId: 'm-1',
+        },
+      },
+    });
+    // Carrito tras re-agregar: priceSnapshot = precio ACTUAL (18.000), no el histórico
+    const cartAfter = {
+      id: 'cart-1',
+      items: [
+        {
+          id: 'ci-1',
+          cartId: 'cart-1',
+          variantId: 'v-1',
+          notes: 'sin cebolla',
+          quantity: 2,
+          priceSnapshot: new Decimal(18000),
+          variant: {
+            id: 'v-1',
+            name: 'Única',
+            price: new Decimal(18000),
+            productId: 'p-1',
+            product: { id: 'p-1', name: 'Hamburguesa sencilla' },
+          },
+        },
+      ],
+    } as unknown as CartWithItems;
+
+    it('AC-19: re-adds active items with current price via CartService and reports sold-out ones', async () => {
+      prisma.order.findFirst.mockResolvedValue({
+        orderCode: 'ORD-0030',
+        items: [
+          item('v-1', 'Hamburguesa sencilla'),
+          item('v-2', 'Perro especial', { isActive: false }),
+          item('v-3', 'Limonada', { productActive: false, notes: null }),
+        ],
+      });
+      cartService.addItem.mockResolvedValue(cartAfter);
+      cartService.createOrGetActiveCart.mockResolvedValue(cartAfter);
+
+      const res = await run('repetir_pedido');
+
+      const query = prisma.order.findFirst.mock.calls[0][0];
+      expect(query.where).toEqual({ merchantId: 'm-1', customerId: 'c-1', status: 'delivered' });
+      expect(query.orderBy).toEqual({ createdAt: 'desc' });
+      // Solo la variante activa; sin precio en la llamada (CartService toma el precio actual de la BD)
+      expect(cartService.addItem).toHaveBeenCalledTimes(1);
+      expect(cartService.addItem).toHaveBeenCalledWith('c-1', 'm-1', 'v-1', 2, {
+        notes: 'sin cebolla',
+        skipStockCheck: !ctx.config.trackStock,
+      });
+      expect(res.ok).toBe(true);
+      const data = res.data as Record<string, unknown>;
+      expect(data).toMatchObject({
+        codigoOrigen: 'ORD-0030',
+        agregados: [{ label: 'Hamburguesa sencilla', cantidad: 2, notas: 'sin cebolla' }],
+        agotados: ['Perro especial', 'Limonada'],
+        subtotal: 36000,
+      });
+      expect(data.text).toContain('$36.000');
+      expect(data.text).toContain('sin cebolla');
+    });
+
+    it('AC-19: out of stock on add (trackStock) → reported as agotado, never throws', async () => {
+      prisma.order.findFirst.mockResolvedValue({
+        orderCode: 'ORD-0030',
+        items: [item('v-1', 'Hamburguesa sencilla')],
+      });
+      cartService.addItem.mockRejectedValue(new BadRequestException('Insufficient stock'));
+      cartService.createOrGetActiveCart.mockResolvedValue({ id: 'cart-1', items: [] });
+      const res = await run('repetir_pedido');
+      expect(res.ok).toBe(true);
+      expect(res.data).toMatchObject({ agregados: [], agotados: ['Hamburguesa sencilla'] });
+    });
+
+    it('clamps quantity to maxQtyPerLine', async () => {
+      prisma.order.findFirst.mockResolvedValue({
+        orderCode: 'ORD-0030',
+        items: [{ ...item('v-1', 'Hamburguesa sencilla'), quantity: 999 }],
+      });
+      cartService.addItem.mockResolvedValue(cartAfter);
+      cartService.createOrGetActiveCart.mockResolvedValue(cartAfter);
+      await run('repetir_pedido');
+      expect(cartService.addItem.mock.calls[0][3]).toBe(ctx.config.maxQtyPerLine);
+    });
+
+    it('AC-19: no delivered orders → sinPedidosEntregados', async () => {
+      expect(await run('repetir_pedido')).toEqual({
+        ok: true,
+        data: { sinPedidosEntregados: true },
+      });
+      expect(cartService.addItem).not.toHaveBeenCalled();
     });
   });
 });

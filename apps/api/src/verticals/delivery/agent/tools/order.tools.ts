@@ -1,6 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OrderStatus } from '@prisma/client';
 import { PrismaService } from '../../../../persistence/prisma/prisma.service';
+import { CartService } from '../../../../services/cart.service';
+import { CartPresenter, cartLineLabel } from '../../presenters/cart.presenter';
 import type {
   DeliveryOrderLifecycle,
   DeliveryTurnContext,
@@ -22,6 +24,9 @@ const ACTIVE_STATUSES: OrderStatus[] = [
   OrderStatus.preparing,
   OrderStatus.on_the_way,
 ];
+
+/** Máximo de ítems detallados en `data` (ToolResult compacto). */
+const MAX_ITEMS_IN_DATA = 5;
 
 /** RN-16: el cliente solo puede cancelar en estos estados. */
 const CUSTOMER_CANCELLABLE: OrderStatus[] = [OrderStatus.pending_payment, OrderStatus.confirmed];
@@ -48,7 +53,7 @@ export function remainingEtaMinutes(
 }
 
 /**
- * Herramientas de autoservicio del cliente (S4.2): estado_pedido, cancelar_pedido.
+ * Herramientas de autoservicio del cliente (S4.2): estado_pedido, cancelar_pedido, repetir_pedido.
  *
  * - Todo se lee de la BD en el turno (RN-00); cifras y ETA calculados aquí, nunca por el LLM.
  * - RN-16: cancelación solo en pending_payment/confirmed, vía `DeliveryOrderLifecycle` (S4.1),
@@ -79,17 +84,26 @@ export class OrderTools {
         additionalProperties: false,
       },
     },
+    {
+      name: 'repetir_pedido',
+      description:
+        'Repite el último pedido entregado: agrega al carrito los productos disponibles con el precio actual y avisa de los agotados.',
+      parameters: { type: 'object', properties: {}, additionalProperties: false },
+    },
   ];
 
   constructor(
     private readonly prisma: PrismaService,
     @Inject(DELIVERY_ORDER_LIFECYCLE) private readonly lifecycle: DeliveryOrderLifecycle,
+    private readonly cartService: CartService,
+    private readonly presenter: CartPresenter,
   ) {}
 
   handlers(): Record<string, ToolHandler> {
     return {
       estado_pedido: (_args, ctx) => this.safe('estado_pedido', () => this.status(ctx)),
       cancelar_pedido: (args, ctx) => this.safe('cancelar_pedido', () => this.cancel(args, ctx)),
+      repetir_pedido: (_args, ctx) => this.safe('repetir_pedido', () => this.repeat(ctx)),
     };
   }
 
@@ -187,6 +201,82 @@ export class OrderTools {
       },
     });
     return candidates.find((o) => codeNumber(o.orderCode) === n) ?? null;
+  }
+
+  /**
+   * AC-19 / RN-00: re-agrega al carrito activo los ítems del último pedido entregado cuya variante
+   * siga activa. El precio lo fija CartService.addItem con el precio ACTUAL de la BD (priceSnapshot),
+   * nunca el `unitPrice` histórico. Las notas del ítem se conservan.
+   */
+  private async repeat(ctx: DeliveryTurnContext): Promise<ToolResult> {
+    const last = await this.prisma.order.findFirst({
+      where: {
+        merchantId: ctx.merchantId,
+        customerId: ctx.customerId,
+        status: OrderStatus.delivered,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        orderCode: true,
+        items: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            variantId: true,
+            quantity: true,
+            notes: true,
+            snapshotName: true,
+            variant: {
+              select: {
+                name: true,
+                isActive: true,
+                product: { select: { name: true, isActive: true, merchantId: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!last) return { ok: true, data: { sinPedidosEntregados: true } };
+
+    const agregados: Array<{ label: string; cantidad: number; notas: string }> = [];
+    const agotados: string[] = [];
+    for (const item of last.items) {
+      const { variant } = item;
+      const label = variant ? cartLineLabel(variant.product.name, variant.name) : item.snapshotName;
+      const available =
+        variant?.isActive === true &&
+        variant.product.isActive &&
+        variant.product.merchantId === ctx.merchantId;
+      if (!available) {
+        agotados.push(label);
+        continue;
+      }
+      const cantidad = Math.min(item.quantity, ctx.config.maxQtyPerLine);
+      try {
+        await this.cartService.addItem(ctx.customerId, ctx.merchantId, item.variantId, cantidad, {
+          notes: item.notes ?? '',
+          skipStockCheck: !ctx.config.trackStock,
+        });
+        agregados.push({ label, cantidad, notas: item.notes ?? '' });
+      } catch {
+        // Sin stock (trackStock) o variante desaparecida: se avisa como agotado
+        agotados.push(label);
+      }
+    }
+
+    const cart = await this.cartService.createOrGetActiveCart(ctx.customerId, ctx.merchantId);
+    const view = this.presenter.toView(cart);
+    return {
+      ok: true,
+      data: {
+        codigoOrigen: last.orderCode,
+        agregados: agregados.slice(0, MAX_ITEMS_IN_DATA),
+        masAgregados: Math.max(0, agregados.length - MAX_ITEMS_IN_DATA),
+        agotados: agotados.slice(0, MAX_ITEMS_IN_DATA),
+        subtotal: view.subtotal,
+        text: this.presenter.render(view),
+      },
+    };
   }
 
   private async safe(name: string, fn: () => Promise<ToolResult>): Promise<ToolResult> {
