@@ -8,6 +8,7 @@ import type {
   ImageInterpretation,
 } from '../contracts';
 import { PHOTO_TEXTS, type ProductPhotoResolver } from './product-photo.service';
+import { RECEIPT_TEXTS, type ReceiptForwarder } from './receipt.service';
 
 const ctx = (
   mediaType?: 'audio' | 'image',
@@ -29,12 +30,17 @@ const imageFetcher = () => ({
 const interpretAs = (value: ImageInterpretation) => ({
   interpret: jest.fn().mockResolvedValue({ ok: true, value }),
 });
-const imageRouter = (interpreter: { interpret: jest.Mock }, photo?: { resolve: jest.Mock }) =>
+const imageRouter = (
+  interpreter: { interpret: jest.Mock },
+  photo?: { resolve: jest.Mock },
+  receipts?: { handle: jest.Mock },
+) =>
   new MediaRouter(
     imageFetcher() as unknown as MediaFetcher,
     { transcribe: jest.fn() } as unknown as Transcriber,
     interpreter as unknown as ImageInterpreter,
     photo as unknown as ProductPhotoResolver,
+    receipts as unknown as ReceiptForwarder,
   );
 
 describe('MediaRouter (S5.0-T3)', () => {
@@ -184,6 +190,50 @@ describe('MediaRouter (S5.0-T3)', () => {
       expect(photo.resolve).not.toHaveBeenCalled();
     },
   );
+
+  it('image receipt (S5.3-T3): the forwarder reply wins over the product flow', async () => {
+    const photo = { resolve: jest.fn() };
+    const receipts = { handle: jest.fn().mockResolvedValue(RECEIPT_TEXTS.received) };
+    const router = imageRouter(
+      interpretAs({ kind: 'payment_receipt', items: [], confidence: 'HIGH' }),
+      photo,
+      receipts,
+    );
+    await expect(router.route(ctx('image', 'media-2'))).resolves.toEqual({
+      action: 'reply',
+      response: RECEIPT_TEXTS.received,
+    });
+    expect(receipts.handle).toHaveBeenCalledWith(expect.anything(), 'payment_receipt');
+    expect(photo.resolve).not.toHaveBeenCalled();
+  });
+
+  it('image receipt: caption-based receipt still works when the interpreter fails', async () => {
+    const receipts = { handle: jest.fn().mockResolvedValue(RECEIPT_TEXTS.received) };
+    const router = imageRouter(
+      { interpret: jest.fn().mockResolvedValue({ ok: false, reason: 'TIMEOUT' }) },
+      undefined,
+      receipts,
+    );
+    await expect(router.route(ctx('image', 'media-2', 'ya pagué'))).resolves.toEqual({
+      action: 'reply',
+      response: RECEIPT_TEXTS.received,
+    });
+    expect(receipts.handle).toHaveBeenCalledWith(expect.anything(), null);
+  });
+
+  it('image: forwarder returns null → continues with the product flow', async () => {
+    const photo = { resolve: jest.fn().mockResolvedValue({ status: 'NOT_FOUND' }) };
+    const receipts = { handle: jest.fn().mockResolvedValue(null) };
+    const router = imageRouter(
+      interpretAs({ kind: 'product', items: [{ query: 'x', quantity: null }], confidence: 'LOW' }),
+      photo,
+      receipts,
+    );
+    await expect(router.route(ctx('image', 'media-2'))).resolves.toEqual({
+      action: 'reply',
+      response: PHOTO_TEXTS.notFound,
+    });
+  });
 
   it('video/document/sticker: unsupported type falls back without calling the fetcher', async () => {
     const mediaFetcher = { fetch: jest.fn() };

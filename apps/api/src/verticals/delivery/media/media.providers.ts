@@ -4,6 +4,7 @@ import { GraphMediaFetcher } from './media-fetcher.service';
 import { MediaRouter } from './media-router.service';
 import { GroqVisionInterpreter } from './image-interpreter.groq';
 import { ProductPhotoResolver } from './product-photo.service';
+import { ReceiptForwarder } from './receipt.service';
 import { NULL_TRANSCRIBER } from './null-media-providers';
 
 /**
@@ -16,5 +17,6 @@ export const MEDIA_PROVIDERS: Provider[] = [
   { provide: TRANSCRIBER, useValue: NULL_TRANSCRIBER },
   { provide: IMAGE_INTERPRETER, useClass: GroqVisionInterpreter }, // S5.3-T1
   ProductPhotoResolver, // S5.3-T2
+  ReceiptForwarder, // S5.3-T3
   MediaRouter,
 ];
