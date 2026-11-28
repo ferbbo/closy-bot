@@ -47,6 +47,18 @@ export interface EnqueueWhatsAppInteractiveParams {
   metadata?: Record<string, unknown>;
 }
 
+/** Delivery (S5.4): parámetros para encolar una imagen por link (`SEND_IMAGE`). */
+export interface EnqueueWhatsAppImageParams {
+  merchantId: string;
+  conversationId?: string;
+  channelId?: string;
+  to: string;
+  link: string;
+  caption?: string;
+  dedupeKey: string;
+  metadata?: Record<string, unknown>;
+}
+
 /**
  * Service for enqueueing outbound messages via transactional outbox pattern
  * Provides high-level API for adding messages to the outbox
@@ -187,6 +199,23 @@ export class OutboxService {
     );
     return this.outboxRepo.create(
       this.buildCreateInput(params, OutboxMessageType.SEND_INTERACTIVE, payloadJson),
+    );
+  }
+
+  /**
+   * Delivery (S5.4): encola una imagen por link (`SEND_IMAGE`). El link sale de la BD
+   * (`Product.imageUrl` o `menuImageUrl`, RN-00); nunca se loguea.
+   */
+  async enqueueWhatsAppImage(params: EnqueueWhatsAppImageParams) {
+    const payloadJson = {
+      image: { link: params.link, caption: params.caption },
+      metadata: params.metadata,
+    };
+    this.logger.log(
+      `Enqueueing WhatsApp image: to=${maskPhone(params.to)}, dedupeKey=${params.dedupeKey}`,
+    );
+    return this.outboxRepo.create(
+      this.buildCreateInput(params, OutboxMessageType.SEND_IMAGE, payloadJson),
     );
   }
 

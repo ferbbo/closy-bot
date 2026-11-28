@@ -287,4 +287,39 @@ describe('WhatsAppOutboundService (PR-03.11)', () => {
       fetchSpy.mockRestore();
     });
   });
+
+  describe('image messages (S5.4)', () => {
+    it('builds the Cloud API image-by-link payload (caption optional)', () => {
+      expect(
+        service.buildImagePayload('+573001234567', {
+          link: 'https://cdn.x/p.jpg',
+          caption: 'Doble',
+        }),
+      ).toEqual({
+        messaging_product: 'whatsapp',
+        to: '573001234567',
+        type: 'image',
+        image: { link: 'https://cdn.x/p.jpg', caption: 'Doble' },
+      });
+      expect(service.buildImagePayload('1', { link: 'https://cdn.x/p.jpg' }).image).toEqual({
+        link: 'https://cdn.x/p.jpg',
+      });
+    });
+
+    it('sendImageMessage falls back to env credentials (dry-run)', async () => {
+      const spy = jest.spyOn(service, 'sendImageMessageWithCredentials');
+      const result = await service.sendImageMessage('+573001234567', {
+        link: 'https://cdn.x/a.jpg',
+      });
+      expect(result.success).toBe(true);
+      expect(spy).toHaveBeenCalledWith(
+        '+573001234567',
+        { link: 'https://cdn.x/a.jpg' },
+        {
+          accessToken: 'test-token',
+          phoneNumberId: '123456789',
+        },
+      );
+    });
+  });
 });

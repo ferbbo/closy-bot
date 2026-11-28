@@ -31,6 +31,12 @@ export interface WhatsAppInteractiveButtons {
   buttons: Array<{ id: string; title: string }>;
 }
 
+/** Delivery (S5.4): imagen por link público (Cloud API `type: image`, `image.link`). */
+export interface WhatsAppImageMessage {
+  link: string;
+  caption?: string;
+}
+
 /**
  * WhatsApp Outbound Service
  * Sends messages via WhatsApp Cloud API
@@ -279,6 +285,33 @@ export class WhatsAppOutboundService {
     credentials: WhatsAppCredentials,
   ): Promise<SendMessageResult> {
     return this.postPayload(this.buildInteractivePayload(to, msg), credentials, 'interactive');
+  }
+
+  /** Delivery (S5.4): payload Cloud API de una imagen por link. */
+  buildImagePayload(to: string, msg: WhatsAppImageMessage): Record<string, unknown> {
+    return {
+      messaging_product: 'whatsapp',
+      to: to.replace(/[+\s]/g, ''),
+      type: 'image',
+      image: { link: msg.link, ...(msg.caption ? { caption: msg.caption } : {}) },
+    };
+  }
+
+  /** Delivery (S5.4): envía una imagen con las credenciales de env (fallback sin canal). */
+  async sendImageMessage(to: string, msg: WhatsAppImageMessage): Promise<SendMessageResult> {
+    return this.sendImageMessageWithCredentials(to, msg, {
+      accessToken: this.accessToken,
+      phoneNumberId: this.phoneNumberId,
+    });
+  }
+
+  /** Delivery (S5.4): envía una imagen con credenciales explícitas del canal. */
+  async sendImageMessageWithCredentials(
+    to: string,
+    msg: WhatsAppImageMessage,
+    credentials: WhatsAppCredentials,
+  ): Promise<SendMessageResult> {
+    return this.postPayload(this.buildImagePayload(to, msg), credentials, 'image');
   }
 
   /** Delivery (S5.4): POST genérico a /messages (dry-run en test o sin credenciales). */

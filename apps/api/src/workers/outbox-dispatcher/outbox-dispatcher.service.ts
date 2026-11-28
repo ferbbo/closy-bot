@@ -6,6 +6,7 @@ import { ChannelRepository } from '../../persistence/repositories/channel.reposi
 import {
   SendMessageResult,
   WhatsAppCredentials,
+  WhatsAppImageMessage,
   WhatsAppInteractiveButtons,
   WhatsAppOutboundService,
   WhatsAppTemplateMessage,
@@ -121,6 +122,9 @@ export class OutboxDispatcherService implements OnModuleInit {
           break;
         case OutboxMessageType.SEND_INTERACTIVE:
           await this.sendInteractiveMessage(message);
+          break;
+        case OutboxMessageType.SEND_IMAGE:
+          await this.sendImageMessage(message);
           break;
         default:
           throw new Error(`Unknown message type: ${message.type}`);
@@ -285,6 +289,28 @@ export class OutboxDispatcherService implements OnModuleInit {
         this.whatsappOutbound.sendInteractiveMessageWithCredentials(message.to, msg, credentials),
     );
     await this.completeSend(message, result, msg.body, 'Interactive');
+  }
+
+  /** Delivery (S5.4): envía una imagen por link (`SEND_IMAGE`); el MessageLog guarda un marcador. */
+  private async sendImageMessage(message: OutboxMessage) {
+    const payload = message.payloadJson as unknown as { image?: WhatsAppImageMessage };
+    const link = payload?.image?.link;
+    if (!link) {
+      throw new Error('Invalid SEND_IMAGE payload: missing link');
+    }
+    const msg: WhatsAppImageMessage = { link, caption: payload.image?.caption };
+    const result = await this.sendWithChannel(
+      message,
+      () => this.whatsappOutbound.sendImageMessage(message.to, msg),
+      (credentials) =>
+        this.whatsappOutbound.sendImageMessageWithCredentials(message.to, msg, credentials),
+    );
+    await this.completeSend(
+      message,
+      result,
+      `[imagen]${msg.caption ? ` ${msg.caption}` : ''}`,
+      'Image',
+    );
   }
 
   /** Delivery (S5.4): credenciales del canal si existe; si no, env vars (como SEND_TEMPLATE). */

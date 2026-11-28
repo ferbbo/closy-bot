@@ -44,6 +44,8 @@ describe('OutboxDispatcherService', () => {
             sendTemplateMessageWithCredentials: jest.fn(), // S1.4
             sendInteractiveMessage: jest.fn(), // S5.4
             sendInteractiveMessageWithCredentials: jest.fn(), // S5.4
+            sendImageMessage: jest.fn(), // S5.4
+            sendImageMessageWithCredentials: jest.fn(), // S5.4
           },
         },
         {
@@ -498,6 +500,55 @@ describe('OutboxDispatcherService', () => {
         5,
       );
       expect(repository.markSent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('sendImageMessage (S5.4)', () => {
+    it('dispatches SEND_IMAGE with channel credentials and logs a marker', async () => {
+      channelRepo.findById.mockResolvedValue({
+        id: 'channel-1',
+        credentials: { phoneNumberId: '123', accessToken: 'tok' },
+      } as never);
+      whatsappOutbound.sendImageMessageWithCredentials.mockResolvedValue({
+        success: true,
+        messageId: 'wamid.IMG',
+      });
+      const messageLogRepo = service['messageLogRepository'] as unknown as { create: jest.Mock };
+      const image = { link: 'https://cdn.x/p.jpg', caption: 'Doble' };
+      await service['processMessage']({
+        id: 'msg-img',
+        type: OutboxMessageType.SEND_IMAGE,
+        to: '+573001234567',
+        channelId: 'channel-1',
+        conversationId: 'conv-1',
+        merchantId: 'm-1',
+        attempts: 0,
+        payloadJson: { image },
+      } as unknown as OutboxMessage);
+      expect(whatsappOutbound.sendImageMessageWithCredentials).toHaveBeenCalledWith(
+        '+573001234567',
+        image,
+        { phoneNumberId: '123', accessToken: 'tok' },
+      );
+      expect(repository.markSent).toHaveBeenCalledWith('msg-img', 'wamid.IMG');
+      expect(messageLogRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ text: '[imagen] Doble' }),
+      );
+    });
+
+    it('marks failed on a payload without link', async () => {
+      await service['processMessage']({
+        id: 'msg-img2',
+        type: OutboxMessageType.SEND_IMAGE,
+        to: '1',
+        attempts: 0,
+        payloadJson: { image: {} },
+      } as unknown as OutboxMessage);
+      expect(repository.markFailed).toHaveBeenCalledWith(
+        'msg-img2',
+        'Invalid SEND_IMAGE payload: missing link',
+        5,
+      );
     });
   });
 });

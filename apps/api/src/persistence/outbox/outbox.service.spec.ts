@@ -286,4 +286,30 @@ describe('OutboxService', () => {
       expect(repository.create.mock.calls[0][0]).not.toHaveProperty('channelRef');
     });
   });
+
+  describe('enqueueWhatsAppImage (S5.4)', () => {
+    it('creates a SEND_IMAGE message with link, caption and dedupeKey', async () => {
+      repository.create.mockResolvedValue({ id: 'outbox-img' } as OutboxMessage);
+      await service.enqueueWhatsAppImage({
+        merchantId: 'merchant-1',
+        conversationId: 'conv-1',
+        channelId: 'channel-1',
+        to: '+573001234567',
+        link: 'https://cdn.x/p.jpg',
+        caption: 'Hamburguesa doble',
+        dedupeKey: 'photo:conv-1:v1:1',
+      });
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: OutboxMessageType.SEND_IMAGE,
+          payloadJson: {
+            image: { link: 'https://cdn.x/p.jpg', caption: 'Hamburguesa doble' },
+            metadata: undefined,
+          },
+          dedupeKey: 'photo:conv-1:v1:1',
+          channelRef: { connect: { id: 'channel-1' } },
+        }),
+      );
+    });
+  });
 });
