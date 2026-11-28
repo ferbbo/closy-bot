@@ -8,6 +8,10 @@ import { MESSAGING_PROVIDERS } from './messaging/messaging.providers';
 import { CART_TOOLS_PROVIDERS } from './agent/tools/cart-tools.providers';
 import { DELIVERY_CATALOG_PROVIDERS } from './catalog/catalog.providers';
 import { CatalogMatcherService } from './catalog/catalog-matcher.service';
+import { LlmModule } from '../../llm/llm.module';
+import { GroundingValidator } from './agent/grounding-validator';
+import { DeliveryAgentService, DELIVERY_LLM_PROVIDER } from './agent/delivery-agent.service';
+import { DeliveryVerticalHandler } from './handler/delivery-vertical.handler';
 import { ServicesModule } from '../../services/services.module';
 import { BusinessMessengerService } from './messaging/business-messenger.service';
 import { CustomerServiceWindowService } from './messaging/customer-service-window.service';
@@ -17,16 +21,21 @@ import { CustomerServiceWindowService } from './messaging/customer-service-windo
  *
  * Todo lo de este módulo está detrás de `FeatureFlagsService.isDeliveryEnabled`
  * y `merchant.industry === 'restaurante'`. Los providers (config, agente,
- * mensajería, sinks, POS…) se registran en los slices siguientes; el handler
- * vertical se registra en `VerticalRouterService` en S2.3.
+ * mensajería, sinks, POS…) se suman por slice; `DeliveryVerticalHandler` se
+ * registra solo en `VerticalRouterService` (onModuleInit).
  */
 @Module({
-  imports: [FeatureFlagsModule, VerticalsModule, PersistenceModule, ServicesModule],
+  imports: [FeatureFlagsModule, VerticalsModule, PersistenceModule, ServicesModule, LlmModule],
   providers: [
     ...DELIVERY_CONFIG_PROVIDERS,
     ...MESSAGING_PROVIDERS,
     ...CART_TOOLS_PROVIDERS,
     ...DELIVERY_CATALOG_PROVIDERS,
+    GroundingValidator,
+    DeliveryAgentService,
+    DeliveryVerticalHandler,
+    // Override point for tests/e2e (FakeLlmProvider); null → Groq via LlmService
+    { provide: DELIVERY_LLM_PROVIDER, useValue: null },
   ],
   exports: [
     DeliveryConfigService,
