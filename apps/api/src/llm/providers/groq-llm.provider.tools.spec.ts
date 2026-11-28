@@ -4,7 +4,7 @@ import type { LlmToolRequest } from '../../verticals/delivery/contracts';
 
 jest.mock('groq-sdk');
 
-/** S1.3-T1: generateWithTools con el cliente groq mockeado (nunca Groq real). */
+/** S1.3-T1: generateWithTools / generateJson con el cliente groq mockeado (nunca Groq real). */
 describe('GroqLlmProvider (S1.3 tools + json)', () => {
   let provider: GroqLlmProvider;
   let create: jest.Mock;
@@ -157,6 +157,39 @@ describe('GroqLlmProvider (S1.3 tools + json)', () => {
       expect(await provider.generateWithTools(baseReq)).toEqual({
         ok: false,
         reason: 'INVALID_RESPONSE',
+      });
+    });
+  });
+
+  describe('generateJson', () => {
+    it('requests json_object and returns the parsed value', async () => {
+      create.mockResolvedValue(completion({ content: '{"kind":"product","items":[]}' }));
+      const res = await provider.generateJson<{ kind: string }>({
+        systemPrompt: 'Responde en JSON',
+        userPrompt: 'x',
+      });
+      expect(res).toEqual({ ok: true, value: { kind: 'product', items: [] } });
+      expect(create.mock.calls[0][0].response_format).toEqual({ type: 'json_object' });
+    });
+
+    it('returns INVALID_RESPONSE on malformed JSON', async () => {
+      create.mockResolvedValue(completion({ content: 'no es json' }));
+      expect(await provider.generateJson({ systemPrompt: 's', userPrompt: 'u' })).toEqual({
+        ok: false,
+        reason: 'INVALID_RESPONSE',
+      });
+    });
+
+    it('returns TIMEOUT / PROVIDER_ERROR without throwing', async () => {
+      create.mockImplementationOnce(() => new Promise(() => undefined));
+      expect(
+        await provider.generateJson({ systemPrompt: 's', userPrompt: 'u', timeoutMs: 20 }),
+      ).toEqual({ ok: false, reason: 'TIMEOUT' });
+
+      create.mockRejectedValueOnce(new Error('boom'));
+      expect(await provider.generateJson({ systemPrompt: 's', userPrompt: 'u' })).toEqual({
+        ok: false,
+        reason: 'PROVIDER_ERROR',
       });
     });
   });

@@ -18,11 +18,31 @@ export interface LlmProvider {
    * Timeout por defecto: 8000 ms (SPEC §3.5). Sin reintentos (presupuesto de latencia del turno).
    */
   generateWithTools(req: LlmToolRequest): Promise<LlmToolResponse>;
+
+  /**
+   * S1.3: Respuesta JSON (`response_format: json_object`). NUNCA lanza.
+   * El valor se devuelve parseado pero SIN validar contra `T`: el llamador valida la forma.
+   */
+  generateJson<T = unknown>(req: LlmJsonRequest): Promise<LlmJsonResult<T>>;
 }
 
 /** S1.3: Razón de fallo común a los métodos que no lanzan (alias de `LlmToolResponse` ok:false). */
 export type LlmFailureReason = Extract<LlmToolResponse, { ok: false }>['reason'];
 export type LlmFailure = { ok: false; reason: LlmFailureReason };
+
+/** S1.3: Parámetros de `generateJson`. El prompt debe pedir explícitamente JSON (requisito de json_object). */
+export interface LlmJsonRequest {
+  systemPrompt: string;
+  userPrompt: string;
+  /** Por defecto `DELIVERY_LLM_MODEL` */
+  model?: string;
+  maxTokens?: number;
+  temperature?: number;
+  /** Por defecto 8000 ms */
+  timeoutMs?: number;
+}
+
+export type LlmJsonResult<T> = { ok: true; value: T } | LlmFailure;
 
 export interface GenerateResponseParams {
   /** System prompt with instructions and guardrails */

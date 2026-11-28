@@ -8,6 +8,8 @@ import {
   LlmProviderError,
   LlmFailure,
   LlmFailureReason,
+  LlmJsonRequest,
+  LlmJsonResult,
 } from '../interfaces/llm-provider.interface';
 import type {
   ChatCompletion,
@@ -130,6 +132,38 @@ export class GroqLlmProvider implements LlmProvider {
         ? { usage: { inputTokens: usage.prompt_tokens, outputTokens: usage.completion_tokens } }
         : {}),
     };
+  }
+
+  /**
+   * S1.3: respuesta JSON (`response_format: json_object`). Nunca lanza; sin reintentos.
+   * Devuelve el JSON parseado sin validar su forma (lo valida el llamador).
+   */
+  async generateJson<T = unknown>(req: LlmJsonRequest): Promise<LlmJsonResult<T>> {
+    const result = await this.callCompletion('json', req.timeoutMs, (signal) =>
+      this.client.chat.completions.create(
+        {
+          model: req.model ?? this.deliveryModel,
+          messages: [
+            { role: 'system', content: req.systemPrompt },
+            { role: 'user', content: req.userPrompt },
+          ],
+          max_tokens: req.maxTokens ?? Number(this.maxTokens),
+          temperature: req.temperature ?? 0,
+          stream: false,
+          response_format: { type: 'json_object' },
+        },
+        { signal },
+      ),
+    );
+    if (!result.ok) return result;
+
+    const content = result.value.choices?.[0]?.message?.content;
+    if (!content) return this.fail('json', 'INVALID_RESPONSE');
+    try {
+      return { ok: true, value: JSON.parse(content) as T };
+    } catch {
+      return this.fail('json', 'INVALID_RESPONSE');
+    }
   }
 
   /**
