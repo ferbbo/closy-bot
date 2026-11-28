@@ -41,18 +41,18 @@ PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 npx prisma generate --no-engine --schem
 ## Slices
 | Slice | Track | Estado | PR | Commits | AC cubiertos | Notas |
 |---|---|---|---|---|---|---|
-| S1.1 | Integrador | TODO | | | | |
-| S1.2 | B | TODO | | | | |
-| S1.3 | C | TODO | | | | |
-| S1.4 | A | TODO | | | | P0 mensajería + plantillas |
-| S1.5 | Integrador | TODO | | | | P0 Meta Sandbox (en paralelo con S1.2–S1.4) |
-| S2.1 | A | TODO | | | | |
-| S2.2 | B | TODO | | | | |
-| S2.3 | Integrador | TODO | | | | |
-| S3.1 | A | TODO | | | | |
-| S3.2 | B | TODO | | | | |
-| S3.4 | C | TODO | | | | Puerto POS (P0) |
-| S3.3 | Integrador | TODO | | | | después de S3.1, S3.2 y S3.4 |
+| S1.1 | Integrador | MERGED | #138 | 6 | AC-01 (parcial), AC-02 (schema) | schema aditivo, flag, router, contratos, seed demo |
+| S1.2 | B | MERGED | #141 | 7 | AC-02, AC-10/11/12 (base), AC-41 (función) | preset restaurante vacío (D-024) |
+| S1.3 | C | MERGED | #140 | 4 | base AC-03/04/07 | generateWithTools, generateJson, FakeLlm, runToolLoop |
+| S1.4 | A | MERGED | #142 | 10 | AC-34, AC-35 (parcial), AC-36, AC-37 (base), AC-38 a/b/e | WABA DTO (D-027), WHATSAPP_SANDBOX (D-028) |
+| S1.5 | Integrador | MERGED | #139 | 7 | AC-38 a–d | Meta Sandbox + DEMO.md |
+| S2.1 | A | MERGED | #144 | 6 | AC-05/06/07/09/39/40/42 (base) | matcher, menú, consultar_negocio, fallback parser |
+| S2.2 | B | MERGED | #143 | 6 | AC-04, AC-08, AC-03/14 (parcial) | notas + extras en cart/checkout (D-031) |
+| S2.3 | Integrador | MERGED | #145 | 9 | AC-03, 04, 05, 06, 07, 10, 22, 23, 33, 35, 39, 40, 41 | agente + handler + e2e delivery-order |
+| S3.1 | A | MERGED | #147 | 5 | AC-11, AC-12, AC-32 (parcial) | CheckoutDraftStore, DeliveryQuoteService, fijar_entrega, cotizar_domicilio |
+| S3.2 | B | MERGED | #148 | 5 | AC-10, AC-13, AC-24 (base) | fijar_pago, guard de horario, AmountLimitGuard |
+| S3.4 | C | MERGED | #146 | 5 | AC-30 | registry + Noop/Fake + kit de contrato + PosOrderSink |
+| S3.3 | Integrador | MERGED | #149 | 7 | AC-14, AC-15, AC-24, AC-30, AC-32, AC-37 | resumen/confirmar, comanda, ORDER_SINKS, e2e delivery-checkout |
 | S4.1 | A | TODO | | | | |
 | S4.2 | B | TODO | | | | |
 | S4.3 | C | TODO | | | | |

@@ -69,3 +69,80 @@
 - **Contexto:** el owner exige que precios, cantidades, productos, FAQ, políticas, imágenes y toda la información comercial salgan siempre de la BD.
 - **Auditoría (huecos cerrados):** (1) el system prompt incluía horario y políticas, y ahora solo lleva la persona; (2) `restaurante.defaults` podía traer zonas u horarios inventados, y ahora solo trae parámetros técnicos más `isCommerciallyComplete`; (3) no había herramienta para FAQ ni políticas, y se agrega `consultar_negocio` (reusa `PlaybookService`); (4) el validador solo cubría montos, y ahora cubre también cuentas, llaves, URLs y nombres de producto; (5) memoria y `lastCandidates` podían usarse como fuente de precio, y ahora queda prohibido (sin caché comercial entre turnos). Imágenes: solo `Product.imageUrl` y `menuImageUrl`. POS: sincroniza a la BD y nunca se lee directo.
 - **Reversión:** no aplica; es una regla raíz.
+
+### D-016 · Unique de CartItem con notes: lookup legacy con `notes=''` · Tier 2 · run-20261127-2008 · 2026-11-27
+- **Contexto:** SPEC §3.4 cambia el unique `[cartId, variantId]` → `[cartId, variantId, notes]`; el input compuesto de Prisma cambia de nombre.
+- **Decisión:** `cart-item.repository.findByCartAndVariant` usa `cartId_variantId_notes` con `notes: ''` (los ítems legacy siempre tienen `''`). `db push` pide `--accept-data-loss` por el unique nuevo, que es un superconjunto del anterior y no puede tener duplicados.
+- **Reversión:** volver al unique anterior (requiere que no existan líneas con notas).
+
+### D-017 · Estados `preparing`/`on_the_way` en el dashboard e industria `restaurante` en legacy · Tier 2 · run-20261127-2008 · 2026-11-27
+- `orders.service` ALLOWED_TRANSITIONS: `preparing → on_the_way|cancelled`, `on_the_way → delivered` (igual a RN-14); transiciones legacy intactas. `Industry` de dominio suma `restaurante`; en flujos legacy usa el playbook genérico y la persona LLM genérica.
+
+### D-018 · Router vertical con `register()` y tipos re-exportados de `contracts.ts` · Tier 1 · run-20261127-2008 · 2026-11-27
+- `VerticalRouterService.register(handler)` en lugar de multi-provider (evita el ciclo Orchestrator ↔ Delivery). Un error de un handler se loguea y cae a los flujos legacy. `vertical.types.ts` re-exporta desde `delivery/contracts.ts` (fuente única).
+
+### D-019 · `contracts.ts` exento de prettier/ban-types · Tier 1 · run-20261127-2008 · 2026-11-27
+- Para conservar la copia literal de CONTRACTS.md §1.
+
+### D-020 · Variables del Meta Sandbox opt-in por suite · Tier 1 · run-20261127-2008 · 2026-11-27
+- `applySandboxEnv(baseUrl)` + `import()` dinámico de AppModule (ConfigModule toma la foto del entorno al importarse). Fijarlas en `jest-e2e.setup.ts` activaría `MetaSignatureGuard` en suites legacy sin firma.
+
+### D-021 · Graph API falso con `http` de Node · Tier 1 · run-20261127-2008 · 2026-11-27
+- express no es resoluble desde apps/api (pnpm estricto). Fixtures de media en memoria con firmas reales (OggS/JPEG). Un hijo síncrono (`execFileSync`) bloquea el event loop del sandbox: los e2e usan `execFile` asíncrono.
+
+### D-022 · `FakeGraphApi.sent()` sin `image` (contrato) · Tier 2 · run-20261127-2008 · 2026-11-27
+- El contrato congelado no incluye mensajes `image`; S5.4 (`ver_foto_producto`, P1) deberá extender el contrato.
+
+### D-023 · LLM con herramientas (S1.3) · Tier 1 · run-20261127-2008 · 2026-11-27
+- Métodos nuevos obligatorios en `LlmProvider`; `generateJson<T>` no valida la forma (lo hace el llamador); modelo `DELIVERY_LLM_MODEL`, timeout 8 s, sin reintentos; `runToolLoop` no depende de `LLM_ENABLED` (gating del llamador); log `llm.tool_loop` sin PII.
+
+### D-024 · Preset `restaurante` de MerchantConfig vacío (RN-00) · Tier 2 · run-20261127-2008 · 2026-11-27
+- Antes caía al preset `ropa` e inventaba medios de pago, tarifa y política para restaurantes. Ahora `paymentMethods: []`, `shippingConfig: {}`, `returnPolicy: null`.
+
+### D-025 · PATCH `deliveryConfig` con gating · Tier 2 · run-20261127-2008 · 2026-11-27
+- Flag apagado → 403; industria ≠ restaurante → 403; la respuesta suma `deliveryConfig` (aditivo); `null` lo borra; mezcla sobre lo guardado y persiste la config completa validada (400 con path exacto).
+
+### D-026 · Defaults técnicos de DeliveryConfig · Tier 1 · run-20261127-2008 · 2026-11-27
+- `prepTimeMinutes=0` = no configurado; `pickupEnabled=false`; `maxOrderAmountWithoutHuman=300000` (umbral de seguridad RN-17, no se muestra); `temporarilyClosed` sin `nextOpening`; `quote` no revisa `pickupEnabled` (lo hace `fijar_entrega`). Propuesta pendiente: `PICKUP_DISABLED` en `ShippingQuote`.
+
+### D-027 · DTO del webhook acepta campos WABA · Tier 2 · run-20261127-2008 · 2026-11-27
+- Antes los webhooks de plantillas/calidad respondían 400 y Meta reintentaba. `messaging_product`/`metadata` solo se omiten para valores WABA puros; `messages` sigue estricto (test).
+
+### D-028 · `WHATSAPP_SANDBOX` · Tier 2 · run-20261127-2008 · 2026-11-27
+- Variable nueva (Joi boolean, default false, `.env.example`). Solo con `true` y `NODE_ENV=test` el outbound sale del dry-run hacia el Meta Sandbox. Sin efecto en producción.
+
+### D-029 · Políticas de BusinessMessenger · Tier 1 · run-20261127-2008 · 2026-11-27
+- Plantilla sin fila de estado = usable; ventana desde `MessageLog` IN del comercio; tope por pedido y destinatario (prefijo `order:{id}:`); opt-out solo para plantillas al cliente; flag apagado → `skipped TEMPLATE_NOT_USABLE` sin BD; parámetros vacíos → `-`; `notifications` vía `DeliveryConfigService.parseStored`; el controlador resuelve el handler WABA con `ModuleRef` (`strict:false`).
+
+### D-030 · Alcance del GroundingValidator · Tier 1 · run-20261127-2008 · 2026-11-27
+- Montos, minutos, secuencias de ≥ 6 dígitos y URLs contra los `data` de herramientas del turno. Los nombres de producto se protegen por construcción (presenters + guard RN-02), sin detección léxica. Respaldo: último bloque de presenter del turno o pedir reformular.
+
+### D-031 · Notas y extras en CartService/CheckoutService · Tier 2 · run-20261127-2008 · 2026-11-27
+- Notas normalizadas (trim, espacios, minúsculas `es`, máx. 120); sin notas = camino legacy. `extras`: `neighborhood` → `shippingAddress`, `reference` → `Order.notes`, total = subtotal + tarifa; sin extras idéntico a legacy.
+
+### D-032 · Herramientas de carrito · Tier 1 · run-20261127-2008 · 2026-11-27
+- Reducir cantidad con `CartItemRepository.updateQuantity` (el servicio valida stock al bajar); varias líneas del mismo variantId → `AMBIGUOUS_ITEM`; `maxQtyPerLine` sobre el total de la línea; `data.text` = bloque exacto del presenter.
+
+### D-033 · Matcher y herramientas de catálogo · Tier 1 · run-20261127-2008 · 2026-11-27
+- Puntaje = fracción de palabras de la consulta presentes (normalizado); MATCHED si 1 candidato o mejor ≥ 0.5 y +0.2 sobre el segundo. `consultar_negocio` no devuelve las FAQ genéricas del playbook legacy (son defaults de código, RN-00) y relee `deliveryConfig` en el turno.
+
+### D-034 · Guards deterministas en el handler · Tier 1 · run-20261127-2008 · 2026-11-27
+- Opt-out, temas ajenos, comercio incompleto y horario con textos fijos (`DELIVERY_TEXTS`; "cerrado" usa la próxima apertura de la BD). Reactivación de opt-out al volver a agregar al carrito. Historial = últimos 8 `MessageLog` sin el mensaje actual.
+
+### D-035 · Inyección de dependencias del agente · Tier 1 · run-20261127-2008 · 2026-11-27
+- `HandoffService` vía `ModuleRef` (`strict:false`) para evitar ciclos; token `DELIVERY_LLM_PROVIDER` (`null` → Groq) para inyectar `FakeLlmProvider` en e2e.
+
+### D-036 · PosOrderSink · Tier 1 · run-20261127-2008 · 2026-11-27
+- Noop declara `pushOrder=false`; el sink marca `skipped` sin llamar al adapter si `provider==='none'` o `!capabilities().pushOrder`. Aviso al encargado con `BusinessMessenger.alertOperation` (`order:{id}:pos_failed`). Reintento inmediato; un adapter que lanza = no reintentable (evita duplicados). Secretos por `process.env[secretRef]`, enmascarados en errores. Solo `synced` corta la repetición.
+
+### D-037 · fijar_entrega / cotizar_domicilio · Tier 1 · run-20261127-2008 · 2026-11-27
+- Sin modalidad → `delivery`; una dirección sin barrio reconocible conserva el barrio previo; cambiar modalidad, dirección, barrio o carrito borra `quote` y `summary` (RN-12); cotización no OK borra la `quote`.
+
+### D-038 · fijar_pago y guards · Tier 1 · run-20261127-2008 · 2026-11-27
+- Errores como datos; efectivo sin monto → `pedirMontoEfectivo`; número < 1000 sin sufijo = miles; `NEEDS_QUOTE` solo con efectivo + monto; `AmountLimitGuard.escalate` nunca lanza. Deuda: helper de draft propio y `paymentInstructions` duplicado (unificar con `CheckoutDraftStore` / `business-info.tool`).
+
+### D-039 · Confirmación (RN-12) · Tier 1 · run-20261127-2008 · 2026-11-27
+- `resumen_pedido` recotiza con el subtotal vivo (RN-00); afirmación por regex determinista sin negaciones; "turno anterior" = `issuedAt` < `now` del turno; COD → `confirmed` + `confirmedAt`, transferencia → `pending_payment` + `pago_pendiente`; total > límite → `pending_payment` + handoff; la comanda sale solo en `confirmed`; confirmar limpia `optedOutAt`. El agente anexa el bloque exacto del presenter si el LLM no lo incluyó.
+
+### D-040 · Reloj del turno y metadata del handler · Tier 1 · run-20261127-2008 · 2026-11-27
+- `now = new Date()` (ms): el timestamp del webhook tiene precisión de 1 s y hacía fallar la regla de "turno anterior". El handler relee la metadata antes de guardar y fusiona solo sus claves (`privacyNoticeAt`, `lastCandidates`) para no pisar el draft escrito por las herramientas.
