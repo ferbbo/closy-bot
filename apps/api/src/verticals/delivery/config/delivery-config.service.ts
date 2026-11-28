@@ -1,6 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../persistence/prisma/prisma.service';
-import { CommercialCompleteness, DeliveryConfig, DeliveryZone, OpenStatus } from '../contracts';
+import {
+  CommercialCompleteness,
+  DeliveryConfig,
+  DeliveryZone,
+  OpenStatus,
+  ShippingQuote,
+  ShippingQuoteInput,
+} from '../contracts';
+
+export type QuoteInput = Omit<ShippingQuoteInput, 'merchantId'>;
 import { validateDeliveryConfig } from './delivery-config.validator';
 import { buildRestauranteDefaults } from './restaurante.defaults';
 import { isCommerciallyComplete } from './commercial-completeness';
@@ -131,5 +140,51 @@ export class DeliveryConfigService {
       }
     }
     return null;
+  }
+
+  /**
+   * RN-09 a RN-11 (puro; las cifras salen de `cfg`, leído de la BD).
+   * - pickup → tarifa 0, ETA = prepTimeMinutes, sin zona ni mínimo. Verificar
+   *   `cfg.pickupEnabled` es responsabilidad del consumidor (fijar_entrega).
+   * - sin barrio detectable → NEEDS_NEIGHBORHOOD; barrio sin zona → OUT_OF_COVERAGE.
+   *   Si solo llega `address` y no contiene ninguna zona, se pide el barrio.
+   * - subtotal (sin domicilio) < minOrder → BELOW_MINIMUM con `minOrder` y `missing`.
+   * - tarifa 0 si `freeDeliveryAbove !== null && subtotal >= freeDeliveryAbove`.
+   */
+  quote(cfg: DeliveryConfig, input: QuoteInput): ShippingQuote {
+    if (input.fulfillment === 'pickup') {
+      return {
+        ok: true,
+        zoneId: null,
+        zoneName: null,
+        fee: 0,
+        etaMinutes: cfg.prepTimeMinutes,
+        fulfillment: 'pickup',
+      };
+    }
+    const neighborhood = input.neighborhood?.trim() ?? '';
+    const address = input.address?.trim() ?? '';
+    if (!neighborhood && !address) return { ok: false, reason: 'NEEDS_NEIGHBORHOOD' };
+    const zone = this.resolveZone(cfg, neighborhood || address);
+    if (!zone) {
+      return { ok: false, reason: neighborhood ? 'OUT_OF_COVERAGE' : 'NEEDS_NEIGHBORHOOD' };
+    }
+    if (input.subtotal < zone.minOrder) {
+      return {
+        ok: false,
+        reason: 'BELOW_MINIMUM',
+        minOrder: zone.minOrder,
+        missing: zone.minOrder - input.subtotal,
+      };
+    }
+    const free = cfg.freeDeliveryAbove !== null && input.subtotal >= cfg.freeDeliveryAbove;
+    return {
+      ok: true,
+      zoneId: zone.id,
+      zoneName: zone.name,
+      fee: free ? 0 : zone.fee,
+      etaMinutes: cfg.prepTimeMinutes + zone.etaMinutes,
+      fulfillment: 'delivery',
+    };
   }
 }
