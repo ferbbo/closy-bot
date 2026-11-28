@@ -48,6 +48,16 @@ export const MERCHANT_CONFIG_PRESETS: Record<string, MerchantConfigData> = {
     orderCodePrefix: 'PED',
     autoConfirmCod: true,
   },
+  // Delivery vertical (RN-00): sin datos comerciales inventados. Medios de pago,
+  // envío y políticas los configura el comercio; hasta entonces isCommerciallyComplete=false.
+  restaurante: {
+    paymentMethods: [],
+    shippingConfig: {},
+    returnPolicy: null,
+    currency: 'COP',
+    orderCodePrefix: 'ORD',
+    autoConfirmCod: true,
+  },
 };
 
 /** Fallback preset when merchant has no industry set */
