@@ -63,6 +63,8 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
     }
     const text = media.action === 'continue' ? media.text : (ctx.input.text ?? '');
     const echoPrefix = media.action === 'continue' ? media.echoPrefix : '';
+    // S5.3-T2: candidatos de una foto de producto (RN-02/RN-25); el cliente elige en el próximo turno.
+    const photoCandidates = media.action === 'continue' ? (media.candidates ?? []) : [];
     // Wall clock (ms): the webhook timestamp has 1 s precision and RN-12 compares turns
     const now = new Date();
     const conv = await this.prisma.conversation.findUnique({
@@ -71,6 +73,9 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
     });
     const metadata = (conv?.metadata ?? {}) as Record<string, unknown>;
     const delivery: DeliveryMeta = { ...((metadata.delivery as DeliveryMeta | undefined) ?? {}) };
+    if (photoCandidates.length) {
+      delivery.lastCandidates = { items: photoCandidates, createdAt: now.toISOString() };
+    }
 
     // RN-29: opt-out de mensajes iniciados por el negocio
     if (isOptOut(text)) {
@@ -125,7 +130,13 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
           lastCandidates: delivery.lastCandidates ?? null,
         });
         if (turn.candidates?.length) {
-          delivery.lastCandidates = { items: turn.candidates, createdAt: now.toISOString() };
+          const extra = turn.candidates.filter(
+            (c) => !photoCandidates.some((p) => p.variantId === c.variantId),
+          );
+          delivery.lastCandidates = {
+            items: [...photoCandidates, ...extra],
+            createdAt: now.toISOString(),
+          };
         }
         reactivate = turn.toolTrace.some((t) => t.name === 'agregar_al_carrito' && t.ok);
         out = { text: turn.text, intent: 'DELIVERY_ORDER' };
