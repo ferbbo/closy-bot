@@ -1,6 +1,8 @@
 import { Category } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import type { ProductWithVariants } from '../../../../persistence/repositories/product.repository';
+import type { DeliveryTurnContext } from '../../contracts';
+import { buildRestauranteDefaults } from '../../config/restaurante.defaults';
 
 /** Fixtures de catálogo (forma de `ProductWithVariants`) inspiradas en `prisma/seed-delivery.ts`. Solo tests. */
 const T0 = new Date('2026-01-01T00:00:00Z');
@@ -69,3 +71,17 @@ export const FX_CATEGORIES = [
   fxCategory('c_beb', 'Bebidas'),
   fxCategory('c_adi', 'Adiciones'),
 ];
+
+export function fxTurnContext(overrides: Partial<DeliveryTurnContext> = {}): DeliveryTurnContext {
+  return {
+    merchantId: 'm1',
+    customerId: 'cus1',
+    conversationId: 'conv1',
+    customerPhone: '+573000000101',
+    text: '',
+    config: buildRestauranteDefaults(),
+    now: new Date('2026-11-28T18:00:00Z'),
+    seenVariantIds: new Set<string>(),
+    ...overrides,
+  };
+}
