@@ -438,6 +438,121 @@ describe('CheckoutService', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Delivery S2.2-T2: OrderItem.notes + extras de domicilio (AC-08, AC-14)
+  // ---------------------------------------------------------------------------
+
+  describe('Delivery S2.2: createOrder con notes y extras', () => {
+    const baseInput = {
+      merchantId: 'merch-1',
+      customerId: 'cust-1',
+      cartId: 'cart-1',
+      customerName: 'Ana',
+      customerPhone: '+573001112233',
+      shippingAddress: 'Calle 45 # 10-20',
+      paymentMethod: 'cod',
+    };
+    const line = (id: string, notes: string, quantity: number, price: number) => ({
+      id,
+      cartId: 'cart-1',
+      variantId: 'var-1',
+      notes,
+      quantity,
+      priceSnapshot: price,
+      variant: {
+        id: 'var-1',
+        name: 'Sencilla',
+        productId: 'prod-1',
+        product: { id: 'prod-1', name: 'Hamburguesa' },
+      },
+    });
+    let orderCreate: jest.Mock;
+
+    beforeEach(() => {
+      cartRepository.findByIdWithItems.mockResolvedValue({
+        id: 'cart-1',
+        status: CartStatus.active,
+        items: [line('i-1', 'sin cebolla', 2, 14000), line('i-2', '', 1, 14000)],
+      } as any);
+      (prismaService.merchantConfig.findUnique as jest.Mock).mockResolvedValue({
+        orderCodePrefix: 'ORD',
+      });
+      orderRepository.countByMerchant.mockResolvedValue(0);
+      orderRepository.findByOrderCode.mockResolvedValue(null);
+      orderCreate = jest.fn().mockResolvedValue({ id: 'order-1', orderCode: 'ORD-001' });
+      (prismaService.$transaction as jest.Mock).mockImplementation(async (fn) =>
+        fn({ order: { create: orderCreate }, cart: { update: jest.fn() } }),
+      );
+    });
+
+    const createdData = () => orderCreate.mock.calls[0][0].data;
+
+    it('AC-08: copia CartItem.notes a OrderItem.notes (legacy "" no se envía)', async () => {
+      await service.createOrder(baseInput);
+
+      const items = createdData().items.createMany.data;
+      expect(items[0]).toEqual(expect.objectContaining({ notes: 'sin cebolla', quantity: 2 }));
+      expect(items[1]).not.toHaveProperty('notes');
+    });
+
+    it('sin extras: datos legacy idénticos (shippingCost 0, total = subtotal, sin campos nuevos)', async () => {
+      const result = await service.createOrder(baseInput);
+
+      const data = createdData();
+      expect(result.totalAmount).toBe(42000);
+      expect(data.totalAmount).toBe(42000);
+      expect(data.shippingCost).toBe(0);
+      expect(data.shippingAddress).toBe('Calle 45 # 10-20');
+      for (const k of ['deliveryZone', 'etaMinutes', 'fulfillment', 'cashChangeFor']) {
+        expect(data).not.toHaveProperty(k);
+      }
+    });
+
+    it('AC-14: extras persisten zona, ETA, tarifa, fulfillment, cambio; total = subtotal + fee', async () => {
+      const result = await service.createOrder(
+        { ...baseInput, notes: 'Timbre dañado' },
+        {
+          deliveryZone: 'Cabecera',
+          etaMinutes: 45,
+          shippingCost: 4000,
+          fulfillment: 'delivery',
+          cashChangeFor: 50000,
+          neighborhood: 'Cabecera',
+          reference: 'Casa azul',
+        },
+      );
+
+      const data = createdData();
+      expect(result.totalAmount).toBe(46000);
+      expect(data).toEqual(
+        expect.objectContaining({
+          totalAmount: 46000,
+          shippingCost: 4000,
+          deliveryZone: 'Cabecera',
+          etaMinutes: 45,
+          fulfillment: 'delivery',
+          cashChangeFor: 50000,
+          shippingAddress: 'Calle 45 # 10-20, Cabecera',
+          notes: 'Timbre dañado | Referencia: Casa azul',
+        }),
+      );
+    });
+
+    it('extras: no duplica el barrio si la dirección ya lo contiene; pickup sin tarifa', async () => {
+      await service.createOrder(
+        { ...baseInput, shippingAddress: 'Cra 33 # 48-10, cabecera' },
+        { fulfillment: 'pickup', neighborhood: 'Cabecera' },
+      );
+
+      const data = createdData();
+      expect(data.shippingAddress).toBe('Cra 33 # 48-10, cabecera');
+      expect(data.shippingCost).toBe(0);
+      expect(data.totalAmount).toBe(42000);
+      expect(data.fulfillment).toBe('pickup');
+      expect(data.notes).toBeUndefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // AC-11 (PR-04.0): CheckoutService delegates 100% to ExpectingService
   // REQ-11: no direct metadata access in CheckoutService
   // ---------------------------------------------------------------------------

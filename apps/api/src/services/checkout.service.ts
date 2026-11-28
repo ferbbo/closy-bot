@@ -49,6 +49,28 @@ export interface CreateOrderInput {
 }
 
 /**
+ * Delivery S2.2-T2: datos opcionales de domicilio para createOrder (CONTRACTS §2).
+ * Sin extras, createOrder se comporta exactamente como el legacy.
+ *
+ * Persistencia:
+ * - deliveryZone, etaMinutes, fulfillment, cashChangeFor → columnas homónimas de Order.
+ * - shippingCost → Order.shippingCost, y totalAmount = subtotal + shippingCost (AC-14).
+ * - neighborhood (sin columna) → se agrega a shippingAddress como "<dirección>, <barrio>"
+ *   salvo que la dirección ya lo contenga (sin distinguir mayúsculas).
+ * - reference (sin columna) → se agrega a Order.notes como "Referencia: <texto>"
+ *   (separado de las notas existentes por " | ").
+ */
+export interface CreateOrderExtras {
+  deliveryZone?: string | null;
+  etaMinutes?: number | null;
+  shippingCost?: number;
+  fulfillment?: 'delivery' | 'pickup';
+  cashChangeFor?: number | null;
+  neighborhood?: string | null;
+  reference?: string | null;
+}
+
+/**
  * CheckoutService
  * PR-05: Checkout Order Creation
  *
@@ -196,7 +218,10 @@ export class CheckoutService {
   // AC-10: Cart.status = completed
   // AC-09: OrderItem snapshots price + name from CartItem
   // ---------------------------------------------------------------------------
-  async createOrder(input: CreateOrderInput): Promise<{
+  async createOrder(
+    input: CreateOrderInput,
+    extras?: CreateOrderExtras,
+  ): Promise<{
     orderCode: string;
     orderId: string;
     totalAmount: number;
@@ -221,12 +246,18 @@ export class CheckoutService {
       0,
     );
 
+    // Delivery S2.2: shipping only when extras provide it (legacy: 0)
+    const shippingCost = extras?.shippingCost ?? 0;
+    const totalAmount = subtotal + shippingCost;
+
     // AC-09: Build order items with price+name snapshots
+    // Delivery S2.2 (AC-08): CartItem.notes → OrderItem.notes ('' legacy → no se envía, queda null)
     const orderItems: Prisma.OrderItemCreateManyOrderInput[] = cart.items.map((item) => ({
       variantId: item.variantId,
       quantity: item.quantity,
       unitPrice: item.priceSnapshot,
       snapshotName: `${item.variant.product.name} - ${item.variant.name}`, // snapshot
+      ...(item.notes ? { notes: item.notes } : {}),
     }));
 
     // Create order + mark cart completed in transaction
@@ -244,6 +275,7 @@ export class CheckoutService {
           paymentMethod: input.paymentMethod,
           notes: input.notes,
           shippingCost: 0,
+          ...(extras ? this.buildDeliveryOrderData(input, extras, totalAmount) : {}),
           items: { createMany: { data: orderItems } },
         },
         include: { items: true },
@@ -259,7 +291,7 @@ export class CheckoutService {
     });
 
     this.logger.log(
-      `Order created: ${result.orderCode} for merchant ${input.merchantId}, total $${subtotal}`,
+      `Order created: ${result.orderCode} for merchant ${input.merchantId}, total $${totalAmount}`,
     );
 
     const displayItems = cart.items.map((item) => ({
@@ -271,9 +303,42 @@ export class CheckoutService {
     return {
       orderCode: result.orderCode,
       orderId: result.id,
-      totalAmount: subtotal,
+      totalAmount,
       items: displayItems,
     };
+  }
+
+  /**
+   * Delivery S2.2-T2: campos de Order derivados de extras (ver CreateOrderExtras).
+   * Solo se llama cuando hay extras; sobrescribe totalAmount/shippingCost/shippingAddress/notes.
+   */
+  private buildDeliveryOrderData(
+    input: CreateOrderInput,
+    extras: CreateOrderExtras,
+    totalAmount: number,
+  ): Partial<Prisma.OrderCreateInput> {
+    const data: Partial<Prisma.OrderCreateInput> = {
+      totalAmount,
+      shippingCost: extras.shippingCost ?? 0,
+    };
+    if (extras.deliveryZone !== undefined) data.deliveryZone = extras.deliveryZone;
+    if (extras.etaMinutes !== undefined) data.etaMinutes = extras.etaMinutes;
+    if (extras.fulfillment !== undefined) data.fulfillment = extras.fulfillment;
+    if (extras.cashChangeFor !== undefined) data.cashChangeFor = extras.cashChangeFor;
+
+    const neighborhood = extras.neighborhood?.trim();
+    if (neighborhood && !input.shippingAddress.toLowerCase().includes(neighborhood.toLowerCase())) {
+      data.shippingAddress = input.shippingAddress
+        ? `${input.shippingAddress}, ${neighborhood}`
+        : neighborhood;
+    }
+
+    const reference = extras.reference?.trim();
+    if (reference) {
+      const refNote = `Referencia: ${reference}`;
+      data.notes = input.notes ? `${input.notes} | ${refNote}` : refNote;
+    }
+    return data;
   }
 
   // ---------------------------------------------------------------------------
