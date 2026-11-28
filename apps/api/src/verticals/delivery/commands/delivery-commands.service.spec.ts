@@ -1,6 +1,11 @@
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../../persistence/prisma/prisma.service';
-import { DeliveryCommandsService, STOCK_CHOICE_TTL_MS } from './delivery-commands.service';
+import { DeliveryConfigService } from '../config/delivery-config.service';
+import {
+  DELIVERY_HELP_TEXT,
+  DeliveryCommandsService,
+  STOCK_CHOICE_TTL_MS,
+} from './delivery-commands.service';
 
 const VARIANTS = [
   { id: 'v-coca-400', name: '400 ml', product: { name: 'Coca-Cola' } },
@@ -9,13 +14,17 @@ const VARIANTS = [
   { id: 'v-perro', name: 'Sencillo', product: { name: 'Perro Caliente' } },
 ];
 
-function build() {
+function build(configRow: { deliveryConfig: unknown } | null = { deliveryConfig: null }) {
   const findMany = jest.fn().mockResolvedValue(VARIANTS);
   const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+  const findUnique = jest.fn().mockResolvedValue(configRow);
+  const update = jest.fn().mockResolvedValue({});
   const prisma = {
     productVariant: { findMany, updateMany },
+    merchantConfig: { findUnique, update },
   } as unknown as PrismaService;
-  return { service: new DeliveryCommandsService(prisma), findMany, updateMany };
+  const config = new DeliveryConfigService(prisma);
+  return { service: new DeliveryCommandsService(prisma, config), findMany, updateMany, update };
 }
 
 describe('DeliveryCommandsService — agotado/disponible (RN-22, AC-20)', () => {
@@ -103,5 +112,73 @@ describe('DeliveryCommandsService — agotado/disponible (RN-22, AC-20)', () => 
   it('"agotado" sin texto explica el formato', async () => {
     const { service } = build();
     expect(await service.tryHandle('m1', 'agotado')).toContain('agotado <producto>');
+  });
+});
+
+describe('DeliveryCommandsService — cerrar/abrir tienda y ayuda (AC-20)', () => {
+  beforeAll(() => jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined));
+
+  it('AC-20: "cerrar tienda" pone temporarilyClosed=true conservando el resto del JSON', async () => {
+    const { service, update } = build({
+      deliveryConfig: { timezone: 'America/Bogota', prepMinutes: 25 },
+    });
+    const reply = await service.tryHandle('m1', 'Cerrar tienda');
+    expect(update).toHaveBeenCalledWith({
+      where: { merchantId: 'm1' },
+      data: {
+        deliveryConfig: { timezone: 'America/Bogota', prepMinutes: 25, temporarilyClosed: true },
+      },
+    });
+    expect(reply).toContain('Tienda cerrada');
+  });
+
+  it('AC-20: "abrir tienda" pone temporarilyClosed=false', async () => {
+    const { service, update } = build({ deliveryConfig: { temporarilyClosed: true } });
+    const reply = await service.tryHandle('m1', 'abrir tienda');
+    expect(update).toHaveBeenCalledWith({
+      where: { merchantId: 'm1' },
+      data: { deliveryConfig: { temporarilyClosed: false } },
+    });
+    expect(reply).toContain('Tienda abierta');
+  });
+
+  it('deliveryConfig null → guarda solo el campo (el resto sale de los defaults técnicos)', async () => {
+    const { service, update } = build({ deliveryConfig: null });
+    await service.tryHandle('m1', 'cerrar tienda');
+    expect(update).toHaveBeenCalledWith({
+      where: { merchantId: 'm1' },
+      data: { deliveryConfig: { temporarilyClosed: true } },
+    });
+  });
+
+  it('idempotente: abrir una tienda ya abierta no escribe', async () => {
+    const { service, update } = build({ deliveryConfig: null });
+    expect(await service.tryHandle('m1', 'abrir tienda')).toBe('La tienda ya estaba abierta.');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('sin MerchantConfig → mensaje y sin escritura', async () => {
+    const { service, update } = build(null);
+    expect(await service.tryHandle('m1', 'cerrar tienda')).toContain('aún no tiene configuración');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('"ayuda" devuelve solo la sección de delivery con todos los comandos', async () => {
+    const { service } = build();
+    const reply = await service.tryHandle('m1', 'Ayuda');
+    expect(reply).toBe(DELIVERY_HELP_TEXT);
+    for (const cmd of [
+      'preparando',
+      'salio',
+      'entregado',
+      'cancelar',
+      'agotado',
+      'disponible',
+      'cerrar tienda',
+      'abrir tienda',
+      'reporte mes',
+    ]) {
+      expect(reply).toContain(cmd);
+    }
   });
 });
