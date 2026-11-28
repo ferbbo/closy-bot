@@ -13,6 +13,7 @@ import { GroundingValidator } from './agent/grounding-validator';
 import { DeliveryAgentService, DELIVERY_LLM_PROVIDER } from './agent/delivery-agent.service';
 import { DeliveryVerticalHandler } from './handler/delivery-vertical.handler';
 import { InteractiveConfirmationSender } from './handler/interactive-confirmation';
+import { PhotoTools } from './agent/tools/photo.tools';
 import { POS_PROVIDERS } from './pos/pos.providers';
 import { ORDER_TOOLS_PROVIDERS } from './agent/tools/order-tools.providers';
 import { DELIVERY_ORDER_LIFECYCLE } from './agent/tools/order.tools';
@@ -58,6 +59,7 @@ import { MEDIA_PROVIDERS } from './media/media.providers';
     DeliveryAgentService,
     DeliveryVerticalHandler,
     InteractiveConfirmationSender, // S5.4-T2
+    PhotoTools, // S5.4-T3
     // Override point for tests/e2e (FakeLlmProvider); null → Groq via LlmService
     { provide: DELIVERY_LLM_PROVIDER, useValue: null },
     // POS port (S3.4): no concrete connector yet → registry falls back to NoopPosAdapter

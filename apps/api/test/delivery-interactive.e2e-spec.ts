@@ -243,4 +243,44 @@ describe('Delivery interactive confirmation (e2e)', () => {
     });
     expect(JSON.stringify(confirmed?.payloadJson)).toContain('pedido_confirmado');
   });
+
+  it('S5.4-T3: ver_foto_producto sends only Product.imageUrl from the DB; null → "no tengo foto"', async () => {
+    const variant = await prisma.productVariant.findUniqueOrThrow({
+      where: { id: v['HAM-SEN'] },
+      select: { productId: true },
+    });
+    const photoUrl = 'https://cdn.example.com/s54/hamburguesa-sencilla.jpg';
+    await prisma.product.update({
+      where: { id: variant.productId },
+      data: { imageUrl: photoUrl },
+    });
+    const images = () =>
+      prisma.outboxMessage.findMany({ where: { merchantId: MERCHANT_ID, type: 'SEND_IMAGE' } });
+
+    fake.enqueue(
+      { toolCalls: [{ name: 'buscar_producto', arguments: { query: 'hamburguesa sencilla' } }] },
+      { toolCalls: [{ name: 'ver_foto_producto', arguments: { variantId: v['HAM-SEN'] } }] },
+      { text: 'Te mandé la foto 📸' },
+    );
+    await send('me muestras la foto de la hamburguesa sencilla?');
+    const sent = await images();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].payloadJson).toMatchObject({
+      image: { link: photoUrl, caption: 'Hamburguesa sencilla' },
+    });
+
+    await prisma.product.update({ where: { id: variant.productId }, data: { imageUrl: null } });
+    fake.enqueue(
+      { toolCalls: [{ name: 'buscar_producto', arguments: { query: 'hamburguesa sencilla' } }] },
+      { toolCalls: [{ name: 'ver_foto_producto', arguments: { variantId: v['HAM-SEN'] } }] },
+      { text: 'No tengo foto de ese producto, pero te cuento que es deliciosa.' },
+    );
+    await send('y otra foto?');
+    expect(await images()).toHaveLength(1);
+    const toolResults = fake.calls
+      .flatMap((c) => (c.method === 'generateWithTools' ? c.request.messages : []))
+      .filter((m) => m.role === 'tool' && m.content.includes('NO_PHOTO'));
+    expect(toolResults.length).toBeGreaterThan(0);
+    expect(toolResults[0].content).toContain('No tengo foto de ese producto.');
+  });
 });
