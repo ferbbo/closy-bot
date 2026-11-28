@@ -55,7 +55,8 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
 
   async handle(ctx: VerticalContext): Promise<VerticalResult | null> {
     const text = ctx.input.text ?? '';
-    const now = ctx.input.timestamp ?? new Date();
+    // Wall clock (ms): the webhook timestamp has 1 s precision and RN-12 compares turns
+    const now = new Date();
     const conv = await this.prisma.conversation.findUnique({
       where: { id: ctx.conversation.id },
       select: { metadata: true, optedOutAt: true },
