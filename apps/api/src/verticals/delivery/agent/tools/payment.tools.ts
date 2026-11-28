@@ -74,7 +74,7 @@ function paymentInstructions(pm: Record<string, unknown>): string | null {
  * Herramienta `fijar_pago({metodo, pagaCon?})` (S3.2-T2, AC-13, RN-13).
  *
  * - Valida el método contra `MerchantConfig.paymentMethods` leído en el turno (RN-00).
- * - Efectivo: `pagaCon` ≥ total (subtotal del carrito en BD + `draft.quote.fee`). Sin `pagaCon`
+ * - Efectivo: `pagaCon` ≥ total (subtotal del carrito en BD + `draft.quote.fee`; pickup = subtotal). Sin `pagaCon`
  *   se persiste el método y se pide el monto (`pedirMontoEfectivo`).
  * - Transferencia: devuelve las instrucciones literales de la BD como dato.
  * - Persiste `paymentMethod` y `cashChangeFor` en `Conversation.metadata.delivery.checkout`.
@@ -168,8 +168,12 @@ export class PaymentTools {
     return { ok: true, data };
   }
 
-  /** Total = subtotal + tarifa cotizada (RN-10). `null` si falta la cotización. */
+  /**
+   * Total = subtotal + tarifa cotizada (RN-10). Pickup → tarifa 0 (total = subtotal), aunque
+   * quede una cotización de domicilio anterior en el draft. `null` si es domicilio sin cotización.
+   */
   private computeTotal(subtotal: number, draft: CheckoutDraft | null): number | null {
+    if (draft?.fulfillment === 'pickup') return subtotal;
     if (draft?.quote) return subtotal + draft.quote.fee;
     return null;
   }

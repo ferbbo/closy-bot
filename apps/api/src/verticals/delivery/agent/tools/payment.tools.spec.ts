@@ -187,6 +187,23 @@ describe('PaymentTools.fijar_pago (S3.2-T2)', () => {
     expect(prisma.conversation.update).not.toHaveBeenCalled();
   });
 
+  it('pickup (fee 0): total = subtotal aunque haya una cotización previa', async () => {
+    metadata = {
+      delivery: { checkout: { cartId: 'cart-1', fulfillment: 'pickup', quote: QUOTE } },
+    };
+    const res = await run({ metodo: 'cod', pagaCon: '32 mil' });
+    expect(res).toEqual({
+      ok: true,
+      data: { metodo: 'cod', label: 'Efectivo', total: 32000, pagaCon: 32000, cambio: 0 },
+    });
+  });
+
+  it('pickup sin cotización no exige NEEDS_QUOTE', async () => {
+    metadata = { delivery: { checkout: { cartId: 'cart-1', fulfillment: 'pickup' } } };
+    expect((await run({ metodo: 'cod', pagaCon: 50000 })).ok).toBe(true);
+    expect(savedCheckout()).toMatchObject({ fulfillment: 'pickup', cashChangeFor: 50000 });
+  });
+
   it('transferencia → instrucciones LITERALES de la BD y cashChangeFor null', async () => {
     const res = await run({ metodo: 'transfer', pagaCon: '50 mil' });
     expect(res).toEqual({
