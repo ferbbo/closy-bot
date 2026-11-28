@@ -16,6 +16,8 @@ export const envValidationSchema = Joi.object({
   WHATSAPP_API_URL: Joi.string().default('https://graph.facebook.com'),
   WHATSAPP_WEBHOOK_VERIFY_TOKEN: Joi.string().optional().default('your-verify-token'),
   WHATSAPP_APP_SECRET: Joi.string().optional(),
+  // Delivery S1.5: Meta Sandbox (fake Graph API) — only tests / local demo; never in production
+  WHATSAPP_SANDBOX: Joi.boolean().default(false),
 
   // LLM Configuration
   LLM_ENABLED: Joi.boolean().default(false),
@@ -94,6 +96,14 @@ export const envValidationSchema = Joi.object({
   INSTAGRAM_ENABLED: Joi.boolean().default(false),
   PLAYBOOK_EDITOR_ENABLED: Joi.boolean().default(false),
   INDUSTRIES_ENABLED: Joi.boolean().default(false),
+
+  // Delivery vertical (B2, gated by FEATURES_MODE != mvp + DELIVERY_ENABLED)
+  DELIVERY_ENABLED: Joi.boolean().default(false),
+  DELIVERY_LLM_MODEL: Joi.string().default('llama-3.3-70b-versatile'),
+  DELIVERY_STT_MODEL: Joi.string().default('whisper-large-v3-turbo'),
+  DELIVERY_VISION_MODEL: Joi.string().default('meta-llama/llama-4-scout-17b-16e-instruct'),
+  // S5.1: ventana de debounce de ráfagas (ms); 0 = desactivado (procesamiento inmediato)
+  DELIVERY_DEBOUNCE_MS: Joi.number().integer().min(0).default(4000),
 
   // PR-INFRA-R2: Cloudflare R2 Object Storage (pre-requisito de PR-18)
   // Todas opcionales: la API arranca sin ellas. PR-18 retorna 503 si no están configuradas.

@@ -5,18 +5,30 @@
  * AC-06: getOrCreateConfig() creates config with preset if none exists
  * AC-07: Presets applied per industry (ropa/belleza/minimarket)
  */
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../persistence/prisma/prisma.service';
 import { UpdateMerchantConfigDto, MerchantConfigResponseDto } from './dto/merchant-config.dto';
 import { getPresetForIndustry } from './merchant-config-presets';
 import { MerchantConfigData } from '../domain/entities/merchant-config.interface';
-import { Prisma } from '@prisma/client';
+import { Industry, Prisma } from '@prisma/client';
+import { FeatureFlagsService } from '../common/feature-flags/feature-flags.service';
+import { validateDeliveryConfig } from '../verticals/delivery/config/delivery-config.validator';
+import { DeliveryConfig } from '../verticals/delivery/contracts';
 
 @Injectable()
 export class MerchantConfigService {
   private readonly logger = new Logger(MerchantConfigService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly featureFlags: FeatureFlagsService,
+  ) {}
 
   // ---------------------------------------------------------------------------
   // AC-06: Get or create MerchantConfig with industry preset
@@ -82,7 +94,7 @@ export class MerchantConfigService {
     dto: UpdateMerchantConfigDto,
   ): Promise<MerchantConfigResponseDto> {
     // Ensure config exists before updating
-    await this.getOrCreateConfig(merchantId);
+    const current = await this.getOrCreateConfig(merchantId);
 
     // Build partial update data — only non-undefined fields
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -108,6 +120,13 @@ export class MerchantConfigService {
     if (dto.businessHours !== undefined) {
       updateData['businessHours'] = dto.businessHours;
     }
+    if (dto.deliveryConfig !== undefined) {
+      updateData['deliveryConfig'] = await this.resolveDeliveryConfigPatch(
+        merchantId,
+        dto.deliveryConfig,
+        current.deliveryConfig,
+      );
+    }
 
     const updated = await this.prisma.merchantConfig.update({
       where: { merchantId },
@@ -126,6 +145,50 @@ export class MerchantConfigService {
   }
 
   // ---------------------------------------------------------------------------
+  // Delivery vertical (S1.2-T4): PATCH deliveryConfig
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Gated: flag DELIVERY_ENABLED (403) + industry=restaurante (403).
+   * El override se mezcla sobre la config guardada (o los defaults técnicos) y se
+   * valida completo; error → 400 con el path exacto (`deliveryConfig.zones[0].fee`).
+   */
+  private async resolveDeliveryConfigPatch(
+    merchantId: string,
+    input: Record<string, unknown> | null,
+    stored: DeliveryConfig | null,
+  ): Promise<Prisma.InputJsonValue | typeof Prisma.DbNull> {
+    if (!this.featureFlags.isDeliveryEnabled) {
+      throw new ForbiddenException('deliveryConfig is not available (delivery feature disabled)');
+    }
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: merchantId },
+      select: { industry: true },
+    });
+    if (merchant?.industry !== Industry.restaurante) {
+      throw new ForbiddenException('deliveryConfig requires merchant industry "restaurante"');
+    }
+    if (input === null) return Prisma.DbNull;
+
+    const storedResult = stored ? validateDeliveryConfig(stored) : null;
+    const base = storedResult?.ok ? storedResult.value : undefined;
+    const result = validateDeliveryConfig(input, base);
+    if (!result.ok) {
+      const errors = result.errors.map((e) => ({
+        path: e.path ? `deliveryConfig.${e.path}` : 'deliveryConfig',
+        message: e.message,
+      }));
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: errors.map((e) => `${e.path} ${e.message}`),
+        errors,
+      });
+    }
+    return result.value as unknown as Prisma.InputJsonValue;
+  }
+
+  // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
 
@@ -139,6 +202,7 @@ export class MerchantConfigService {
     currency: string;
     orderCodePrefix: string;
     autoConfirmCod: boolean;
+    deliveryConfig?: Prisma.JsonValue;
     createdAt: Date;
     updatedAt: Date;
   }): MerchantConfigResponseDto {
@@ -152,6 +216,7 @@ export class MerchantConfigService {
       currency: string;
       orderCodePrefix: string;
       autoConfirmCod: boolean;
+      deliveryConfig?: DeliveryConfig | null;
       createdAt: Date;
       updatedAt: Date;
     };
@@ -166,6 +231,7 @@ export class MerchantConfigService {
     dto.currency = data.currency;
     dto.orderCodePrefix = data.orderCodePrefix;
     dto.autoConfirmCod = data.autoConfirmCod;
+    dto.deliveryConfig = data.deliveryConfig ?? null;
     dto.createdAt = data.createdAt;
     dto.updatedAt = data.updatedAt;
     return dto;

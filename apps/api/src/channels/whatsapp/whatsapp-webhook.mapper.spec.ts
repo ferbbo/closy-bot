@@ -93,7 +93,42 @@ describe('whatsapp-webhook.mapper', () => {
       expect(result[1].message_id).toBe('wamid.MSG2');
     });
 
-    it('should skip unsupported message types', () => {
+    it('should skip unsupported message types (sticker)', () => {
+      const payload: MetaWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '123456',
+            changes: [
+              {
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '+1234567890',
+                    phone_number_id: 'phone_123',
+                  },
+                  messages: [
+                    {
+                      from: '+573001234567',
+                      id: 'wamid.STK1',
+                      timestamp: '1234567890',
+                      type: 'sticker',
+                    },
+                  ],
+                },
+                field: 'messages',
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = mapMetaWebhookToInboundMessages(payload);
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('S5.0-T1: maps an image message with media fields (no text)', () => {
       const payload: MetaWebhookPayload = {
         object: 'whatsapp_business_account',
         entry: [
@@ -116,6 +151,7 @@ describe('whatsapp-webhook.mapper', () => {
                       image: {
                         id: 'img_123',
                         mime_type: 'image/jpeg',
+                        caption: 'esto es un combo?',
                       },
                     },
                   ],
@@ -129,7 +165,58 @@ describe('whatsapp-webhook.mapper', () => {
 
       const result = mapMetaWebhookToInboundMessages(payload);
 
-      expect(result).toHaveLength(0);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        message_id: 'wamid.IMG1',
+        media_type: 'image',
+        media_id: 'img_123',
+        mime_type: 'image/jpeg',
+        caption: 'esto es un combo?',
+      });
+      expect(result[0].text).toBeUndefined();
+    });
+
+    it('S5.0-T1: maps an audio message with media fields and no caption', () => {
+      const payload: MetaWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '123456',
+            changes: [
+              {
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '+1234567890',
+                    phone_number_id: 'phone_123',
+                  },
+                  messages: [
+                    {
+                      from: '+573001234567',
+                      id: 'wamid.AUD1',
+                      timestamp: '1234567890',
+                      type: 'audio',
+                      audio: { id: 'aud_123', mime_type: 'audio/ogg' },
+                    },
+                  ],
+                },
+                field: 'messages',
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = mapMetaWebhookToInboundMessages(payload);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        message_id: 'wamid.AUD1',
+        media_type: 'audio',
+        media_id: 'aud_123',
+        mime_type: 'audio/ogg',
+      });
+      expect(result[0].caption).toBeUndefined();
     });
 
     it('should skip messages without text body', () => {
@@ -212,6 +299,55 @@ describe('whatsapp-webhook.mapper', () => {
       const result = mapMetaWebhookToInboundMessages(payload);
 
       expect(result).toHaveLength(0);
+    });
+  });
+
+  describe('interactive button_reply (S5.4)', () => {
+    const payloadWith = (message: Record<string, unknown>) =>
+      ({
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'waba',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: { display_phone_number: '1', phone_number_id: 'phone_123' },
+                  messages: [
+                    { from: '573001234567', id: 'wamid.B1', timestamp: '1700000000', ...message },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      }) as unknown as MetaWebhookPayload;
+
+    it('maps button_reply to text = title plus interactive_reply_id', () => {
+      const [dto] = mapMetaWebhookToInboundMessages(
+        payloadWith({
+          type: 'interactive',
+          interactive: {
+            type: 'button_reply',
+            button_reply: { id: 'delivery_confirm_yes', title: 'Sí, confirmo' },
+          },
+        }),
+      );
+      expect(dto).toMatchObject({
+        message_id: 'wamid.B1',
+        text: 'Sí, confirmo',
+        interactive_reply_id: 'delivery_confirm_yes',
+        receiver_phone_id: 'phone_123',
+      });
+    });
+
+    it('skips interactive messages without a button_reply', () => {
+      const result = mapMetaWebhookToInboundMessages(
+        payloadWith({ type: 'interactive', interactive: { type: 'nfm_reply' } }),
+      );
+      expect(result).toEqual([]);
     });
   });
 

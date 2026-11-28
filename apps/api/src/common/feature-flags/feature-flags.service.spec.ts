@@ -9,6 +9,7 @@ function buildService(envOverrides: Record<string, unknown> = {}): FeatureFlagsS
     INSTAGRAM_ENABLED: false,
     PLAYBOOK_EDITOR_ENABLED: false,
     INDUSTRIES_ENABLED: false,
+    DELIVERY_ENABLED: false,
   };
   const merged = { ...defaults, ...envOverrides };
 
@@ -152,6 +153,30 @@ describe('FeatureFlagsService', () => {
 
     it('returns mvp mode via DI', () => {
       expect(service.featuresMode).toBe('mvp');
+    });
+  });
+  // ──────────────────────────────────────────────────────────
+  // Delivery vertical (S1.1-T2): isDeliveryEnabled
+  // ──────────────────────────────────────────────────────────
+  describe('isDeliveryEnabled (delivery vertical, B2)', () => {
+    it('returns false in mvp mode even if DELIVERY_ENABLED=true', () => {
+      const service = buildService({ FEATURES_MODE: 'mvp', DELIVERY_ENABLED: true });
+      expect(service.isDeliveryEnabled).toBe(false);
+    });
+
+    it('returns true in dev mode when DELIVERY_ENABLED=true', () => {
+      const service = buildService({ FEATURES_MODE: 'dev', DELIVERY_ENABLED: true });
+      expect(service.isDeliveryEnabled).toBe(true);
+    });
+
+    it('returns false in dev mode when DELIVERY_ENABLED=false', () => {
+      const service = buildService({ FEATURES_MODE: 'dev', DELIVERY_ENABLED: false });
+      expect(service.isDeliveryEnabled).toBe(false);
+    });
+
+    it('defaults to false when DELIVERY_ENABLED is not set (full mode)', () => {
+      const service = buildService({ FEATURES_MODE: 'full', DELIVERY_ENABLED: undefined });
+      expect(service.isDeliveryEnabled).toBe(false);
     });
   });
 });

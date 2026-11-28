@@ -4,7 +4,10 @@
  * AC-04: Parser normalizes commands (case-insensitive, no tildes)
  * AC-05: Returns null for unknown commands
  */
-import { MerchantCommandParserService } from './merchant-command-parser.service';
+import {
+  DELIVERY_PASSTHROUGH_COMMAND,
+  MerchantCommandParserService,
+} from './merchant-command-parser.service';
 
 describe('MerchantCommandParserService', () => {
   let parser: MerchantCommandParserService;
@@ -238,6 +241,48 @@ describe('MerchantCommandParserService', () => {
 
     it('should return null for "handoff" alone (no orderCode)', () => {
       expect(parser.parse('handoff')).toBeNull();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // S4.1: delegación a la vertical delivery (solo con isDeliveryEnabled)
+  // ---------------------------------------------------------------------------
+  describe('S4.1: delivery passthrough', () => {
+    const withFlag = (enabled: boolean) =>
+      new MerchantCommandParserService({
+        get: () => ({ isDeliveryEnabled: enabled }),
+      } as never);
+
+    it('flag apagado → comando desconocido sigue siendo null', () => {
+      expect(withFlag(false).parse('salio 42')).toBeNull();
+    });
+
+    it('flag activo → comando no legacy se delega con el texto original', () => {
+      expect(withFlag(true).parse('Salió 42')).toEqual({
+        command: DELIVERY_PASSTHROUGH_COMMAND,
+        args: { text: 'Salió 42' },
+      });
+    });
+
+    it('flag activo → comandos legacy intactos (enviado / confirmar)', () => {
+      const p = withFlag(true);
+      expect(p.parse('enviado ORD-001')).toEqual({
+        command: 'enviado',
+        args: { orderCode: 'ORD-001' },
+      });
+      expect(p.parse('confirmar ORD-001')).toEqual({
+        command: 'confirmar',
+        args: { orderCode: 'ORD-001' },
+      });
+    });
+
+    it('ModuleRef sin FeatureFlagsService → null', () => {
+      const p = new MerchantCommandParserService({
+        get: () => {
+          throw new Error('not found');
+        },
+      } as never);
+      expect(p.parse('salio 42')).toBeNull();
     });
   });
 });

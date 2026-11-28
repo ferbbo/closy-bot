@@ -165,4 +165,161 @@ describe('WhatsAppOutboundService (PR-03.11)', () => {
       expect(result.messageId).toContain('dry-run');
     });
   });
+  // Delivery S1.4-T1
+  describe('template messages (S1.4)', () => {
+    const template = {
+      name: 'pedido_confirmado',
+      languageCode: 'es',
+      params: { customer_name: 'Ana', order_code: 'ORD-0001' },
+    };
+
+    it('builds the Cloud API template payload with named body parameters', () => {
+      expect(service.buildTemplatePayload('+57 3001234567', template)).toEqual({
+        messaging_product: 'whatsapp',
+        to: '573001234567',
+        type: 'template',
+        template: {
+          name: 'pedido_confirmado',
+          language: { code: 'es' },
+          components: [
+            {
+              type: 'body',
+              parameters: [
+                { type: 'text', parameter_name: 'customer_name', text: 'Ana' },
+                { type: 'text', parameter_name: 'order_code', text: 'ORD-0001' },
+              ],
+            },
+          ],
+        },
+      });
+    });
+
+    it('omits components when the template has no parameters', () => {
+      const payload = service.buildTemplatePayload('573001234567', { ...template, params: {} });
+      expect((payload.template as { components: unknown[] }).components).toEqual([]);
+    });
+
+    it('sends template in dry-run mode without calling fetch', async () => {
+      const fetchSpy = jest.spyOn(global, 'fetch');
+      const result = await service.sendTemplateMessageWithCredentials('+573001234567', template, {
+        accessToken: 'tok',
+        phoneNumberId: '987',
+      });
+      expect(result.success).toBe(true);
+      expect(result.messageId).toContain('dry-run');
+      expect(fetchSpy).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+
+    it('sendTemplateMessage falls back to env credentials', async () => {
+      const spy = jest.spyOn(service, 'sendTemplateMessageWithCredentials');
+      await service.sendTemplateMessage('+573001234567', template);
+      expect(spy).toHaveBeenCalledWith('+573001234567', template, {
+        accessToken: 'test-token',
+        phoneNumberId: '123456789',
+      });
+    });
+  });
+
+  describe('interactive messages (S5.4)', () => {
+    const msg = {
+      body: 'Resumen',
+      buttons: [
+        { id: 'delivery_confirm_yes', title: 'Sí, confirmo' },
+        { id: 'delivery_confirm_no', title: 'No, cambiar' },
+      ],
+    };
+
+    it('builds the Cloud API interactive button payload', () => {
+      expect(service.buildInteractivePayload('+57 300 1234567', msg)).toEqual({
+        messaging_product: 'whatsapp',
+        to: '573001234567',
+        type: 'interactive',
+        interactive: {
+          type: 'button',
+          body: { text: 'Resumen' },
+          action: {
+            buttons: [
+              { type: 'reply', reply: { id: 'delivery_confirm_yes', title: 'Sí, confirmo' } },
+              { type: 'reply', reply: { id: 'delivery_confirm_no', title: 'No, cambiar' } },
+            ],
+          },
+        },
+      });
+    });
+
+    it('sends in dry-run mode without calling fetch', async () => {
+      const fetchSpy = jest.spyOn(global, 'fetch');
+      const result = await service.sendInteractiveMessage('+573001234567', msg);
+      expect(result.success).toBe(true);
+      expect(result.messageId).toContain('dry-run');
+      expect(fetchSpy).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+
+    it('POSTs the payload with channel credentials outside dry-run and maps errors', async () => {
+      const live = new WhatsAppOutboundService({
+        get: (key: string, def?: string) =>
+          ({ NODE_ENV: 'production', WHATSAPP_API_URL: 'https://graph.test' })[key] ?? def,
+      } as unknown as ConfigService);
+      const fetchSpy = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ messages: [{ id: 'wamid.I1' }] }),
+        } as unknown as Response)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 400,
+          statusText: 'Bad Request',
+          text: async () => 'bad',
+        } as unknown as Response);
+      const creds = { accessToken: 'tok', phoneNumberId: '987' };
+
+      const ok = await live.sendInteractiveMessageWithCredentials('+573001234567', msg, creds);
+      expect(ok).toEqual({ success: true, messageId: 'wamid.I1' });
+      const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('https://graph.test/v18.0/987/messages');
+      expect(JSON.parse(String(init.body)).interactive.type).toBe('button');
+
+      const bad = await live.sendInteractiveMessageWithCredentials('+573001234567', msg, creds);
+      expect(bad).toEqual({ success: false, error: 'API error: 400 Bad Request' });
+      fetchSpy.mockRestore();
+    });
+  });
+
+  describe('image messages (S5.4)', () => {
+    it('builds the Cloud API image-by-link payload (caption optional)', () => {
+      expect(
+        service.buildImagePayload('+573001234567', {
+          link: 'https://cdn.x/p.jpg',
+          caption: 'Doble',
+        }),
+      ).toEqual({
+        messaging_product: 'whatsapp',
+        to: '573001234567',
+        type: 'image',
+        image: { link: 'https://cdn.x/p.jpg', caption: 'Doble' },
+      });
+      expect(service.buildImagePayload('1', { link: 'https://cdn.x/p.jpg' }).image).toEqual({
+        link: 'https://cdn.x/p.jpg',
+      });
+    });
+
+    it('sendImageMessage falls back to env credentials (dry-run)', async () => {
+      const spy = jest.spyOn(service, 'sendImageMessageWithCredentials');
+      const result = await service.sendImageMessage('+573001234567', {
+        link: 'https://cdn.x/a.jpg',
+      });
+      expect(result.success).toBe(true);
+      expect(spy).toHaveBeenCalledWith(
+        '+573001234567',
+        { link: 'https://cdn.x/a.jpg' },
+        {
+          accessToken: 'test-token',
+          phoneNumberId: '123456789',
+        },
+      );
+    });
+  });
 });

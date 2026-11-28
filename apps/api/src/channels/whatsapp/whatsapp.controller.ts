@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { ModuleRef } from '@nestjs/core';
 import { ChannelType } from '@prisma/client'; // PR-03.11
 import { WhatsAppService } from './whatsapp.service';
 import { WhatsAppOutboundService } from './whatsapp-outbound.service';
@@ -25,6 +26,13 @@ import { MetaSignatureGuard } from './guards/meta-signature.guard';
 import { mapMetaWebhookToInboundMessages, isStatusOnlyPayload } from './whatsapp-webhook.mapper';
 import { OutboxService } from '../../persistence/outbox/outbox.service';
 import { maskPhone } from '../../common/utils/pii.util';
+import {
+  TemplateWebhookHandler,
+  WabaWebhookValue,
+  isWabaWebhookField,
+} from '../../verticals/delivery/messaging/template-webhook.handler';
+import { FeatureFlagsService } from '../../common/feature-flags/feature-flags.service';
+import { BurstBufferService } from '../../verticals/delivery/burst/burst-buffer.service';
 
 /**
  * Controller for WhatsApp webhooks (Meta WhatsApp Cloud API)
@@ -44,6 +52,8 @@ export class WhatsAppController {
     private readonly merchantResolver: MerchantResolverService, // PR-03.11
     private readonly configService: ConfigService,
     private readonly outboxService: OutboxService,
+    private readonly moduleRef: ModuleRef, // Delivery S1.4-T4: resolución perezosa del handler WABA
+    private readonly featureFlags: FeatureFlagsService, // Delivery S5.0-T1: gating de media
   ) {
     this.verifyToken = this.configService.get<string>('WHATSAPP_WEBHOOK_VERIFY_TOKEN', '');
     if (!this.verifyToken) {
@@ -113,6 +123,10 @@ export class WhatsAppController {
   ): Promise<{ received: boolean }> {
     this.logger.log(`Meta webhook received: object=${payload.object}`);
 
+    // Delivery S1.4-T4: cambios de WABA (plantillas / calidad). No-op si el handler no está
+    // registrado o el flag está apagado; nunca afecta al procesamiento de `messages`.
+    await this.handleWabaChanges(payload);
+
     // Early return for status updates
     if (isStatusOnlyPayload(payload)) {
       this.logger.debug('Status-only payload, returning 200 without processing');
@@ -135,6 +149,36 @@ export class WhatsAppController {
     }
 
     return { received: true };
+  }
+
+  /**
+   * Delivery S1.4-T4: delega `message_template_status_update`, `template_category_update` y
+   * `phone_number_quality_update` a TemplateWebhookHandler (DeliveryModule), resuelto vía
+   * ModuleRef para no acoplar WhatsAppModule ↔ DeliveryModule. Errores: log y 200.
+   */
+  private async handleWabaChanges(payload: MetaWebhookPayload): Promise<void> {
+    const changes = (payload.entry || []).flatMap((entry) =>
+      (entry.changes || [])
+        .filter((change) => isWabaWebhookField(change.field))
+        .map((change) => ({ entryId: entry.id, change })),
+    );
+    if (changes.length === 0) return;
+
+    let handler: TemplateWebhookHandler;
+    try {
+      handler = this.moduleRef.get(TemplateWebhookHandler, { strict: false });
+    } catch {
+      this.logger.debug('TemplateWebhookHandler not registered; WABA changes ignored');
+      return;
+    }
+
+    for (const { entryId, change } of changes) {
+      try {
+        await handler.handle(entryId, change.field, change.value as unknown as WabaWebhookValue);
+      } catch (error) {
+        this.logger.error(`WABA webhook ${change.field} failed: ${(error as Error).message}`);
+      }
+    }
   }
 
   /**
@@ -244,9 +288,27 @@ export class WhatsAppController {
       `Channel resolved: merchantId=${resolution.merchant.id}, channelId=${resolution.channel.id}`,
     );
 
+    // S5.0-T1: media solo se procesa cuando la vertical delivery puede usarla;
+    // si no, se mantiene el comportamiento legacy (se ignora, sin tocar la BD).
+    // S5.4-T2: igual con las respuestas a botones interactivos.
+    if (dto.media_type || dto.interactive_reply_id) {
+      const deliveryEligible =
+        this.featureFlags.isDeliveryEnabled && resolution.merchant.industry === 'restaurante';
+      if (!deliveryEligible) {
+        this.logger.log(
+          `Ignoring ${dto.media_type ?? 'interactive'} message outside delivery vertical (message_id=${dto.message_id})`,
+        );
+        return;
+      }
+    }
+
     try {
       // 1. Process and dedupe inbound message
       await this.whatsappService.processInboundMessage(dto);
+
+      // S5.1: debounce de ráfagas (solo vertical delivery). El texto se guarda en el buffer y
+      // se responde 200; la media vacía el buffer primero y se procesa como turno propio.
+      if (await this.divertToBurst(dto, resolution, phoneNumberId)) return;
 
       // 2-3. Orchestrate + Send (best-effort, never block 200 after persistence)
       try {
@@ -258,6 +320,16 @@ export class WhatsAppController {
           channelId: resolution.channel.id, // PR-03.11
           text: dto.text || '',
           timestamp: new Date(dto.timestamp),
+          mediaType: dto.media_type as
+            | 'audio'
+            | 'image'
+            | 'video'
+            | 'document'
+            | 'sticker'
+            | undefined,
+          mediaId: dto.media_id,
+          mimeType: dto.mime_type,
+          caption: dto.caption,
         });
 
         this.logger.log(
@@ -296,6 +368,57 @@ export class WhatsAppController {
         `Failed to process message ${dto.message_id}`,
         error instanceof Error ? error.stack : error,
       );
+    }
+  }
+
+  /**
+   * S5.1-T1: desvía el mensaje al buffer de ráfagas cuando aplica (flag delivery + industria
+   * restaurante + DELIVERY_DEBOUNCE_MS > 0 + remitente que no es el comercio).
+   * @returns true si el texto quedó en el buffer (no hay que procesarlo ahora)
+   */
+  private async divertToBurst(
+    dto: InboundMessageDto,
+    resolution: NonNullable<Awaited<ReturnType<MerchantResolverService['resolveByChannel']>>>,
+    phoneNumberId: string,
+  ): Promise<boolean> {
+    const { merchant, channel } = resolution;
+    if (!this.featureFlags.isDeliveryEnabled || merchant.industry !== 'restaurante') return false;
+    if (merchant.whatsappNumber && dto.from === merchant.whatsappNumber) return false;
+    if (merchant.botPaused || merchant.status !== 'active') return false;
+
+    let burst: BurstBufferService;
+    try {
+      burst = this.moduleRef.get(BurstBufferService, { strict: false });
+    } catch {
+      return false;
+    }
+    if (!burst.isEnabled()) return false;
+
+    const ref = {
+      from: dto.from,
+      receiverPhoneId: phoneNumberId,
+      merchantId: merchant.id,
+      channelId: channel.id,
+    };
+    try {
+      if (dto.media_type) {
+        await burst.flushPending(ref);
+        return false;
+      }
+      if (!dto.text?.trim()) return false;
+      await burst.enqueue({
+        ...ref,
+        messageId: dto.message_id,
+        text: dto.text,
+        timestamp: new Date(dto.timestamp),
+      });
+      return true;
+    } catch (error) {
+      // Si el buffer falla, se procesa de inmediato (comportamiento previo)
+      this.logger.error(
+        `Burst buffer failed for message ${dto.message_id}: ${(error as Error).message}`,
+      );
+      return false;
     }
   }
 }

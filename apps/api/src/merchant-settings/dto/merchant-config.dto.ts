@@ -16,6 +16,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import type { DeliveryConfig } from '../../verticals/delivery/contracts';
 
 // ---------------------------------------------------------------------------
 // Nested validators
@@ -131,6 +132,15 @@ export class UpdateMerchantConfigDto {
   @IsOptional()
   @IsBoolean()
   autoConfirmCod?: boolean;
+
+  /**
+   * Delivery vertical (B2, flag DELIVERY_ENABLED, industry=restaurante).
+   * Override parcial de DeliveryConfig; lo valida `validateDeliveryConfig`
+   * (400 con el path exacto). `null` borra la config (vuelven los defaults técnicos).
+   */
+  @IsOptional()
+  @IsObject()
+  deliveryConfig?: Record<string, unknown> | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -148,6 +158,8 @@ export class MerchantConfigResponseDto {
   currency!: string;
   orderCodePrefix!: string;
   autoConfirmCod!: boolean;
+  /** Delivery vertical: DeliveryConfig guardado (null si no se ha configurado) */
+  deliveryConfig!: DeliveryConfig | null;
   createdAt!: Date;
   updatedAt!: Date;
 }

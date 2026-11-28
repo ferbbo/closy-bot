@@ -192,4 +192,124 @@ describe('OutboxService', () => {
       expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('A'.repeat(50) + '...'));
     });
   });
+  // Delivery S1.4-T1
+  describe('enqueueWhatsAppTemplate (S1.4)', () => {
+    it('creates a SEND_TEMPLATE message with dedupeKey and channel', async () => {
+      repository.create.mockResolvedValue({ id: 'outbox-t1' } as OutboxMessage);
+
+      const result = await service.enqueueWhatsAppTemplate({
+        merchantId: 'merchant-1',
+        conversationId: 'conv-1',
+        channelId: 'channel-1',
+        to: '+573001234567',
+        templateName: 'pedido_en_camino',
+        languageCode: 'es',
+        params: { order_code: 'ORD-0042', merchant_name: 'Burger Barrio' },
+        dedupeKey: 'order:o1:status:on_the_way',
+        renderedText: 'Tu pedido ORD-0042 de Burger Barrio va en camino.',
+      });
+
+      expect(result.id).toBe('outbox-t1');
+      expect(repository.create).toHaveBeenCalledWith({
+        merchant: { connect: { id: 'merchant-1' } },
+        conversationId: 'conv-1',
+        channel: OutboxChannel.WHATSAPP,
+        type: OutboxMessageType.SEND_TEMPLATE,
+        to: '+573001234567',
+        payloadJson: {
+          template: {
+            name: 'pedido_en_camino',
+            languageCode: 'es',
+            params: { order_code: 'ORD-0042', merchant_name: 'Burger Barrio' },
+          },
+          renderedText: 'Tu pedido ORD-0042 de Burger Barrio va en camino.',
+          metadata: undefined,
+        },
+        dedupeKey: 'order:o1:status:on_the_way',
+        channelRef: { connect: { id: 'channel-1' } },
+      });
+    });
+
+    it('omits channelRef when no channelId', async () => {
+      repository.create.mockResolvedValue({ id: 'outbox-t2' } as OutboxMessage);
+      await service.enqueueWhatsAppTemplate({
+        merchantId: 'merchant-1',
+        to: '+573001234567',
+        templateName: 'alerta_operacion',
+        languageCode: 'es',
+        params: {},
+        dedupeKey: 'k',
+      });
+      expect(repository.create.mock.calls[0][0]).not.toHaveProperty('channelRef');
+    });
+  });
+
+  describe('enqueueWhatsAppInteractive (S5.4)', () => {
+    const buttons = [
+      { id: 'delivery_confirm_yes', title: 'Sí, confirmo' },
+      { id: 'delivery_confirm_no', title: 'No, cambiar' },
+    ];
+
+    it('creates a SEND_INTERACTIVE message with dedupeKey and channel', async () => {
+      repository.create.mockResolvedValue({ id: 'outbox-i1' } as OutboxMessage);
+      const result = await service.enqueueWhatsAppInteractive({
+        merchantId: 'merchant-1',
+        conversationId: 'conv-1',
+        channelId: 'channel-1',
+        to: '+573001234567',
+        body: 'Resumen del pedido',
+        buttons,
+        dedupeKey: 'reply:wamid.1',
+      });
+      expect(result.id).toBe('outbox-i1');
+      expect(repository.create).toHaveBeenCalledWith({
+        merchant: { connect: { id: 'merchant-1' } },
+        conversationId: 'conv-1',
+        channel: OutboxChannel.WHATSAPP,
+        type: OutboxMessageType.SEND_INTERACTIVE,
+        to: '+573001234567',
+        payloadJson: { interactive: { body: 'Resumen del pedido', buttons }, metadata: undefined },
+        dedupeKey: 'reply:wamid.1',
+        channelRef: { connect: { id: 'channel-1' } },
+      });
+    });
+
+    it('omits channelRef when no channelId', async () => {
+      repository.create.mockResolvedValue({ id: 'outbox-i2' } as OutboxMessage);
+      await service.enqueueWhatsAppInteractive({
+        merchantId: 'merchant-1',
+        to: '+573001234567',
+        body: 'x',
+        buttons,
+        dedupeKey: 'k',
+      });
+      expect(repository.create.mock.calls[0][0]).not.toHaveProperty('channelRef');
+    });
+  });
+
+  describe('enqueueWhatsAppImage (S5.4)', () => {
+    it('creates a SEND_IMAGE message with link, caption and dedupeKey', async () => {
+      repository.create.mockResolvedValue({ id: 'outbox-img' } as OutboxMessage);
+      await service.enqueueWhatsAppImage({
+        merchantId: 'merchant-1',
+        conversationId: 'conv-1',
+        channelId: 'channel-1',
+        to: '+573001234567',
+        link: 'https://cdn.x/p.jpg',
+        caption: 'Hamburguesa doble',
+        dedupeKey: 'photo:conv-1:v1:1',
+      });
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: OutboxMessageType.SEND_IMAGE,
+          payloadJson: {
+            image: { link: 'https://cdn.x/p.jpg', caption: 'Hamburguesa doble' },
+            metadata: undefined,
+          },
+          dedupeKey: 'photo:conv-1:v1:1',
+          channelRef: { connect: { id: 'channel-1' } },
+        }),
+      );
+    });
+  });
 });

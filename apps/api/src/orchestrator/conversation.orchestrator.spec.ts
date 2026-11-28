@@ -31,6 +31,8 @@ import { ExpectingService } from '../services/expecting.service'; // PR-04.2
 import { CartService } from '../services/cart.service'; // PR-04.2
 import { PlaybookMessages } from '../domain/entities/playbook-config.interface'; // PR-04.2
 import { GenericPlaybookDefaults } from '../domain/entities/playbook-defaults/generic.config'; // PR-04.2
+import { VerticalRouterService } from '../verticals/vertical-router.service'; // Delivery S1.1-T4
+import { FeatureFlagsService } from '../common/feature-flags/feature-flags.service'; // Delivery S1.1-T4
 
 describe('ConversationOrchestrator', () => {
   let orchestrator: ConversationOrchestrator;
@@ -43,6 +45,7 @@ describe('ConversationOrchestrator', () => {
   let helpFlow: HelpFlow;
   let addToCartFlow: AddToCartFlow;
   let expectingService: ExpectingService;
+  let verticalRouter: VerticalRouterService; // Delivery S1.1-T4
 
   const mockMerchant: Merchant = {
     id: 'merchant-1',
@@ -314,6 +317,7 @@ describe('ConversationOrchestrator', () => {
           provide: CartService, // PR-04.2
           useValue: { getVariantStockForItem: jest.fn().mockResolvedValue(10) },
         },
+        VerticalRouterService, // Delivery S1.1-T4: real router, empty registry by default
       ],
     }).compile();
 
@@ -327,6 +331,7 @@ describe('ConversationOrchestrator', () => {
     helpFlow = module.get<HelpFlow>(HelpFlow);
     addToCartFlow = module.get<AddToCartFlow>(AddToCartFlow);
     expectingService = module.get<ExpectingService>(ExpectingService);
+    verticalRouter = module.get<VerticalRouterService>(VerticalRouterService);
   });
 
   it('should be defined', () => {
@@ -879,6 +884,85 @@ describe('ConversationOrchestrator', () => {
         // Should call normal routing
         expect(routeDecisionService.classifyAndRoute).toHaveBeenCalled();
         expect(result.shouldSend).toBe(true);
+      });
+    });
+
+    // ──────────────────────────────────────────────────────────
+    // Delivery vertical (S1.1-T4): VerticalRouter hook
+    // ──────────────────────────────────────────────────────────
+    describe('Delivery S1.1-T4: vertical router hook', () => {
+      const greetingRoute = {
+        route: 'TEMPLATE' as const,
+        intent: 'GREETING' as const,
+        reason: 'keyword match',
+        confidence: 'HIGH' as const,
+        signals: ['hola'],
+      };
+
+      it('flag off (mvp) → delivery handler declines and the legacy pipeline runs', async () => {
+        const flags = new FeatureFlagsService({
+          get: (key: string) => (key === 'FEATURES_MODE' ? 'mvp' : true),
+        } as unknown as ConfigService);
+        const handle = jest.fn();
+        const canHandle = jest.fn(async () => flags.isDeliveryEnabled);
+        verticalRouter.register({ name: 'delivery', canHandle, handle });
+        jest.spyOn(routeDecisionService, 'classifyAndRoute').mockResolvedValue(greetingRoute);
+
+        const result = await orchestrator.process({ ...baseInput, text: 'hola' });
+
+        expect(canHandle).toHaveBeenCalled();
+        expect(handle).not.toHaveBeenCalled();
+        expect(routeDecisionService.classifyAndRoute).toHaveBeenCalled();
+        expect(result.intent).toBe('GREETING');
+      });
+
+      it('no handler registered → no delegation, legacy pipeline runs', async () => {
+        const spy = jest.spyOn(verticalRouter, 'tryHandle');
+        jest.spyOn(routeDecisionService, 'classifyAndRoute').mockResolvedValue(greetingRoute);
+
+        const result = await orchestrator.process({ ...baseInput, text: 'hola' });
+
+        expect(spy).toHaveBeenCalledTimes(1);
+        await expect(spy.mock.results[0].value).resolves.toBeNull();
+        expect(result.intent).toBe('GREETING');
+      });
+
+      it('handler accepts → returns the vertical response and skips legacy routing', async () => {
+        const handle = jest.fn().mockResolvedValue({
+          response: '¡Hola! ¿Qué se te antoja hoy?',
+          shouldSend: true,
+          intent: 'DELIVERY_ORDER',
+        });
+        verticalRouter.register({ name: 'delivery', canHandle: async () => true, handle });
+
+        const result = await orchestrator.process({ ...baseInput, text: 'hola' });
+
+        expect(handle).toHaveBeenCalledWith(
+          expect.objectContaining({
+            merchant: expect.objectContaining({ id: 'merchant-1' }),
+            customer: { id: 'customer-1', phone: baseInput.from },
+            conversation: expect.objectContaining({ id: 'conv-1' }),
+            input: expect.objectContaining({ messageId: 'msg-123', text: 'hola' }),
+          }),
+        );
+        expect(routeDecisionService.classifyAndRoute).not.toHaveBeenCalled();
+        expect(result).toEqual({
+          response: '¡Hola! ¿Qué se te antoja hoy?',
+          shouldSend: true,
+          conversationId: 'conv-1',
+          merchantId: 'merchant-1',
+          intent: 'DELIVERY_ORDER',
+        });
+      });
+
+      it('merchant admin messages never reach the vertical router', async () => {
+        const spy = jest.spyOn(verticalRouter, 'tryHandle');
+        await orchestrator.process({
+          ...baseInput,
+          from: mockMerchant.whatsappNumber as string,
+          text: 'ayuda',
+        });
+        expect(spy).not.toHaveBeenCalled();
       });
     });
   });

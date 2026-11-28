@@ -55,38 +55,73 @@ export function mapMetaWebhookToInboundMessages(payload: MetaWebhookPayload): In
  * Map a single Meta message to InboundMessageDto
  * Returns null if message type is not supported
  */
+const MEDIA_TYPES = ['audio', 'image', 'video', 'document'] as const;
+type MediaMessageType = (typeof MEDIA_TYPES)[number];
+
+function isMediaType(type: string): type is MediaMessageType {
+  return (MEDIA_TYPES as readonly string[]).includes(type);
+}
+
 function mapSingleMessage(
   metaMessage: MetaMessage,
   phoneNumberId: string,
 ): InboundMessageDto | null {
   const { id, from, timestamp, type } = metaMessage;
 
-  // Only process text messages in MVP
-  if (type !== 'text') {
-    logger.log(
-      `Unsupported message type: ${type} (message_id=${id}). Media download not implemented yet.`,
-    );
-    return null;
-  }
-
-  // Extract text content
-  const text = metaMessage.text?.body;
-  if (!text) {
-    logger.warn(`Text message without body content (message_id=${id})`);
-    return null;
-  }
-
   // Convert Unix epoch to ISO 8601
   const timestampMs = parseInt(timestamp, 10) * 1000;
   const isoTimestamp = new Date(timestampMs).toISOString();
 
-  return {
-    message_id: id,
-    from,
-    receiver_phone_id: phoneNumberId,
-    timestamp: isoTimestamp,
-    text,
-  };
+  if (type === 'text') {
+    const text = metaMessage.text?.body;
+    if (!text) {
+      logger.warn(`Text message without body content (message_id=${id})`);
+      return null;
+    }
+    return {
+      message_id: id,
+      from,
+      receiver_phone_id: phoneNumberId,
+      timestamp: isoTimestamp,
+      text,
+    };
+  }
+
+  // S5.0-T1: audio/image/video/document se propagan con sus datos de media; el
+  // resto (sticker, location, contacts, button, interactive salvo button_reply) sigue sin soporte.
+  if (isMediaType(type)) {
+    const media = metaMessage[type];
+    if (!media) {
+      logger.warn(`${type} message without media payload (message_id=${id})`);
+      return null;
+    }
+    return {
+      message_id: id,
+      from,
+      receiver_phone_id: phoneNumberId,
+      timestamp: isoTimestamp,
+      media_type: type,
+      media_id: media.id,
+      mime_type: media.mime_type,
+      caption: media.caption,
+    };
+  }
+
+  // S5.4: respuesta a botón → texto = título del botón (mismo flujo que si lo escribiera).
+  const reply = type === 'interactive' ? metaMessage.interactive?.button_reply : undefined;
+  if (reply?.id) {
+    return {
+      message_id: id,
+      from,
+      receiver_phone_id: phoneNumberId,
+      timestamp: isoTimestamp,
+      text: reply.title || reply.id,
+      interactive_reply_id: reply.id,
+    };
+  }
+
+  logger.log(`Unsupported message type: ${type} (message_id=${id}).`);
+  return null;
 }
 
 /**
