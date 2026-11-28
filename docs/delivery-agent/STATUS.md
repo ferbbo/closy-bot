@@ -5,7 +5,7 @@
 
 ## Lock
 ```
-LOCK: run-20261127-1801 since 2026-11-27T18:01:50-05:00
+LOCK: run-20261127-2008 since 2026-11-27T20:08:43-05:00
 ```
 Formato cuando está tomado: `LOCK: run-<YYYYMMDD-HHmm> since <ISO-8601 -05:00>`.
 Si existe un lock con menos de 110 minutos de antigüedad, la corrida nueva **no trabaja**: reporta "corrida anterior activa" y termina.
