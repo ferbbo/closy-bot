@@ -13,6 +13,10 @@ import { GroundingValidator } from './agent/grounding-validator';
 import { DeliveryAgentService, DELIVERY_LLM_PROVIDER } from './agent/delivery-agent.service';
 import { DeliveryVerticalHandler } from './handler/delivery-vertical.handler';
 import { POS_PROVIDERS } from './pos/pos.providers';
+import {
+  DELIVERY_CHECKOUT_PROVIDERS,
+  DELIVERY_TOOLS_PROVIDERS,
+} from './checkout/checkout.providers';
 import { PosOrderSink } from './sinks/pos-order.sink';
 import { POS_ADAPTERS } from './contracts';
 import { ServicesModule } from '../../services/services.module';
@@ -43,6 +47,9 @@ import { CustomerServiceWindowService } from './messaging/customer-service-windo
     ...POS_PROVIDERS,
     { provide: POS_ADAPTERS, useValue: [] },
     PosOrderSink,
+    // Checkout (S3.1): draft store, quote provider and delivery tools
+    ...DELIVERY_CHECKOUT_PROVIDERS,
+    ...DELIVERY_TOOLS_PROVIDERS,
   ],
   exports: [
     DeliveryConfigService,
