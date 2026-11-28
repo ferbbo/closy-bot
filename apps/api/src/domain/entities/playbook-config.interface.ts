@@ -4,7 +4,8 @@
  * Defines behavior, prompts, and rules per industry
  */
 
-export type Industry = 'ropa' | 'belleza' | 'minimarket' | 'retail_general';
+// 'restaurante' (delivery vertical) uses the generic playbook in legacy flows
+export type Industry = 'ropa' | 'belleza' | 'minimarket' | 'retail_general' | 'restaurante';
 
 /**
  * PR-GAP-2: FAQ entry for keyword-based matching (no RAG/embeddings)

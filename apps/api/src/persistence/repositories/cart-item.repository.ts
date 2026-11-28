@@ -35,9 +35,11 @@ export class CartItemRepository {
   async findByCartAndVariant(cartId: string, variantId: string): Promise<CartItem | null> {
     return this.prisma.cartItem.findUnique({
       where: {
-        cartId_variantId: {
+        // Delivery S1.1: unique is now (cartId, variantId, notes); legacy items have notes=''
+        cartId_variantId_notes: {
           cartId,
           variantId,
+          notes: '',
         },
       },
     });

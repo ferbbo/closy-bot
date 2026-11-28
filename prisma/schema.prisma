@@ -88,6 +88,7 @@ model MerchantConfig {
   currency        String   @default("COP")
   orderCodePrefix String   @default("ORD") @map("order_code_prefix")
   autoConfirmCod  Boolean  @default(true) @map("auto_confirm_cod")
+  deliveryConfig  Json?    @map("delivery_config") // Delivery vertical: DeliveryConfig (contracts.ts)
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -102,6 +103,7 @@ enum Industry {
   belleza
   minimarket
   retail_general
+  restaurante // Delivery vertical (comidas rápidas)
 }
 
 /// MerchantStatus enum for onboarding lifecycle (PR-OB-01)
@@ -165,6 +167,7 @@ model Conversation {
   lastSummarizedAt DateTime?        @map("last_summarized_at") // Last time summary was generated
   metadata         Json?            // PR-05: Generic metadata (checkout state, etc.)
   handoffActive    Boolean          @default(false) @map("handoff_active") // PR-05.2: relay bidireccional activo
+  optedOutAt       DateTime?        @map("opted_out_at") // Delivery: opt-out de mensajes iniciados por el negocio (RN-29)
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
@@ -294,6 +297,7 @@ enum OutboxChannel {
 
 enum OutboxMessageType {
   SEND_TEXT
+  SEND_TEMPLATE // Delivery: plantilla utility de WhatsApp (RN-15)
 }
 
 enum OutboxMessageStatus {
@@ -411,13 +415,14 @@ model CartItem {
   variantId     String   @map("variant_id")
   quantity      Int
   priceSnapshot Decimal  @map("price_snapshot") @db.Decimal(10, 2)
+  notes         String   @default("") // Delivery: notas libres por ítem ("sin cebolla")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   cart    Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
   variant ProductVariant @relation(fields: [variantId], references: [id])
 
-  @@unique([cartId, variantId])
+  @@unique([cartId, variantId, notes])
   @@index([cartId])
   @@map("cart_items")
 }
@@ -477,6 +482,8 @@ enum OrderStatus {
   paid // Pago confirmado (webhook o comando manual)
   shipped // Orden enviada
   delivered // Orden entregada
+  preparing // Delivery: en cocina
+  on_the_way // Delivery: en camino
   cancelled // Orden cancelada
 }
 
@@ -494,6 +501,16 @@ model Order {
   paymentMethod   String      @map("payment_method") // 'cod' | 'transfer' | 'payment_link'
   notes           String?     @db.Text
   shippingCost    Decimal     @default(0) @map("shipping_cost") @db.Decimal(10, 2)
+  // Delivery vertical (aditivo)
+  deliveryZone    String?     @map("delivery_zone")
+  etaMinutes      Int?        @map("eta_minutes")
+  fulfillment     String      @default("delivery") // delivery | pickup
+  cashChangeFor   Decimal?    @map("cash_change_for") @db.Decimal(10, 2)
+  confirmedAt     DateTime?   @map("confirmed_at")
+  cancelledAt     DateTime?   @map("cancelled_at")
+  posProvider     String?     @map("pos_provider")
+  posExternalId   String?     @map("pos_external_id")
+  posSyncStatus   String?     @map("pos_sync_status") // pending | synced | failed | skipped
   createdAt       DateTime    @default(now()) @map("created_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
 
@@ -620,6 +637,7 @@ model OrderItem {
   quantity     Int
   unitPrice    Decimal  @map("unit_price") @db.Decimal(10, 2) // Snapshot at purchase time
   snapshotName String   @map("snapshot_name") // "Product name - Variant name" snapshot
+  notes        String? // Delivery: notas libres por ítem
   createdAt    DateTime @default(now()) @map("created_at")
 
   order   Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -627,4 +645,21 @@ model OrderItem {
 
   @@index([orderId])
   @@map("order_items")
+}
+
+// =============================================================================
+// Delivery vertical: estado de plantillas de WhatsApp (alimentado por webhooks de Meta)
+// =============================================================================
+
+model WhatsappTemplateState {
+  id        String   @id @default(cuid())
+  channelId String   @map("channel_id")
+  name      String
+  language  String
+  status    String // APPROVED | PENDING | REJECTED | PAUSED | DISABLED
+  category  String // UTILITY | MARKETING | AUTHENTICATION
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([channelId, name, language])
+  @@map("whatsapp_template_states")
 }

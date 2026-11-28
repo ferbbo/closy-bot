@@ -540,7 +540,9 @@ export class ConversationOrchestrator {
           conversationContext: {
             conversationId: conversation.id,
             merchantName: merchant.name,
-            industry: merchant.industry ?? undefined,
+            // 'restaurante' (delivery vertical) has no legacy LLM persona → generic
+            industry:
+              merchant.industry === 'restaurante' ? undefined : (merchant.industry ?? undefined),
           },
         });
         break;

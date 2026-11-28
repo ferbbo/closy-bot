@@ -36,6 +36,9 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   shipped: [OrderStatus.delivered],
   delivered: [],
   cancelled: [],
+  // Delivery vertical statuses (S1.1): same rules as DELIVERY_TRANSITIONS (RN-14)
+  preparing: [OrderStatus.on_the_way, OrderStatus.cancelled],
+  on_the_way: [OrderStatus.delivered],
 };
 
 /**
