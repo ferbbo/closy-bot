@@ -11,6 +11,7 @@ import type { DeliveryTools } from './tools/delivery.tools';
 import type { PaymentTools } from './tools/payment.tools';
 import type { ConfirmTools } from './tools/confirm.tools';
 import type { OpeningHoursGuard } from '../handler/guards/opening-hours.guard';
+import type { OrderTools } from './tools/order.tools';
 import { DeliveryAgentService, freshCandidateIds } from './delivery-agent.service';
 import { GroundingValidator } from './grounding-validator';
 import { DELIVERY_TEXTS } from './delivery-agent.prompt';
@@ -136,6 +137,7 @@ function build(provider: FakeLlmProvider, matchStatus: 'MATCHED' | 'NOT_FOUND' =
     passthrough as unknown as PaymentTools,
     passthrough as unknown as ConfirmTools,
     { wrap: (h: Record<string, unknown>) => h } as unknown as OpeningHoursGuard,
+    passthrough as unknown as OrderTools,
     provider,
   );
   return { service, added, matcher };
