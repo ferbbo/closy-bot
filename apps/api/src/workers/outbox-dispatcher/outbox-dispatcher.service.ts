@@ -3,7 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { OutboxRepository } from '../../persistence/repositories/outbox.repository';
 import { ChannelRepository } from '../../persistence/repositories/channel.repository'; // PR-03.11
-import { WhatsAppOutboundService } from '../../channels/whatsapp/whatsapp-outbound.service';
+import {
+  WhatsAppOutboundService,
+  WhatsAppTemplateMessage,
+} from '../../channels/whatsapp/whatsapp-outbound.service';
 import { OutboxMessage, OutboxMessageType, MessageDirection } from '@prisma/client';
 import { maskPhone } from '../../common/utils/pii.util';
 import { MessageLogRepository } from '../../persistence/repositories/message-log.repository'; // PR-03.10
@@ -110,6 +113,9 @@ export class OutboxDispatcherService implements OnModuleInit {
         case OutboxMessageType.SEND_TEXT:
           await this.sendTextMessage(message);
           break;
+        case OutboxMessageType.SEND_TEMPLATE:
+          await this.sendTemplateMessage(message);
+          break;
         default:
           throw new Error(`Unknown message type: ${message.type}`);
       }
@@ -189,6 +195,62 @@ export class OutboxDispatcherService implements OnModuleInit {
         this.logger.warn(
           `Failed to log outbound message for conversation ${message.conversationId}`,
           error,
+        );
+      }
+    }
+  }
+
+  /**
+   * Delivery (S1.4): envía una plantilla (`SEND_TEMPLATE`). Misma resolución de credenciales
+   * que SEND_TEXT (canal si existe, si no env vars). El MessageLog guarda el cuerpo renderizado
+   * (o `[plantilla:<name>]`) para la memoria de la conversación.
+   */
+  private async sendTemplateMessage(message: OutboxMessage) {
+    const payload = message.payloadJson as unknown as {
+      template: WhatsAppTemplateMessage;
+      renderedText?: string;
+    };
+    if (!payload?.template?.name || !payload.template.languageCode) {
+      throw new Error('Invalid SEND_TEMPLATE payload: missing template name or language');
+    }
+    const template: WhatsAppTemplateMessage = {
+      name: payload.template.name,
+      languageCode: payload.template.languageCode,
+      params: payload.template.params ?? {},
+    };
+
+    const channel = message.channelId ? await this.channelRepo.findById(message.channelId) : null;
+    const result = channel
+      ? await this.whatsappOutbound.sendTemplateMessageWithCredentials(
+          message.to,
+          template,
+          channel.credentials as { accessToken: string; phoneNumberId: string },
+        )
+      : await this.whatsappOutbound.sendTemplateMessage(message.to, template);
+
+    if (!result.success) {
+      throw new Error(result.error ?? 'Unknown error from WhatsApp API');
+    }
+
+    await this.outboxRepo.markSent(message.id, result.messageId ?? 'unknown');
+    this.logger.log(
+      `Template sent: id=${message.id}, template=${template.name}, providerMessageId=${result.messageId}`,
+    );
+
+    if (message.conversationId) {
+      try {
+        const days = Number(this.configService.get<number>('MESSAGE_HISTORY_DAYS', 30));
+        await this.messageLogRepository.create({
+          conversationId: message.conversationId,
+          merchantId: message.merchantId,
+          direction: MessageDirection.OUT,
+          providerMessageId: result.messageId,
+          text: payload.renderedText ?? `[plantilla:${template.name}]`,
+          expiresAt: new Date(Date.now() + days * 24 * 60 * 60 * 1000),
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Failed to log outbound template for conversation ${message.conversationId}: ${(error as Error).message}`,
         );
       }
     }
