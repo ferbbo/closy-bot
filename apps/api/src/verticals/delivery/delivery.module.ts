@@ -37,6 +37,7 @@ import { ServicesModule } from '../../services/services.module';
 import { BusinessMessengerService } from './messaging/business-messenger.service';
 import { CustomerServiceWindowService } from './messaging/customer-service-window.service';
 import { MEDIA_PROVIDERS } from './media/media.providers';
+import { BURST_PROVIDERS } from './burst/burst.providers';
 
 /**
  * DeliveryModule — Closy Delivery Agent (vertical B2, restaurantes).
@@ -96,6 +97,8 @@ import { MEDIA_PROVIDERS } from './media/media.providers';
     },
     // Multimodal (S5.0): MediaFetcher real + MediaRouter; Transcriber/ImageInterpreter stub
     ...MEDIA_PROVIDERS,
+    // Debounce de ráfagas (S5.1): resuelto por WhatsAppController vía ModuleRef
+    ...BURST_PROVIDERS,
   ],
   exports: [
     DeliveryConfigService,
