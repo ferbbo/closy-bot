@@ -16,6 +16,7 @@ import { DeliveryConfigService } from '../config/delivery-config.service';
 import { DeliveryAgentService } from '../agent/delivery-agent.service';
 import { DELIVERY_TEXTS, isInfoQuery, isOffTopic, isOptOut } from '../agent/delivery-agent.prompt';
 import { MediaRouter } from '../media/media-router.service';
+import { photoQuantityHint, withoutSuggestedQuantity } from '../media/product-photo.service';
 
 interface DeliveryMeta {
   privacyNoticeAt?: string;
@@ -76,6 +77,9 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
     if (photoCandidates.length) {
       delivery.lastCandidates = { items: photoCandidates, createdAt: now.toISOString() };
     }
+    // Turno de elección tras una foto: la cantidad sugerida llega al agente (RN-25).
+    const photoHint =
+      media.action === 'none' ? photoQuantityHint(delivery.lastCandidates, now) : '';
 
     // RN-29: opt-out de mensajes iniciados por el negocio
     if (isOptOut(text)) {
@@ -126,7 +130,11 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
             seenVariantIds: new Set<string>(),
           },
           merchantName: ctx.merchant.name,
-          history: await this.history(ctx),
+          // fuera de ctx.text para que el parser de respaldo (AC-07) no lo lea como pedido
+          history: [
+            ...(await this.history(ctx)),
+            ...(photoHint ? [{ role: 'assistant' as const, content: photoHint }] : []),
+          ],
           lastCandidates: delivery.lastCandidates ?? null,
         });
         if (turn.candidates?.length) {
@@ -139,6 +147,12 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
           };
         }
         reactivate = turn.toolTrace.some((t) => t.name === 'agregar_al_carrito' && t.ok);
+        if (photoHint && reactivate && delivery.lastCandidates) {
+          delivery.lastCandidates = {
+            ...delivery.lastCandidates,
+            items: withoutSuggestedQuantity(delivery.lastCandidates.items),
+          };
+        }
         out = { text: turn.text, intent: 'DELIVERY_ORDER' };
       }
     }

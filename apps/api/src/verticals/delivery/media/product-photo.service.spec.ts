@@ -1,6 +1,10 @@
 import type { CatalogMatcherService } from '../catalog/catalog-matcher.service';
 import type { MatchResult, VariantCandidate } from '../contracts';
-import { ProductPhotoResolver } from './product-photo.service';
+import {
+  photoQuantityHint,
+  ProductPhotoResolver,
+  withoutSuggestedQuantity,
+} from './product-photo.service';
 
 const cand = (variantId: string, label: string, unitPrice: number): VariantCandidate => ({
   variantId,
@@ -90,5 +94,29 @@ describe('ProductPhotoResolver (S5.3-T2)', () => {
     if (res.status !== 'FOUND') throw new Error('expected FOUND');
     expect(res.candidates).toHaveLength(1);
     expect(res.echo).not.toContain('sushi');
+  });
+});
+
+describe('photoQuantityHint / withoutSuggestedQuantity (S5.3-T2)', () => {
+  const now = new Date('2026-11-28T12:00:00Z');
+  const toc = { ...cand('v-toc', 'Hamburguesa de tocineta', 19000), suggestedQuantity: 2 };
+
+  it('lists DB labels with the suggested quantity, never prices', () => {
+    const hint = photoQuantityHint({ items: [toc], createdAt: now.toISOString() }, now);
+    expect(hint).toContain('Hamburguesa de tocineta ×2');
+    expect(hint).not.toMatch(/19\.?000|\$/);
+  });
+
+  it('empty when expired (TTL 30 min), missing or without quantities', () => {
+    const old = new Date(now.getTime() - 31 * 60 * 1000).toISOString();
+    expect(photoQuantityHint({ items: [toc], createdAt: old }, now)).toBe('');
+    expect(photoQuantityHint(null, now)).toBe('');
+    expect(
+      photoQuantityHint(
+        { items: withoutSuggestedQuantity([toc]), createdAt: now.toISOString() },
+        now,
+      ),
+    ).toBe('');
+    expect(withoutSuggestedQuantity([toc])[0]).not.toHaveProperty('suggestedQuantity');
   });
 });

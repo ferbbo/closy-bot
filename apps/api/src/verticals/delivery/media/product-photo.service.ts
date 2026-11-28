@@ -81,3 +81,36 @@ function buildEcho(items: ImageInterpretation['items']): string {
   const budget = ECHO_MAX_CHARS - prefix.length;
   return `${prefix}${body.length > budget ? `${body.slice(0, budget - 1)}…` : body}`;
 }
+
+const HINT_TTL_MS = 30 * 60 * 1000; // igual que lastCandidates (RN-02)
+
+/**
+ * Pista para el turno en que el cliente elige ("la primera"): cantidades sugeridas por la foto
+ * en los `lastCandidates` vigentes. Solo labels de la BD y cantidades; nunca precios.
+ */
+export function photoQuantityHint(
+  last:
+    | { items: Array<VariantCandidate & { suggestedQuantity?: number | null }>; createdAt: string }
+    | null
+    | undefined,
+  now: Date,
+): string {
+  if (!last?.items?.length) return '';
+  const age = now.getTime() - new Date(last.createdAt).getTime();
+  if (!(age >= 0 && age <= HINT_TTL_MS)) return '';
+  const withQty = last.items.filter((c) => c.suggestedQuantity);
+  if (!withQty.length) return '';
+  const list = withQty.map((c) => `${c.label} ×${c.suggestedQuantity}`).join(', ');
+  return `[nota interna] De la foto anterior, cantidades sugeridas: ${list}. Úsalas si el cliente elige una de esas opciones sin decir otra cantidad.`;
+}
+
+/** Quita las cantidades sugeridas una vez usadas (para no repetir la pista en turnos siguientes). */
+export function withoutSuggestedQuantity<T extends VariantCandidate>(
+  items: T[],
+): VariantCandidate[] {
+  return items.map((c) => {
+    const copy: VariantCandidate & { suggestedQuantity?: unknown } = { ...c };
+    delete copy.suggestedQuantity;
+    return copy;
+  });
+}
