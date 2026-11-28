@@ -43,11 +43,16 @@ export class FakeMediaFetcher implements MediaFetcher {
 
 /**
  * FakeTranscriber(text|failure) — devuelve el texto fijo que se le pase, o el fallo indicado.
+ * Igual que el transcriptor real, un audio con `durationSec > maxDurationSec` → TOO_LONG (RN-24).
  *
  *   new FakeTranscriber('2 hamburguesas sencillas sin cebolla y una coca 400')
  *   new FakeTranscriber({ ok: false, reason: 'TOO_LONG' })
  */
 export class FakeTranscriber implements Transcriber {
+  public readonly calls: Array<{
+    media: FetchedMedia;
+    opts: { language: 'es'; maxDurationSec: number };
+  }> = [];
   private readonly response: MediaResult<{ text: string }>;
 
   constructor(textOrFailure: string | MediaResult<{ text: string }>) {
@@ -57,7 +62,14 @@ export class FakeTranscriber implements Transcriber {
         : textOrFailure;
   }
 
-  async transcribe(): Promise<MediaResult<{ text: string }>> {
+  async transcribe(
+    media: FetchedMedia,
+    opts: { language: 'es'; maxDurationSec: number },
+  ): Promise<MediaResult<{ text: string }>> {
+    this.calls.push({ media, opts });
+    if (typeof media.durationSec === 'number' && media.durationSec > opts.maxDurationSec) {
+      return { ok: false, reason: 'TOO_LONG' };
+    }
     return this.response;
   }
 }
