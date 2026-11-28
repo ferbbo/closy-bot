@@ -195,3 +195,20 @@
 
 ### D-052 · Merges bloqueados: PRs apilados · Tier 1 · run-20261128-0008 · 2026-11-28
 - `merge_pull_request` sigue denegado por el clasificador del entorno (igual que en run-20261127-2210). Esta corrida no intenta rodear la denegación con merges locales ni con REST. Deja los PRs verificados y abiertos con un orden de merge sugerido: #154, #155 y #156 son independientes. El PR de S5.3 incluye un merge de `da/S5.2-voice` (conflicto en `media.providers.ts` resuelto) y debe mergearse después de #155.
+
+### D-053 · S5.5 apilado sobre #154 · Tier 1 · run-20261128-0208 · 2026-11-28
+- `delivery-journey.e2e-spec.ts` reutiliza `test/utils/delivery-e2e.harness.ts` de #154 (conectar antes que copiar). La rama `da/S5.5-release` sale de `da/S4-e2e-debt` y su PR (#158) apunta a esa base para que el diff sea limpio. T4 (PR #137) queda para cuando todo esté mergeado.
+
+### D-054 · `SEND_INTERACTIVE` y `SEND_IMAGE` en `OutboxMessageType` · Tier 2 · run-20261128-0208 · 2026-11-28
+- Cambio aditivo de enum (CONTRACTS §2). No hay renombres ni borrados. Reversión: dejar de usarlos (los valores sobrantes no afectan).
+
+### D-055 · DTO del webhook acepta `interactive` · Tier 2 · run-20261128-0208 · 2026-11-28
+- `button_reply` se mapea a `text = title` + `interactive_reply_id`. Con el flag apagado el controlador lo ignora igual que la media (S5.0). Efecto visible en legacy: un webhook con `interactive` ahora pasa la validación y recibe 200 (antes probablemente 400 por `forbidNonWhitelisted`). Mismo criterio que D-050.
+
+### D-056 · Confirmación interactiva y foto de producto (S5.4) · Tier 1 · run-20261128-0208 · 2026-11-28
+- Botones `delivery_confirm_yes` "Sí, confirmo" y `delivery_confirm_no` "No, cambiar algo". Los títulos pasan por el clasificador afirmativo/negativo existente.
+- Cuerpo del interactivo = prefijo fijo opcional + bloque exacto de `OrderSummaryPresenter` + "¿Confirmamos tu pedido?". En ese turno se descarta la frase del LLM (RN-01/02).
+- Se cae a texto si no hay `channelId`, si el cuerpo supera 1024 caracteres o si falla el encolado.
+- dedupeKey `reply:<messageId>`.
+- `ver_foto_producto({variantId}|{menu:true})`: solo variantIds vistos en el turno, `Product.imageUrl` o `menuImageUrl` de la BD, solo links http(s), sin precio; si no hay imagen responde "No tengo foto de ese producto." (RN-00).
+- El helper `send` de `delivery-checkout.e2e-spec.ts` lee también `SEND_INTERACTIVE`; ninguna aserción cambió.
