@@ -8,6 +8,8 @@ import { PlaybookService, type MerchantPlaybookData } from '../services/playbook
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { ConversationRepository } from '../persistence/repositories/conversation.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10 AC-06
+import { runToolLoop, type RunToolLoopParams } from './tool-loop'; // S1.3-T3
+import type { ToolLoopResult } from '../verticals/delivery/contracts';
 
 /**
  * LLM Service - Facade for LLM operations
@@ -184,6 +186,19 @@ export class LlmService {
       this.logger.error('Simple LLM generation failed', error);
       throw error;
     }
+  }
+
+  /**
+   * S1.3-T3: bucle genérico de tool calling (ver `tool-loop.ts`). Nunca lanza.
+   * No depende de LLM_ENABLED/LLM_* (el gating es del llamador, p. ej. DELIVERY_ENABLED).
+   * `provider` permite inyectar otro LlmProvider (p. ej. FakeLlmProvider en tests);
+   * por defecto usa Groq.
+   */
+  async runToolLoop(
+    params: RunToolLoopParams & { provider?: LlmProvider },
+  ): Promise<ToolLoopResult> {
+    const { provider, ...loopParams } = params;
+    return runToolLoop(provider ?? this.groqProvider, loopParams, this.logger);
   }
 
   /**
