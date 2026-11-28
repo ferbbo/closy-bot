@@ -6,6 +6,7 @@ import { PersistenceModule } from '../../persistence/persistence.module';
 import { OrchestratorModule } from '../../orchestrator/orchestrator.module';
 import { ServicesModule } from '../../services/services.module'; // PR-03.11
 import { MetaSignatureGuard } from './guards/meta-signature.guard';
+import { FeatureFlagsModule } from '../../common/feature-flags/feature-flags.module'; // Delivery S5.0-T1
 
 /**
  * WhatsApp channel module
@@ -14,7 +15,7 @@ import { MetaSignatureGuard } from './guards/meta-signature.guard';
  * PR-03.11: Imports ServicesModule for MerchantResolverService
  */
 @Module({
-  imports: [PersistenceModule, OrchestratorModule, ServicesModule], // PR-03.11
+  imports: [PersistenceModule, OrchestratorModule, ServicesModule, FeatureFlagsModule], // PR-03.11
   controllers: [WhatsAppController],
   providers: [WhatsAppService, WhatsAppOutboundService, MetaSignatureGuard],
   exports: [WhatsAppService, WhatsAppOutboundService],

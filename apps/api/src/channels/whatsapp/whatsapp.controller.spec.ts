@@ -13,6 +13,7 @@ import { ArgumentMetadata, BadRequestException, ValidationPipe } from '@nestjs/c
 import { ModuleRef } from '@nestjs/core';
 import { MetaWebhookPayload } from './dto/meta-webhook.dto';
 import { TemplateWebhookHandler } from '../../verticals/delivery/messaging/template-webhook.handler';
+import { FeatureFlagsService } from '../../common/feature-flags/feature-flags.service';
 
 describe('WhatsAppController', () => {
   let controller: WhatsAppController;
@@ -93,6 +94,10 @@ describe('WhatsAppController', () => {
         {
           provide: OutboxService,
           useValue: mockOutboxService,
+        },
+        {
+          provide: FeatureFlagsService,
+          useValue: { isDeliveryEnabled: false },
         },
         MetaSignatureGuard,
       ],
@@ -242,6 +247,7 @@ describe('WhatsAppController', () => {
         { get: jest.fn(() => 'tok') } as unknown as ConfigService,
         { enqueueWhatsAppText: jest.fn() } as unknown as OutboxService,
         moduleRef as ModuleRef,
+        { isDeliveryEnabled: false } as FeatureFlagsService,
       );
       return { ctrl, orchestratorMock };
     };
@@ -333,6 +339,92 @@ describe('WhatsAppController', () => {
         {} as never,
       );
       expect(get).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('media gating (S5.0-T1)', () => {
+    const audioPayload = (): MetaWebhookPayload =>
+      ({
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'waba-123',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: { display_phone_number: '1', phone_number_id: 'phone-id-test' },
+                  messages: [
+                    {
+                      from: '573001234567',
+                      id: 'wamid.AUD1',
+                      timestamp: '1700000000',
+                      type: 'audio',
+                      audio: { id: 'aud_1', mime_type: 'audio/ogg' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      }) as unknown as MetaWebhookPayload;
+
+    const buildMediaController = (opts: {
+      isDeliveryEnabled: boolean;
+      industry: string | null;
+    }) => {
+      const whatsappService = { processInboundMessage: jest.fn() };
+      const merchantResolver = {
+        resolveByChannel: jest.fn().mockResolvedValue({
+          merchant: { id: 'merchant-1', industry: opts.industry },
+          channel: { id: 'channel-1' },
+        }),
+      };
+      const orchestratorMock = { process: jest.fn().mockResolvedValue({ shouldSend: false }) };
+      const ctrl = new WhatsAppController(
+        whatsappService as unknown as WhatsAppService,
+        {} as WhatsAppOutboundService,
+        orchestratorMock as unknown as ConversationOrchestrator,
+        merchantResolver as unknown as MerchantResolverService,
+        { get: jest.fn(() => 'tok') } as unknown as ConfigService,
+        { enqueueWhatsAppText: jest.fn() } as unknown as OutboxService,
+        {} as ModuleRef,
+        { isDeliveryEnabled: opts.isDeliveryEnabled } as FeatureFlagsService,
+      );
+      return { ctrl, whatsappService, orchestratorMock };
+    };
+
+    it('ignores audio for a non-restaurante merchant (legacy behavior preserved, RN-21)', async () => {
+      const { ctrl, whatsappService, orchestratorMock } = buildMediaController({
+        isDeliveryEnabled: true,
+        industry: 'ropa',
+      });
+      await ctrl.handleMetaWebhook(audioPayload(), {} as never);
+      expect(whatsappService.processInboundMessage).not.toHaveBeenCalled();
+      expect(orchestratorMock.process).not.toHaveBeenCalled();
+    });
+
+    it('ignores audio when isDeliveryEnabled is false even for a restaurante merchant', async () => {
+      const { ctrl, whatsappService } = buildMediaController({
+        isDeliveryEnabled: false,
+        industry: 'restaurante',
+      });
+      await ctrl.handleMetaWebhook(audioPayload(), {} as never);
+      expect(whatsappService.processInboundMessage).not.toHaveBeenCalled();
+    });
+
+    it('processes audio and propagates media fields when the delivery vertical is eligible', async () => {
+      const { ctrl, whatsappService, orchestratorMock } = buildMediaController({
+        isDeliveryEnabled: true,
+        industry: 'restaurante',
+      });
+      await ctrl.handleMetaWebhook(audioPayload(), {} as never);
+      expect(whatsappService.processInboundMessage).toHaveBeenCalled();
+      expect(orchestratorMock.process).toHaveBeenCalledWith(
+        expect.objectContaining({ mediaType: 'audio', mediaId: 'aud_1', mimeType: 'audio/ogg' }),
+      );
     });
   });
 });

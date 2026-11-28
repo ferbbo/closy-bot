@@ -31,6 +31,7 @@ import {
   WabaWebhookValue,
   isWabaWebhookField,
 } from '../../verticals/delivery/messaging/template-webhook.handler';
+import { FeatureFlagsService } from '../../common/feature-flags/feature-flags.service';
 
 /**
  * Controller for WhatsApp webhooks (Meta WhatsApp Cloud API)
@@ -51,6 +52,7 @@ export class WhatsAppController {
     private readonly configService: ConfigService,
     private readonly outboxService: OutboxService,
     private readonly moduleRef: ModuleRef, // Delivery S1.4-T4: resolución perezosa del handler WABA
+    private readonly featureFlags: FeatureFlagsService, // Delivery S5.0-T1: gating de media
   ) {
     this.verifyToken = this.configService.get<string>('WHATSAPP_WEBHOOK_VERIFY_TOKEN', '');
     if (!this.verifyToken) {
@@ -285,6 +287,19 @@ export class WhatsAppController {
       `Channel resolved: merchantId=${resolution.merchant.id}, channelId=${resolution.channel.id}`,
     );
 
+    // S5.0-T1: media solo se procesa cuando la vertical delivery puede usarla;
+    // si no, se mantiene el comportamiento legacy (se ignora, sin tocar la BD).
+    if (dto.media_type) {
+      const deliveryEligible =
+        this.featureFlags.isDeliveryEnabled && resolution.merchant.industry === 'restaurante';
+      if (!deliveryEligible) {
+        this.logger.log(
+          `Ignoring ${dto.media_type} message outside delivery vertical (message_id=${dto.message_id})`,
+        );
+        return;
+      }
+    }
+
     try {
       // 1. Process and dedupe inbound message
       await this.whatsappService.processInboundMessage(dto);
@@ -299,6 +314,16 @@ export class WhatsAppController {
           channelId: resolution.channel.id, // PR-03.11
           text: dto.text || '',
           timestamp: new Date(dto.timestamp),
+          mediaType: dto.media_type as
+            | 'audio'
+            | 'image'
+            | 'video'
+            | 'document'
+            | 'sticker'
+            | undefined,
+          mediaId: dto.media_id,
+          mimeType: dto.mime_type,
+          caption: dto.caption,
         });
 
         this.logger.log(

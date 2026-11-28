@@ -32,6 +32,19 @@ export class InboundMessageDto {
   @IsString()
   @IsOptional()
   media_url?: string;
+
+  // Delivery S5.0-T1: id de media de Graph API (MediaFetcher lo descarga en el turno, RN-24).
+  @IsString()
+  @IsOptional()
+  media_id?: string;
+
+  @IsString()
+  @IsOptional()
+  mime_type?: string;
+
+  @IsString()
+  @IsOptional()
+  caption?: string;
 }
 
 /**

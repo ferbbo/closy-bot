@@ -93,7 +93,42 @@ describe('whatsapp-webhook.mapper', () => {
       expect(result[1].message_id).toBe('wamid.MSG2');
     });
 
-    it('should skip unsupported message types', () => {
+    it('should skip unsupported message types (sticker)', () => {
+      const payload: MetaWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '123456',
+            changes: [
+              {
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '+1234567890',
+                    phone_number_id: 'phone_123',
+                  },
+                  messages: [
+                    {
+                      from: '+573001234567',
+                      id: 'wamid.STK1',
+                      timestamp: '1234567890',
+                      type: 'sticker',
+                    },
+                  ],
+                },
+                field: 'messages',
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = mapMetaWebhookToInboundMessages(payload);
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('S5.0-T1: maps an image message with media fields (no text)', () => {
       const payload: MetaWebhookPayload = {
         object: 'whatsapp_business_account',
         entry: [
@@ -116,6 +151,7 @@ describe('whatsapp-webhook.mapper', () => {
                       image: {
                         id: 'img_123',
                         mime_type: 'image/jpeg',
+                        caption: 'esto es un combo?',
                       },
                     },
                   ],
@@ -129,7 +165,58 @@ describe('whatsapp-webhook.mapper', () => {
 
       const result = mapMetaWebhookToInboundMessages(payload);
 
-      expect(result).toHaveLength(0);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        message_id: 'wamid.IMG1',
+        media_type: 'image',
+        media_id: 'img_123',
+        mime_type: 'image/jpeg',
+        caption: 'esto es un combo?',
+      });
+      expect(result[0].text).toBeUndefined();
+    });
+
+    it('S5.0-T1: maps an audio message with media fields and no caption', () => {
+      const payload: MetaWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '123456',
+            changes: [
+              {
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '+1234567890',
+                    phone_number_id: 'phone_123',
+                  },
+                  messages: [
+                    {
+                      from: '+573001234567',
+                      id: 'wamid.AUD1',
+                      timestamp: '1234567890',
+                      type: 'audio',
+                      audio: { id: 'aud_123', mime_type: 'audio/ogg' },
+                    },
+                  ],
+                },
+                field: 'messages',
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = mapMetaWebhookToInboundMessages(payload);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        message_id: 'wamid.AUD1',
+        media_type: 'audio',
+        media_id: 'aud_123',
+        mime_type: 'audio/ogg',
+      });
+      expect(result[0].caption).toBeUndefined();
     });
 
     it('should skip messages without text body', () => {

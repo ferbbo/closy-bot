@@ -45,6 +45,8 @@ export const DELIVERY_TEXTS = {
     const days = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
     return `En este momento estamos cerrados. Abrimos el ${days[nextOpening.day]} a las ${nextOpening.time}. Si quieres, te muestro la carta.`;
   },
+  // S5.0: audio/imagen que no se pudo descargar o interpretar (AC-26, stub hasta S5.2/S5.3).
+  mediaFallback: '¿Me lo escribes, porfa? Así te ayudo más rápido 🙂',
 } as const;
 
 /** RN-29: frases de opt-out de mensajes iniciados por el negocio. */

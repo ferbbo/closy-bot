@@ -15,6 +15,7 @@ import type {
 import { DeliveryConfigService } from '../config/delivery-config.service';
 import { DeliveryAgentService } from '../agent/delivery-agent.service';
 import { DELIVERY_TEXTS, isInfoQuery, isOffTopic, isOptOut } from '../agent/delivery-agent.prompt';
+import { MediaRouter } from '../media/media-router.service';
 
 interface DeliveryMeta {
   privacyNoticeAt?: string;
@@ -43,6 +44,7 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
     private readonly agent: DeliveryAgentService,
     private readonly router: VerticalRouterService,
     private readonly moduleRef: ModuleRef,
+    private readonly mediaRouter: MediaRouter,
   ) {}
 
   onModuleInit(): void {
@@ -54,7 +56,13 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
   }
 
   async handle(ctx: VerticalContext): Promise<VerticalResult | null> {
-    const text = ctx.input.text ?? '';
+    // S5.0-T3: audio/imagen se resuelven antes de los guards de texto.
+    const media = await this.mediaRouter.route(ctx);
+    if (media.action === 'reply') {
+      return this.result(media.response, 'DELIVERY_GUARD');
+    }
+    const text = media.action === 'continue' ? media.text : (ctx.input.text ?? '');
+    const echoPrefix = media.action === 'continue' ? media.echoPrefix : '';
     // Wall clock (ms): the webhook timestamp has 1 s precision and RN-12 compares turns
     const now = new Date();
     const conv = await this.prisma.conversation.findUnique({
@@ -147,7 +155,7 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
         ...(reactivate && conv?.optedOutAt ? { optedOutAt: null } : {}),
       },
     });
-    return this.result(prefix + out.text, out.intent);
+    return this.result(echoPrefix + prefix + out.text, out.intent);
   }
 
   private async history(
