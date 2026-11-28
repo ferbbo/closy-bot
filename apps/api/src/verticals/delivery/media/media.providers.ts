@@ -2,7 +2,8 @@ import { Provider } from '@nestjs/common';
 import { MEDIA_FETCHER, TRANSCRIBER, IMAGE_INTERPRETER } from '../contracts';
 import { GraphMediaFetcher } from './media-fetcher.service';
 import { MediaRouter } from './media-router.service';
-import { NULL_IMAGE_INTERPRETER, NULL_TRANSCRIBER } from './null-media-providers';
+import { GroqVisionInterpreter } from './image-interpreter.groq';
+import { NULL_TRANSCRIBER } from './null-media-providers';
 
 /**
  * S5.0: MediaFetcher real (Graph API) + stubs de Transcriber/ImageInterpreter.
@@ -12,6 +13,6 @@ export const MEDIA_PROVIDERS: Provider[] = [
   GraphMediaFetcher,
   { provide: MEDIA_FETCHER, useExisting: GraphMediaFetcher },
   { provide: TRANSCRIBER, useValue: NULL_TRANSCRIBER },
-  { provide: IMAGE_INTERPRETER, useValue: NULL_IMAGE_INTERPRETER },
+  { provide: IMAGE_INTERPRETER, useClass: GroqVisionInterpreter }, // S5.3-T1
   MediaRouter,
 ];
