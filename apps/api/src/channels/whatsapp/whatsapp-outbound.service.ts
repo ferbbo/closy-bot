@@ -23,6 +23,15 @@ export interface WhatsAppTemplateMessage {
 }
 
 /**
+ * Delivery (S5.4): mensaje interactivo con botones de respuesta (Cloud API `interactive.button`).
+ * Límites de Meta: body ≤ 1024 caracteres, 1–3 botones, título ≤ 20 caracteres, id ≤ 256.
+ */
+export interface WhatsAppInteractiveButtons {
+  body: string;
+  buttons: Array<{ id: string; title: string }>;
+}
+
+/**
  * WhatsApp Outbound Service
  * Sends messages via WhatsApp Cloud API
  * PR-03.11: Added support for dynamic credentials per channel
@@ -233,6 +242,81 @@ export class WhatsAppOutboundService {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       };
+    }
+  }
+
+  /** Delivery (S5.4): payload Cloud API de un mensaje interactivo con botones de respuesta. */
+  buildInteractivePayload(to: string, msg: WhatsAppInteractiveButtons): Record<string, unknown> {
+    return {
+      messaging_product: 'whatsapp',
+      to: to.replace(/[+\s]/g, ''),
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        body: { text: msg.body },
+        action: {
+          buttons: msg.buttons.map((b) => ({ type: 'reply', reply: { id: b.id, title: b.title } })),
+        },
+      },
+    };
+  }
+
+  /** Delivery (S5.4): envía un interactivo con las credenciales de env (fallback sin canal). */
+  async sendInteractiveMessage(
+    to: string,
+    msg: WhatsAppInteractiveButtons,
+  ): Promise<SendMessageResult> {
+    return this.sendInteractiveMessageWithCredentials(to, msg, {
+      accessToken: this.accessToken,
+      phoneNumberId: this.phoneNumberId,
+    });
+  }
+
+  /** Delivery (S5.4): envía un interactivo con credenciales explícitas del canal. */
+  async sendInteractiveMessageWithCredentials(
+    to: string,
+    msg: WhatsAppInteractiveButtons,
+    credentials: WhatsAppCredentials,
+  ): Promise<SendMessageResult> {
+    return this.postPayload(this.buildInteractivePayload(to, msg), credentials, 'interactive');
+  }
+
+  /** Delivery (S5.4): POST genérico a /messages (dry-run en test o sin credenciales). */
+  private async postPayload(
+    payload: Record<string, unknown>,
+    credentials: WhatsAppCredentials,
+    kind: string,
+  ): Promise<SendMessageResult> {
+    this.logger.log(
+      `Sending ${kind} to ${this.maskPhone(String(payload.to))} via phone ${this.maskPhone(credentials.phoneNumberId)}`,
+    );
+    if (this.dryRun || !credentials.accessToken || !credentials.phoneNumberId) {
+      this.logger.debug(`[DRY RUN] ${kind} not sent (test mode or missing credentials)`);
+      return { success: true, messageId: `dry-run-${Date.now()}` };
+    }
+    try {
+      const url = `${this.apiUrl}/${this.apiVersion}/${credentials.phoneNumberId}/messages`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${credentials.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const errorBody = await response.text();
+        this.logger.error(
+          `WhatsApp API error (${kind}): ${response.status} ${response.statusText}`,
+          errorBody.substring(0, 200),
+        );
+        return { success: false, error: `API error: ${response.status} ${response.statusText}` };
+      }
+      const data = (await response.json()) as { messages?: Array<{ id: string }> };
+      return { success: true, messageId: data.messages?.[0]?.id };
+    } catch (error) {
+      this.logger.error(`Failed to send WhatsApp ${kind}: ${(error as Error).message}`);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
 

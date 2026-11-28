@@ -243,4 +243,47 @@ describe('OutboxService', () => {
       expect(repository.create.mock.calls[0][0]).not.toHaveProperty('channelRef');
     });
   });
+
+  describe('enqueueWhatsAppInteractive (S5.4)', () => {
+    const buttons = [
+      { id: 'delivery_confirm_yes', title: 'Sí, confirmo' },
+      { id: 'delivery_confirm_no', title: 'No, cambiar' },
+    ];
+
+    it('creates a SEND_INTERACTIVE message with dedupeKey and channel', async () => {
+      repository.create.mockResolvedValue({ id: 'outbox-i1' } as OutboxMessage);
+      const result = await service.enqueueWhatsAppInteractive({
+        merchantId: 'merchant-1',
+        conversationId: 'conv-1',
+        channelId: 'channel-1',
+        to: '+573001234567',
+        body: 'Resumen del pedido',
+        buttons,
+        dedupeKey: 'reply:wamid.1',
+      });
+      expect(result.id).toBe('outbox-i1');
+      expect(repository.create).toHaveBeenCalledWith({
+        merchant: { connect: { id: 'merchant-1' } },
+        conversationId: 'conv-1',
+        channel: OutboxChannel.WHATSAPP,
+        type: OutboxMessageType.SEND_INTERACTIVE,
+        to: '+573001234567',
+        payloadJson: { interactive: { body: 'Resumen del pedido', buttons }, metadata: undefined },
+        dedupeKey: 'reply:wamid.1',
+        channelRef: { connect: { id: 'channel-1' } },
+      });
+    });
+
+    it('omits channelRef when no channelId', async () => {
+      repository.create.mockResolvedValue({ id: 'outbox-i2' } as OutboxMessage);
+      await service.enqueueWhatsAppInteractive({
+        merchantId: 'merchant-1',
+        to: '+573001234567',
+        body: 'x',
+        buttons,
+        dedupeKey: 'k',
+      });
+      expect(repository.create.mock.calls[0][0]).not.toHaveProperty('channelRef');
+    });
+  });
 });
