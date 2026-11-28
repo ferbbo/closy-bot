@@ -218,3 +218,8 @@
 - La integración encontró que `delivery-journey` (AC-29, #158) falla al combinarse con #159, porque el resumen pasa a `SEND_INTERACTIVE` y el harness solo leía `SEND_TEXT`. El fix va en el harness compartido, en la rama de #158 (`38efbbd`): lee la respuesta más reciente que no sea plantilla. `type: { not: 'SEND_TEMPLATE' }` es válido con y sin el valor nuevo del enum.
 - Resultado: unit 1727/1732 · e2e 225/349 con la lista de fallos idéntica a la baseline (121), igual en los modos mvp y dev+delivery.
 - Entorno: el seed de los e2e corre `npx tsx` en un subproceso y necesita `DATABASE_URL` exportada (no la toma del `.env`).
+
+### D-058 · Release S5.5-T4 · Tier 1 · run-20261128-0809 · 2026-11-28
+- Con #154–#159 ya mergeados por el owner, T4 se hace en esta corrida y no espera a la de las 04:00 del 29-nov. Se re-verificó la rama integrada (unit, e2e, mvp y dev+delivery, sin regresión contra la baseline) y el PR #137 se actualizó por REST (título, cuerpo con el checklist §7 AC → test, las decisiones Tier 2 y la deuda) y se pasó a *ready for review*. **No se mergea** (Tier 3: es un merge a `dev`).
+- Los 4 errores de `pnpm lint` son `no-explicit-any` legacy (commits f139a48/45ddc2b, mar-2026) y no se tocan: están fuera de la matriz de propiedad. Se descartaron los cambios de `--fix` sobre archivos legacy.
+
