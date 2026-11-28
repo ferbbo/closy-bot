@@ -163,6 +163,7 @@
 ### D-045 · Gating de media en el controlador, no en el mapper · Tier 1 · run-20261127-2210 · 2026-11-27
 - **Contexto:** S5.0-T1 pide propagar media del mapper hasta `VerticalContext.input`. El mapper no conoce merchant/flag (se resuelve después).
 - **Decisión:** el mapper siempre produce el DTO con `media_type/media_id/mime_type/caption` para audio/image/video/document (antes se descartaban). `WhatsAppController.processMessage` ignora el mensaje (sin tocar la BD, como antes) si hay media y no (`isDeliveryEnabled && industry==='restaurante'`). Así el comportamiento legacy es idéntico con el flag apagado.
+- **Código:** PR #153 (`da/S5.0-media-plumbing`), sin mergear a `feat/delivery-agent` por un bloqueo de permisos del entorno (ver STATUS §Bloqueos).
 
 ### D-046 · MediaRouter short-circuitea antes de leer la conversación · Tier 1 · run-20261127-2210 · 2026-11-27
 - Cuando el fetch, la transcripción o la interpretación fallan (incluye los stubs `UNSUPPORTED` de S5.0), el handler responde el fallback "escríbelo" sin `prisma.conversation.findUnique` ni guards de texto. Evita trabajo y lecturas innecesarias en el camino más común hasta que S5.2/S5.3 tengan providers reales.
