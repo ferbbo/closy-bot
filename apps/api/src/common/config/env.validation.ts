@@ -16,6 +16,8 @@ export const envValidationSchema = Joi.object({
   WHATSAPP_API_URL: Joi.string().default('https://graph.facebook.com'),
   WHATSAPP_WEBHOOK_VERIFY_TOKEN: Joi.string().optional().default('your-verify-token'),
   WHATSAPP_APP_SECRET: Joi.string().optional(),
+  // Delivery S1.5: Meta Sandbox (fake Graph API) — only tests / local demo; never in production
+  WHATSAPP_SANDBOX: Joi.boolean().default(false),
 
   // LLM Configuration
   LLM_ENABLED: Joi.boolean().default(false),

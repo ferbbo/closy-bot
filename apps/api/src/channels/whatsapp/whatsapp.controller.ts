@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { ModuleRef } from '@nestjs/core';
 import { ChannelType } from '@prisma/client'; // PR-03.11
 import { WhatsAppService } from './whatsapp.service';
 import { WhatsAppOutboundService } from './whatsapp-outbound.service';
@@ -25,6 +26,11 @@ import { MetaSignatureGuard } from './guards/meta-signature.guard';
 import { mapMetaWebhookToInboundMessages, isStatusOnlyPayload } from './whatsapp-webhook.mapper';
 import { OutboxService } from '../../persistence/outbox/outbox.service';
 import { maskPhone } from '../../common/utils/pii.util';
+import {
+  TemplateWebhookHandler,
+  WabaWebhookValue,
+  isWabaWebhookField,
+} from '../../verticals/delivery/messaging/template-webhook.handler';
 
 /**
  * Controller for WhatsApp webhooks (Meta WhatsApp Cloud API)
@@ -44,6 +50,7 @@ export class WhatsAppController {
     private readonly merchantResolver: MerchantResolverService, // PR-03.11
     private readonly configService: ConfigService,
     private readonly outboxService: OutboxService,
+    private readonly moduleRef: ModuleRef, // Delivery S1.4-T4: resolución perezosa del handler WABA
   ) {
     this.verifyToken = this.configService.get<string>('WHATSAPP_WEBHOOK_VERIFY_TOKEN', '');
     if (!this.verifyToken) {
@@ -113,6 +120,10 @@ export class WhatsAppController {
   ): Promise<{ received: boolean }> {
     this.logger.log(`Meta webhook received: object=${payload.object}`);
 
+    // Delivery S1.4-T4: cambios de WABA (plantillas / calidad). No-op si el handler no está
+    // registrado o el flag está apagado; nunca afecta al procesamiento de `messages`.
+    await this.handleWabaChanges(payload);
+
     // Early return for status updates
     if (isStatusOnlyPayload(payload)) {
       this.logger.debug('Status-only payload, returning 200 without processing');
@@ -135,6 +146,36 @@ export class WhatsAppController {
     }
 
     return { received: true };
+  }
+
+  /**
+   * Delivery S1.4-T4: delega `message_template_status_update`, `template_category_update` y
+   * `phone_number_quality_update` a TemplateWebhookHandler (DeliveryModule), resuelto vía
+   * ModuleRef para no acoplar WhatsAppModule ↔ DeliveryModule. Errores: log y 200.
+   */
+  private async handleWabaChanges(payload: MetaWebhookPayload): Promise<void> {
+    const changes = (payload.entry || []).flatMap((entry) =>
+      (entry.changes || [])
+        .filter((change) => isWabaWebhookField(change.field))
+        .map((change) => ({ entryId: entry.id, change })),
+    );
+    if (changes.length === 0) return;
+
+    let handler: TemplateWebhookHandler;
+    try {
+      handler = this.moduleRef.get(TemplateWebhookHandler, { strict: false });
+    } catch {
+      this.logger.debug('TemplateWebhookHandler not registered; WABA changes ignored');
+      return;
+    }
+
+    for (const { entryId, change } of changes) {
+      try {
+        await handler.handle(entryId, change.field, change.value as unknown as WabaWebhookValue);
+      } catch (error) {
+        this.logger.error(`WABA webhook ${change.field} failed: ${(error as Error).message}`);
+      }
+    }
   }
 
   /**

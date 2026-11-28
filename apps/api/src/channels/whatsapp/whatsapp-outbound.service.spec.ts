@@ -165,4 +165,59 @@ describe('WhatsAppOutboundService (PR-03.11)', () => {
       expect(result.messageId).toContain('dry-run');
     });
   });
+  // Delivery S1.4-T1
+  describe('template messages (S1.4)', () => {
+    const template = {
+      name: 'pedido_confirmado',
+      languageCode: 'es',
+      params: { customer_name: 'Ana', order_code: 'ORD-0001' },
+    };
+
+    it('builds the Cloud API template payload with named body parameters', () => {
+      expect(service.buildTemplatePayload('+57 3001234567', template)).toEqual({
+        messaging_product: 'whatsapp',
+        to: '573001234567',
+        type: 'template',
+        template: {
+          name: 'pedido_confirmado',
+          language: { code: 'es' },
+          components: [
+            {
+              type: 'body',
+              parameters: [
+                { type: 'text', parameter_name: 'customer_name', text: 'Ana' },
+                { type: 'text', parameter_name: 'order_code', text: 'ORD-0001' },
+              ],
+            },
+          ],
+        },
+      });
+    });
+
+    it('omits components when the template has no parameters', () => {
+      const payload = service.buildTemplatePayload('573001234567', { ...template, params: {} });
+      expect((payload.template as { components: unknown[] }).components).toEqual([]);
+    });
+
+    it('sends template in dry-run mode without calling fetch', async () => {
+      const fetchSpy = jest.spyOn(global, 'fetch');
+      const result = await service.sendTemplateMessageWithCredentials('+573001234567', template, {
+        accessToken: 'tok',
+        phoneNumberId: '987',
+      });
+      expect(result.success).toBe(true);
+      expect(result.messageId).toContain('dry-run');
+      expect(fetchSpy).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+
+    it('sendTemplateMessage falls back to env credentials', async () => {
+      const spy = jest.spyOn(service, 'sendTemplateMessageWithCredentials');
+      await service.sendTemplateMessage('+573001234567', template);
+      expect(spy).toHaveBeenCalledWith('+573001234567', template, {
+        accessToken: 'test-token',
+        phoneNumberId: '123456789',
+      });
+    });
+  });
 });

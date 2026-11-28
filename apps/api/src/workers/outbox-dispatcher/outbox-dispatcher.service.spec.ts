@@ -40,6 +40,8 @@ describe('OutboxDispatcherService', () => {
           useValue: {
             sendTextMessage: jest.fn(),
             sendTextMessageWithCredentials: jest.fn(), // PR-03.11
+            sendTemplateMessage: jest.fn(), // S1.4
+            sendTemplateMessageWithCredentials: jest.fn(), // S1.4
           },
         },
         {
@@ -320,6 +322,98 @@ describe('OutboxDispatcherService', () => {
       await service['handleError'](mockMessage as OutboxMessage, 'String error');
 
       expect(repository.markFailed).toHaveBeenCalledWith('msg-1', 'String error', 5);
+    });
+  });
+  // Delivery S1.4-T1: SEND_TEMPLATE
+  describe('sendTemplateMessage (S1.4)', () => {
+    const template = {
+      name: 'pedido_en_camino',
+      languageCode: 'es',
+      params: { order_code: 'ORD-0042', merchant_name: 'Burger Barrio' },
+    };
+
+    it('dispatches SEND_TEMPLATE via processMessage with env credentials when no channel', async () => {
+      whatsappOutbound.sendTemplateMessage.mockResolvedValue({
+        success: true,
+        messageId: 'wamid.T1',
+      });
+      const msg = {
+        id: 'msg-t1',
+        type: OutboxMessageType.SEND_TEMPLATE,
+        to: '+573001234567',
+        channelId: null,
+        attempts: 0,
+        payloadJson: { template },
+      };
+
+      await service['processMessage'](msg as unknown as OutboxMessage);
+
+      expect(whatsappOutbound.sendTemplateMessage).toHaveBeenCalledWith('+573001234567', template);
+      expect(whatsappOutbound.sendTextMessage).not.toHaveBeenCalled();
+      expect(repository.markSent).toHaveBeenCalledWith('msg-t1', 'wamid.T1');
+    });
+
+    it('uses channel credentials and logs rendered text when conversationId present', async () => {
+      channelRepo.findById.mockResolvedValue({
+        id: 'channel-1',
+        credentials: { phoneNumberId: '123', accessToken: 'tok' },
+      } as never);
+      whatsappOutbound.sendTemplateMessageWithCredentials.mockResolvedValue({
+        success: true,
+        messageId: 'wamid.T2',
+      });
+      const messageLogRepo = service['messageLogRepository'] as unknown as { create: jest.Mock };
+
+      await service['sendTemplateMessage']({
+        id: 'msg-t2',
+        to: '+573001234567',
+        channelId: 'channel-1',
+        conversationId: 'conv-1',
+        merchantId: 'm-1',
+        payloadJson: { template, renderedText: 'Tu pedido ORD-0042 va en camino.' },
+      } as unknown as OutboxMessage);
+
+      expect(whatsappOutbound.sendTemplateMessageWithCredentials).toHaveBeenCalledWith(
+        '+573001234567',
+        template,
+        { phoneNumberId: '123', accessToken: 'tok' },
+      );
+      expect(messageLogRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conversationId: 'conv-1',
+          text: 'Tu pedido ORD-0042 va en camino.',
+        }),
+      );
+    });
+
+    it('marks failed when the API rejects the template', async () => {
+      whatsappOutbound.sendTemplateMessage.mockResolvedValue({
+        success: false,
+        error: 'API error: 400',
+      });
+      const msg = {
+        id: 'msg-t3',
+        type: OutboxMessageType.SEND_TEMPLATE,
+        to: '+573001234567',
+        attempts: 0,
+        payloadJson: { template },
+      };
+
+      await service['processMessage'](msg as unknown as OutboxMessage);
+
+      expect(repository.markFailed).toHaveBeenCalledWith('msg-t3', 'API error: 400', 5);
+      expect(repository.markSent).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid payload without calling the API', async () => {
+      await expect(
+        service['sendTemplateMessage']({
+          id: 'x',
+          to: '1',
+          payloadJson: {},
+        } as unknown as OutboxMessage),
+      ).rejects.toThrow('Invalid SEND_TEMPLATE payload');
+      expect(whatsappOutbound.sendTemplateMessage).not.toHaveBeenCalled();
     });
   });
 });
