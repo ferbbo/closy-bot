@@ -6,6 +6,8 @@ import { DELIVERY_CONFIG_PROVIDERS } from './config/delivery-config.providers';
 import { DeliveryConfigService } from './config/delivery-config.service';
 import { MESSAGING_PROVIDERS } from './messaging/messaging.providers';
 import { CART_TOOLS_PROVIDERS } from './agent/tools/cart-tools.providers';
+import { DELIVERY_CATALOG_PROVIDERS } from './catalog/catalog.providers';
+import { CatalogMatcherService } from './catalog/catalog-matcher.service';
 import { ServicesModule } from '../../services/services.module';
 import { BusinessMessengerService } from './messaging/business-messenger.service';
 import { CustomerServiceWindowService } from './messaging/customer-service-window.service';
@@ -20,7 +22,17 @@ import { CustomerServiceWindowService } from './messaging/customer-service-windo
  */
 @Module({
   imports: [FeatureFlagsModule, VerticalsModule, PersistenceModule, ServicesModule],
-  providers: [...DELIVERY_CONFIG_PROVIDERS, ...MESSAGING_PROVIDERS, ...CART_TOOLS_PROVIDERS],
-  exports: [DeliveryConfigService, BusinessMessengerService, CustomerServiceWindowService],
+  providers: [
+    ...DELIVERY_CONFIG_PROVIDERS,
+    ...MESSAGING_PROVIDERS,
+    ...CART_TOOLS_PROVIDERS,
+    ...DELIVERY_CATALOG_PROVIDERS,
+  ],
+  exports: [
+    DeliveryConfigService,
+    BusinessMessengerService,
+    CustomerServiceWindowService,
+    CatalogMatcherService,
+  ],
 })
 export class DeliveryModule {}
