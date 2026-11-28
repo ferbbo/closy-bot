@@ -53,13 +53,6 @@ describe('Delivery media — voice (e2e)', () => {
   const sendAudio = async (mediaId: string): Promise<{ reply: string; wamid: string }> => {
     const wamid = `wamid.S52_AUDIO_${Date.now()}_${seq++}`;
     const payload = inboundAudio(customerPhone, mediaId, { id: wamid });
-    // KNOWN GAP (reported, outside S5.2 scope): Meta marks voice notes with `audio.voice: true`,
-    // but MetaMessageMedia does not whitelist `voice` and the global ValidationPipe
-    // (forbidNonWhitelisted) answers 400. Stripped here until the DTO accepts it.
-    const messages = payload.entry[0].changes[0].value.messages as
-      | Array<{ audio?: Record<string, unknown> }>
-      | undefined;
-    if (messages?.[0]?.audio) delete messages[0].audio.voice;
     const raw = JSON.stringify(payload);
     const outboxWhere = { merchantId: MERCHANT_ID, type: 'SEND_TEXT' as const };
     const before = await prisma.outboxMessage.count({ where: outboxWhere });
