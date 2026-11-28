@@ -22,7 +22,7 @@ export interface DeliveryE2eHarness {
   fake: FakeLlmProvider;
   /** sku → variantId del seed. */
   variants: Record<string, string>;
-  /** Envía un webhook de texto firmado y devuelve el último SEND_TEXT encolado para el comercio. */
+  /** Envía un webhook de texto firmado y devuelve la última respuesta (texto o interactivo) encolada para el comercio. */
   sendText(from: string, text: string): Promise<string>;
   close(): Promise<void>;
 }
@@ -103,11 +103,19 @@ export async function startDeliveryApp(
       .set('X-Hub-Signature-256', signPayload(raw))
       .send(raw)
       .expect(200);
-    const last = await prisma.outboxMessage.findFirst({
-      where: { ...where, type: 'SEND_TEXT' },
+    // S5.4 (AC-28): el turno del resumen responde con SEND_INTERACTIVE (body = bloque del
+    // presenter). `not: SEND_TEMPLATE` es válido con y sin el valor nuevo del enum.
+    const recent = await prisma.outboxMessage.findMany({
+      where: { ...where, type: { not: 'SEND_TEMPLATE' } },
       orderBy: { createdAt: 'desc' },
+      take: 5,
     });
-    return String((last?.payloadJson as { text?: string } | null)?.text ?? '');
+    for (const msg of recent) {
+      const payload = msg.payloadJson as { text?: string; interactive?: { body?: string } } | null;
+      const body = payload?.text ?? payload?.interactive?.body;
+      if (body) return String(body);
+    }
+    return '';
   };
 
   const close = async (): Promise<void> => {

@@ -3829,6 +3829,101 @@ Ejemplo: `clv1abc123/products/clv1xyz456/1741234567890-a1b2c3d4e5f6.webp`
 
 ---
 
+## Closy Delivery Agent — vertical de domicilios (B2, `feat/delivery-agent`)
+
+> Agente de pedidos a domicilio por WhatsApp para restaurantes. Spec: `docs/delivery-agent/SPEC.md` ·
+> demo local paso a paso: `docs/delivery-agent/DEMO.md` · estado: `docs/delivery-agent/STATUS.md`.
+
+### Activación (feature flag)
+La vertical solo atiende si se cumplen **las tres** condiciones; si no, el flujo legacy no cambia (RN-21):
+
+| Condición | Valor |
+|---|---|
+| `FEATURES_MODE` | distinto de `mvp` (kill-switch) |
+| `DELIVERY_ENABLED` | `true` |
+| `merchant.industry` | `restaurante` |
+
+### Variables de entorno
+| Variable | Default | Uso |
+|---|---|---|
+| `DELIVERY_ENABLED` | `false` | Flag de la vertical |
+| `DELIVERY_LLM_MODEL` | `llama-3.3-70b-versatile` | Modelo del agente (tool calling, Groq) |
+| `DELIVERY_STT_MODEL` | `whisper-large-v3-turbo` | Transcripción de notas de voz |
+| `DELIVERY_VISION_MODEL` | `meta-llama/llama-4-scout-17b-16e-instruct` | Fotos de producto y comprobantes |
+| `DELIVERY_DEBOUNCE_MS` | `4000` | Ventana para agrupar ráfagas de mensajes (llega con S5.1, PR #156) |
+| `WHATSAPP_SANDBOX` | `false` | `true` solo contra el Meta Sandbox local (`pnpm meta:sandbox`) |
+
+Todas están declaradas en `apps/api/src/common/config/env.validation.ts` y `apps/api/.env.example`.
+`GROQ_API_KEY` es la misma del LLM legacy.
+
+### Configuración del comercio (`deliveryConfig`)
+Se edita con el endpoint existente de configuración (Session Cookie). Es un PATCH parcial: lo que
+no se envía conserva su valor. Un PATCH sin `deliveryConfig` funciona igual que siempre.
+
+```bash
+curl -X PATCH http://localhost:3000/merchants/me/config \
+  -H "Cookie: session_id=<tu-session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "deliveryConfig": {
+      "timezone": "America/Bogota",
+      "openingHours": [{ "day": 5, "open": "17:00", "close": "02:00" }],
+      "prepTimeMinutes": 20,
+      "zones": [
+        { "id": "cabecera", "name": "Cabecera", "aliases": ["cabecera del llano"],
+          "fee": 4000, "minOrder": 15000, "etaMinutes": 15 }
+      ],
+      "freeDeliveryAbove": null,
+      "pickupEnabled": true,
+      "maxOrderAmountWithoutHuman": 300000,
+      "menuImageUrl": null
+    }
+  }'
+```
+
+Errores: `400` con `errors: [{ path, message }]` por campo (p. ej. `deliveryConfig.zones[0].fee`);
+`403` si el flag está apagado o el comercio no es `restaurante`. `"deliveryConfig": null` lo borra.
+`close < open` significa que la franja cruza la medianoche. Precios, zonas, horarios y medios de
+pago se leen **solo** de la BD (RN-00): el agente nunca los inventa.
+
+### Comandos del encargado (WhatsApp, desde `merchant.whatsappNumber`)
+| Comando | Efecto |
+|---|---|
+| `preparando N [min]` | Pedido N → preparando (ETA opcional) y aviso al cliente |
+| `salio N` / `salió N` | Pedido N → en camino y aviso al cliente |
+| `entregado N` | Pedido N → entregado y aviso al cliente |
+| `cancelar N motivo` | Cancela el pedido N y avisa al cliente |
+| `agotado <producto>` / `disponible <producto>` | Marca o desmarca un producto como agotado |
+| `cerrar tienda` / `abrir tienda` | Pausa o reanuda los pedidos |
+| `reporte` / `reporte mes` | Pedidos facturables del día o del mes |
+| `ayuda` | Lista de comandos |
+
+`N` acepta el número corto (`42`) o el código completo (`ORD-0042`). Todo aviso al cliente sale
+por `BusinessMessenger` con plantillas utility (`pedido_en_preparacion`, `pedido_en_camino`,
+`pedido_entregado`…), una sola vez por estado (`dedupeKey order:{id}:status:{estado}`).
+
+### Probar sin credenciales (Meta Sandbox)
+```bash
+pnpm db:seed:delivery                        # comercio demo "Burger Barrio"
+pnpm meta:sandbox                            # Graph API falso en :4010, imprime las variables
+FEATURES_MODE=dev DELIVERY_ENABLED=true pnpm dev
+pnpm simulate:whatsapp "quiero 2 hamburguesas sencillas" --from +573000000101
+curl http://127.0.0.1:4010/__sandbox/sent    # lo que "envió" el bot
+```
+
+### Tests
+```bash
+cd apps/api
+npx jest src/verticals/delivery                                   # unit de la vertical
+npx jest --config test/jest-e2e.json --runInBand test/delivery-   # e2e de la vertical
+FEATURES_MODE=mvp npx jest --config test/jest-e2e.json --runInBand # kill-switch (AC-01)
+```
+`test/delivery-journey.e2e-spec.ts` recorre el viaje completo (AC-29): webhook → menú → pedido →
+resumen → "dale" → comanda → preparando → en camino → entregado, con el LLM falso.
+
+### Evidencia por AC
+Checklist completo AC → test en el PR de release `feat/delivery-agent → dev` (#137).
+
 ## Próximos Pasos
 
 Todos los flujos del MVP Core V1 están implementados. Ver `docs/plan/PR-STACK-core-v1.md` para el estado actualizado.

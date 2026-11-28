@@ -53,8 +53,31 @@ Cada llamada firma el webhook con `WHATSAPP_APP_SECRET` (`X-Hub-Signature-256`) 
 `POST /webhooks/whatsapp` (`--api <url>` para otra URL). La respuesta del bot aparece en
 `/__sandbox/sent`.
 
-> El flujo conversacional completo (carrito, checkout, comanda) se habilita a medida que se
-> integran los slices F2–F5 (ver `STATUS.md`).
+### 1.5 Simular al encargado (comandos de cocina)
+El seed guarda `merchant.whatsappNumber` con "+", pero Meta envía `from` **sin** "+". Para que el
+encargado se reconozca en la demo, guarda el número sin "+" (`UPDATE merchants SET whatsapp_number =
+'573000000001' WHERE id = 'dlv_merchant_burger_barrio';`) y luego:
+```bash
+pnpm simulate:whatsapp "preparando 1 20" --from 573000000001
+pnpm simulate:whatsapp "salio 1" --from 573000000001
+pnpm simulate:whatsapp "entregado 1" --from 573000000001
+pnpm simulate:whatsapp "reporte" --from 573000000001
+```
+Los avisos al cliente aparecen en `/__sandbox/sent` como plantillas (`pedido_en_preparacion`, …).
+
+### 1.6 Simular un webhook a mano (cURL)
+```bash
+BODY='{"object":"whatsapp_business_account","entry":[{"id":"sandbox-waba-id","changes":[{"field":"messages","value":{"messaging_product":"whatsapp","metadata":{"display_phone_number":"573000000001","phone_number_id":"sandbox-phone-number-id"},"contacts":[{"wa_id":"573000000101","profile":{"name":"Cliente"}}],"messages":[{"from":"573000000101","id":"wamid.demo-'$(date +%s)'","timestamp":"'$(date +%s)'","type":"text","text":{"body":"hola"}}]}}]}]}'
+SIG="sha256=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$WHATSAPP_APP_SECRET" | cut -d' ' -f2)"
+curl -X POST http://localhost:3000/webhooks/whatsapp \
+  -H 'Content-Type: application/json' -H "X-Hub-Signature-256: $SIG" -d "$BODY"
+```
+`200` = aceptado (el `id` del mensaje se deduplica: repetirlo no genera otra respuesta). `401` = firma
+inválida (revisa `WHATSAPP_APP_SECRET`). `pnpm simulate:whatsapp` hace exactamente esto.
+
+### 1.7 Viaje completo automatizado
+`apps/api/test/delivery-journey.e2e-spec.ts` (AC-29) recorre el mismo flujo de §1.4–1.5 con el LLM
+falso: `cd apps/api && npx jest --config test/jest-e2e.json --runInBand test/delivery-journey`.
 
 ## 2. Prueba real con Closy-bot-qa (manual, solo el owner)
 
