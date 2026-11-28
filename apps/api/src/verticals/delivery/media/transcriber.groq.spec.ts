@@ -80,6 +80,14 @@ describe('GroqWhisperTranscriber (S5.2-T1)', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it('returns TOO_LONG even without GROQ_API_KEY (duration is checked first)', async () => {
+    const noKey = new GroqWhisperTranscriber(configWith({}));
+    await expect(noKey.transcribe(audio({ durationSec: 300 }), OPTS)).resolves.toEqual({
+      ok: false,
+      reason: 'TOO_LONG',
+    });
+  });
+
   it('accepts an audio exactly at the duration limit', async () => {
     create.mockResolvedValue({ text: 'ok' });
     const result = await transcriber.transcribe(audio({ durationSec: 120 }), OPTS);

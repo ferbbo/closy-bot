@@ -44,11 +44,11 @@ export class GroqWhisperTranscriber implements Transcriber {
     media: FetchedMedia,
     opts: { language: 'es'; maxDurationSec: number },
   ): Promise<MediaResult<{ text: string }>> {
-    if (!this.client) {
-      return { ok: false, reason: 'UNSUPPORTED' };
-    }
     if (typeof media.durationSec === 'number' && media.durationSec > opts.maxDurationSec) {
       return { ok: false, reason: 'TOO_LONG' };
+    }
+    if (!this.client) {
+      return { ok: false, reason: 'UNSUPPORTED' };
     }
     if (media.sizeBytes === 0 || media.buffer.length === 0) {
       return { ok: false, reason: 'EMPTY' };
