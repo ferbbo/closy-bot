@@ -33,6 +33,33 @@ export interface EnqueueWhatsAppTemplateParams {
 }
 
 /**
+ * Delivery (S5.4): parámetros para encolar un mensaje interactivo con botones (`SEND_INTERACTIVE`).
+ * `dedupeKey` obligatorio (idempotente por `@@unique([merchantId, dedupeKey])`).
+ */
+export interface EnqueueWhatsAppInteractiveParams {
+  merchantId: string;
+  conversationId?: string;
+  channelId?: string;
+  to: string;
+  body: string;
+  buttons: Array<{ id: string; title: string }>;
+  dedupeKey: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Delivery (S5.4): parámetros para encolar una imagen por link (`SEND_IMAGE`). */
+export interface EnqueueWhatsAppImageParams {
+  merchantId: string;
+  conversationId?: string;
+  channelId?: string;
+  to: string;
+  link: string;
+  caption?: string;
+  dedupeKey: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
  * Service for enqueueing outbound messages via transactional outbox pattern
  * Provides high-level API for adding messages to the outbox
  */
@@ -156,5 +183,62 @@ export class OutboxService {
     }
 
     return this.outboxRepo.create(createInput);
+  }
+
+  /**
+   * Delivery (S5.4): encola un mensaje interactivo con botones de respuesta (`SEND_INTERACTIVE`).
+   * El dispatcher guarda `body` en MessageLog para la memoria de la conversación.
+   */
+  async enqueueWhatsAppInteractive(params: EnqueueWhatsAppInteractiveParams) {
+    const payloadJson = {
+      interactive: { body: params.body, buttons: params.buttons },
+      metadata: params.metadata,
+    };
+    this.logger.log(
+      `Enqueueing WhatsApp interactive: to=${maskPhone(params.to)}, buttons=${params.buttons.length}, dedupeKey=${params.dedupeKey}`,
+    );
+    return this.outboxRepo.create(
+      this.buildCreateInput(params, OutboxMessageType.SEND_INTERACTIVE, payloadJson),
+    );
+  }
+
+  /**
+   * Delivery (S5.4): encola una imagen por link (`SEND_IMAGE`). El link sale de la BD
+   * (`Product.imageUrl` o `menuImageUrl`, RN-00); nunca se loguea.
+   */
+  async enqueueWhatsAppImage(params: EnqueueWhatsAppImageParams) {
+    const payloadJson = {
+      image: { link: params.link, caption: params.caption },
+      metadata: params.metadata,
+    };
+    this.logger.log(
+      `Enqueueing WhatsApp image: to=${maskPhone(params.to)}, dedupeKey=${params.dedupeKey}`,
+    );
+    return this.outboxRepo.create(
+      this.buildCreateInput(params, OutboxMessageType.SEND_IMAGE, payloadJson),
+    );
+  }
+
+  private buildCreateInput(
+    params: {
+      merchantId: string;
+      conversationId?: string;
+      channelId?: string;
+      to: string;
+      dedupeKey: string;
+    },
+    type: OutboxMessageType,
+    payloadJson: unknown,
+  ) {
+    return {
+      merchant: { connect: { id: params.merchantId } },
+      conversationId: params.conversationId,
+      channel: OutboxChannel.WHATSAPP,
+      type,
+      to: params.to,
+      payloadJson: payloadJson as unknown as Prisma.InputJsonValue,
+      dedupeKey: params.dedupeKey,
+      ...(params.channelId ? { channelRef: { connect: { id: params.channelId } } } : {}),
+    };
   }
 }

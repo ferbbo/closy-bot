@@ -88,7 +88,7 @@ function mapSingleMessage(
   }
 
   // S5.0-T1: audio/image/video/document se propagan con sus datos de media; el
-  // resto (sticker, location, contacts, button, interactive) sigue sin soporte.
+  // resto (sticker, location, contacts, button, interactive salvo button_reply) sigue sin soporte.
   if (isMediaType(type)) {
     const media = metaMessage[type];
     if (!media) {
@@ -104,6 +104,19 @@ function mapSingleMessage(
       media_id: media.id,
       mime_type: media.mime_type,
       caption: media.caption,
+    };
+  }
+
+  // S5.4: respuesta a botón → texto = título del botón (mismo flujo que si lo escribiera).
+  const reply = type === 'interactive' ? metaMessage.interactive?.button_reply : undefined;
+  if (reply?.id) {
+    return {
+      message_id: id,
+      from,
+      receiver_phone_id: phoneNumberId,
+      timestamp: isoTimestamp,
+      text: reply.title || reply.id,
+      interactive_reply_id: reply.id,
     };
   }
 

@@ -302,6 +302,55 @@ describe('whatsapp-webhook.mapper', () => {
     });
   });
 
+  describe('interactive button_reply (S5.4)', () => {
+    const payloadWith = (message: Record<string, unknown>) =>
+      ({
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'waba',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: { display_phone_number: '1', phone_number_id: 'phone_123' },
+                  messages: [
+                    { from: '573001234567', id: 'wamid.B1', timestamp: '1700000000', ...message },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      }) as unknown as MetaWebhookPayload;
+
+    it('maps button_reply to text = title plus interactive_reply_id', () => {
+      const [dto] = mapMetaWebhookToInboundMessages(
+        payloadWith({
+          type: 'interactive',
+          interactive: {
+            type: 'button_reply',
+            button_reply: { id: 'delivery_confirm_yes', title: 'Sí, confirmo' },
+          },
+        }),
+      );
+      expect(dto).toMatchObject({
+        message_id: 'wamid.B1',
+        text: 'Sí, confirmo',
+        interactive_reply_id: 'delivery_confirm_yes',
+        receiver_phone_id: 'phone_123',
+      });
+    });
+
+    it('skips interactive messages without a button_reply', () => {
+      const result = mapMetaWebhookToInboundMessages(
+        payloadWith({ type: 'interactive', interactive: { type: 'nfm_reply' } }),
+      );
+      expect(result).toEqual([]);
+    });
+  });
+
   describe('isStatusOnlyPayload', () => {
     it('should return true for status-only payload', () => {
       const payload: MetaWebhookPayload = {

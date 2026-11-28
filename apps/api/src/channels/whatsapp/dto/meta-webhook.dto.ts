@@ -45,6 +45,30 @@ export class MetaMessageMedia {
   voice?: boolean;
 }
 
+// Delivery S5.4: respuesta a un botón interactivo (`interactive.button_reply`).
+export class MetaInteractiveReply {
+  @IsString()
+  id!: string;
+
+  @IsString()
+  title!: string;
+}
+
+export class MetaMessageInteractive {
+  @IsString()
+  type!: string; // 'button_reply' | 'list_reply' | ...
+
+  @ValidateNested()
+  @Type(() => MetaInteractiveReply)
+  @IsOptional()
+  button_reply?: MetaInteractiveReply;
+
+  @ValidateNested()
+  @Type(() => MetaInteractiveReply)
+  @IsOptional()
+  list_reply?: MetaInteractiveReply;
+}
+
 export class MetaMessage {
   @IsString()
   from!: string;
@@ -94,6 +118,12 @@ export class MetaMessage {
   @Type(() => MetaMessageMedia)
   @IsOptional()
   video?: MetaMessageMedia;
+
+  // Delivery S5.4: botón de confirmación (aditivo y opcional)
+  @ValidateNested()
+  @Type(() => MetaMessageInteractive)
+  @IsOptional()
+  interactive?: MetaMessageInteractive;
 }
 
 export class MetaStatus {

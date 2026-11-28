@@ -8,6 +8,7 @@ import type { DeliveryAgentService } from '../agent/delivery-agent.service';
 import { DELIVERY_TEXTS } from '../agent/delivery-agent.prompt';
 import { DeliveryVerticalHandler } from './delivery-vertical.handler';
 import type { MediaRouter } from '../media/media-router.service';
+import type { InteractiveConfirmationSender } from './interactive-confirmation';
 
 const vctx = (text: string, industry: string | null = 'restaurante'): VerticalContext => ({
   merchant: { id: 'm1', name: 'Burger Barrio', industry, playbookConfig: null },
@@ -23,6 +24,7 @@ function setup(
     open?: boolean;
     metadata?: unknown;
     optedOutAt?: Date | null;
+    channelId?: string | null;
   } = {},
 ) {
   const config = {
@@ -33,6 +35,7 @@ function setup(
       findUnique: jest.fn().mockResolvedValue({
         metadata: opts.metadata ?? null,
         optedOutAt: opts.optedOutAt ?? null,
+        channelId: opts.channelId ?? null,
       }),
       update: jest.fn().mockResolvedValue({}),
     },
@@ -74,6 +77,11 @@ function setup(
   const mediaRouter = {
     route: jest.fn().mockResolvedValue({ action: 'none' }),
   } as unknown as MediaRouter;
+  const confirmation = {
+    send: jest.fn(async (i: { prefix: string; summaryBlock: string; channelId: string | null }) =>
+      i.channelId ? `${i.prefix}${i.summaryBlock}\n\n¿Confirmamos tu pedido?` : null,
+    ),
+  };
   const handler = new DeliveryVerticalHandler(
     flags,
     prisma as unknown as PrismaService,
@@ -82,8 +90,9 @@ function setup(
     router,
     { get: () => handoff } as unknown as ModuleRef,
     mediaRouter,
+    confirmation as unknown as InteractiveConfirmationSender,
   );
-  return { handler, prisma, agent, handoff, router, deliveryConfig, mediaRouter };
+  return { handler, prisma, agent, handoff, router, deliveryConfig, mediaRouter, confirmation };
 }
 
 describe('DeliveryVerticalHandler (S2.3-T3)', () => {
@@ -303,5 +312,56 @@ describe('DeliveryVerticalHandler (S2.3-T3)', () => {
     const saved = prisma.conversation.update.mock.calls[0][0].data.metadata.delivery;
     expect(saved.checkout).toEqual({ cartId: 'cart1', paymentMethod: 'cod' });
     expect(saved.lastCandidates.items[0].variantId).toBe('v1');
+  });
+
+  describe('S5.4-T2: interactive confirmation', () => {
+    const summaryTurn = {
+      text: 'Perfecto. Te dejo el resumen\nBLOQUE',
+      toolTrace: [{ name: 'resumen_pedido', ok: true }],
+      candidates: null,
+      fallbackUsed: null,
+      groundingFailures: 0,
+      summaryBlock: 'BLOQUE',
+    };
+
+    it('sends the summary as interactive (shouldSend=false) with the exact block, not the LLM text', async () => {
+      const { handler, agent, confirmation } = setup({
+        metadata: { delivery: { privacyNoticeAt: 'x' } },
+        channelId: 'ch1',
+      });
+      agent.handleTurn.mockResolvedValueOnce(summaryTurn);
+      const res = await handler.handle(vctx('pago en efectivo'));
+      expect(confirmation.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          summaryBlock: 'BLOQUE',
+          channelId: 'ch1',
+          inboundMessageId: 'wamid.1',
+          to: '+573000000101',
+          prefix: '',
+        }),
+      );
+      expect(res).toEqual({
+        response: 'BLOQUE\n\n¿Confirmamos tu pedido?',
+        shouldSend: false,
+        intent: 'DELIVERY_ORDER',
+      });
+    });
+
+    it('falls back to the current text reply when interactive does not apply', async () => {
+      const { handler, agent } = setup({ metadata: { delivery: { privacyNoticeAt: 'x' } } });
+      agent.handleTurn.mockResolvedValueOnce(summaryTurn);
+      const res = await handler.handle(vctx('pago en efectivo'));
+      expect(res).toEqual({
+        response: summaryTurn.text,
+        shouldSend: true,
+        intent: 'DELIVERY_ORDER',
+      });
+    });
+
+    it('turns without a summary never use the interactive sender', async () => {
+      const { handler, confirmation } = setup({ channelId: 'ch1' });
+      await handler.handle(vctx('quiero una hamburguesa'));
+      expect(confirmation.send).not.toHaveBeenCalled();
+    });
   });
 });

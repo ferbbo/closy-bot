@@ -427,6 +427,44 @@ describe('WhatsAppController', () => {
         expect.objectContaining({ mediaType: 'audio', mediaId: 'aud_1', mimeType: 'audio/ogg' }),
       );
     });
+    const buttonPayload = (): MetaWebhookPayload => {
+      const p = audioPayload() as unknown as {
+        entry: Array<{ changes: Array<{ value: { messages: Array<Record<string, unknown>> } }> }>;
+      };
+      p.entry[0].changes[0].value.messages = [
+        {
+          from: '573001234567',
+          id: 'wamid.BTN1',
+          timestamp: '1700000000',
+          type: 'interactive',
+          interactive: {
+            type: 'button_reply',
+            button_reply: { id: 'delivery_confirm_yes', title: 'Sí, confirmo' },
+          },
+        },
+      ];
+      return p as unknown as MetaWebhookPayload;
+    };
+
+    it('S5.4: ignores a button reply outside the delivery vertical (legacy unchanged)', async () => {
+      const { ctrl, whatsappService } = buildMediaController({
+        isDeliveryEnabled: false,
+        industry: 'restaurante',
+      });
+      await ctrl.handleMetaWebhook(buttonPayload(), {} as never);
+      expect(whatsappService.processInboundMessage).not.toHaveBeenCalled();
+    });
+
+    it('S5.4: routes a button reply as its title text when the delivery vertical is eligible', async () => {
+      const { ctrl, orchestratorMock } = buildMediaController({
+        isDeliveryEnabled: true,
+        industry: 'restaurante',
+      });
+      await ctrl.handleMetaWebhook(buttonPayload(), {} as never);
+      expect(orchestratorMock.process).toHaveBeenCalledWith(
+        expect.objectContaining({ messageId: 'wamid.BTN1', text: 'Sí, confirmo' }),
+      );
+    });
   });
 
   describe('burst debounce (S5.1-T1)', () => {

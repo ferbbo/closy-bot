@@ -298,6 +298,8 @@ enum OutboxChannel {
 enum OutboxMessageType {
   SEND_TEXT
   SEND_TEMPLATE // Delivery: plantilla utility de WhatsApp (RN-15)
+  SEND_INTERACTIVE // Delivery S5.4: mensaje interactivo con botones (F-18)
+  SEND_IMAGE // Delivery S5.4: imagen por link (ver_foto_producto, RN-00)
 }
 
 enum OutboxMessageStatus {

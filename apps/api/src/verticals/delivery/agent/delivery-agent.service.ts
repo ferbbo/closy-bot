@@ -18,6 +18,7 @@ import { DeliveryTools } from './tools/delivery.tools';
 import { PaymentTools } from './tools/payment.tools';
 import { ConfirmTools } from './tools/confirm.tools';
 import { OrderTools } from './tools/order.tools';
+import { PhotoTools } from './tools/photo.tools';
 import { OpeningHoursGuard } from '../handler/guards/opening-hours.guard';
 import { parseOrderText } from './fallback-parser';
 import { buildDeliverySystemPrompt, DELIVERY_TEXTS } from './delivery-agent.prompt';
@@ -43,6 +44,8 @@ export interface AgentTurnOutput {
   candidates: VariantCandidate[] | null;
   fallbackUsed: string | null;
   groundingFailures: number;
+  /** S5.4: bloque exacto de `resumen_pedido` de este turno (para el mensaje interactivo). */
+  summaryBlock?: string | null;
 }
 
 /** Candidatos vigentes (TTL 30 min). Solo sirven para resolver referencias, nunca para precios. */
@@ -79,6 +82,7 @@ export class DeliveryAgentService {
     private readonly openingHours: OpeningHoursGuard,
     private readonly orderTools: OrderTools,
     @Optional() @Inject(DELIVERY_LLM_PROVIDER) private readonly providerOverride?: LlmProvider,
+    @Optional() private readonly photoTools?: PhotoTools, // S5.4-T3 (P1)
   ) {}
 
   async handleTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
@@ -175,6 +179,7 @@ export class DeliveryAgentService {
       candidates,
       fallbackUsed: failures >= 2 ? 'GROUNDING' : null,
       groundingFailures: failures,
+      summaryBlock: summaryBlock as string | null,
     });
   }
 
@@ -208,6 +213,7 @@ export class DeliveryAgentService {
       ...this.paymentTools.definitions,
       ...this.confirmTools.definitions,
       ...this.orderTools.definitions,
+      ...(this.photoTools?.definitions ?? []),
     ];
   }
 
@@ -221,6 +227,7 @@ export class DeliveryAgentService {
       ...this.paymentTools.handlers(),
       ...this.confirmTools.handlers(),
       ...this.orderTools.handlers(),
+      ...(this.photoTools?.handlers() ?? {}),
     });
   }
 

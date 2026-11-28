@@ -290,12 +290,13 @@ export class WhatsAppController {
 
     // S5.0-T1: media solo se procesa cuando la vertical delivery puede usarla;
     // si no, se mantiene el comportamiento legacy (se ignora, sin tocar la BD).
-    if (dto.media_type) {
+    // S5.4-T2: igual con las respuestas a botones interactivos.
+    if (dto.media_type || dto.interactive_reply_id) {
       const deliveryEligible =
         this.featureFlags.isDeliveryEnabled && resolution.merchant.industry === 'restaurante';
       if (!deliveryEligible) {
         this.logger.log(
-          `Ignoring ${dto.media_type} message outside delivery vertical (message_id=${dto.message_id})`,
+          `Ignoring ${dto.media_type ?? 'interactive'} message outside delivery vertical (message_id=${dto.message_id})`,
         );
         return;
       }
