@@ -4,6 +4,9 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { OutboxRepository } from '../../persistence/repositories/outbox.repository';
 import { ChannelRepository } from '../../persistence/repositories/channel.repository'; // PR-03.11
 import {
+  SendMessageResult,
+  WhatsAppCredentials,
+  WhatsAppInteractiveButtons,
   WhatsAppOutboundService,
   WhatsAppTemplateMessage,
 } from '../../channels/whatsapp/whatsapp-outbound.service';
@@ -115,6 +118,9 @@ export class OutboxDispatcherService implements OnModuleInit {
           break;
         case OutboxMessageType.SEND_TEMPLATE:
           await this.sendTemplateMessage(message);
+          break;
+        case OutboxMessageType.SEND_INTERACTIVE:
+          await this.sendInteractiveMessage(message);
           break;
         default:
           throw new Error(`Unknown message type: ${message.type}`);
@@ -253,6 +259,73 @@ export class OutboxDispatcherService implements OnModuleInit {
           `Failed to log outbound template for conversation ${message.conversationId}: ${(error as Error).message}`,
         );
       }
+    }
+  }
+
+  /**
+   * Delivery (S5.4): envía un mensaje interactivo con botones (`SEND_INTERACTIVE`). Misma
+   * resolución de credenciales que SEND_TEMPLATE; el MessageLog guarda el `body`.
+   */
+  private async sendInteractiveMessage(message: OutboxMessage) {
+    const payload = message.payloadJson as unknown as {
+      interactive?: WhatsAppInteractiveButtons;
+    };
+    const interactive = payload?.interactive;
+    if (!interactive?.body || !Array.isArray(interactive.buttons) || !interactive.buttons.length) {
+      throw new Error('Invalid SEND_INTERACTIVE payload: missing body or buttons');
+    }
+    const msg: WhatsAppInteractiveButtons = {
+      body: interactive.body,
+      buttons: interactive.buttons,
+    };
+    const result = await this.sendWithChannel(
+      message,
+      () => this.whatsappOutbound.sendInteractiveMessage(message.to, msg),
+      (credentials) =>
+        this.whatsappOutbound.sendInteractiveMessageWithCredentials(message.to, msg, credentials),
+    );
+    await this.completeSend(message, result, msg.body, 'Interactive');
+  }
+
+  /** Delivery (S5.4): credenciales del canal si existe; si no, env vars (como SEND_TEMPLATE). */
+  private async sendWithChannel(
+    message: OutboxMessage,
+    withEnv: () => Promise<SendMessageResult>,
+    withCredentials: (credentials: WhatsAppCredentials) => Promise<SendMessageResult>,
+  ): Promise<SendMessageResult> {
+    const channel = message.channelId ? await this.channelRepo.findById(message.channelId) : null;
+    return channel
+      ? withCredentials(channel.credentials as unknown as WhatsAppCredentials)
+      : withEnv();
+  }
+
+  /** Delivery (S5.4): marca enviado y registra el texto saliente en MessageLog (best-effort). */
+  private async completeSend(
+    message: OutboxMessage,
+    result: SendMessageResult,
+    logText: string,
+    kind: string,
+  ) {
+    if (!result.success) {
+      throw new Error(result.error ?? 'Unknown error from WhatsApp API');
+    }
+    await this.outboxRepo.markSent(message.id, result.messageId ?? 'unknown');
+    this.logger.log(`${kind} sent: id=${message.id}, providerMessageId=${result.messageId}`);
+    if (!message.conversationId) return;
+    try {
+      const days = Number(this.configService.get<number>('MESSAGE_HISTORY_DAYS', 30));
+      await this.messageLogRepository.create({
+        conversationId: message.conversationId,
+        merchantId: message.merchantId,
+        direction: MessageDirection.OUT,
+        providerMessageId: result.messageId,
+        text: logText,
+        expiresAt: new Date(Date.now() + days * 24 * 60 * 60 * 1000),
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to log outbound ${kind} for conversation ${message.conversationId}: ${(error as Error).message}`,
+      );
     }
   }
 
