@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { FeatureFlagsModule } from '../../common/feature-flags/feature-flags.module';
 import { VerticalsModule } from '../verticals.module';
+import { PersistenceModule } from '../../persistence/persistence.module';
+import { DELIVERY_CONFIG_PROVIDERS } from './config/delivery-config.providers';
+import { DeliveryConfigService } from './config/delivery-config.service';
 
 /**
  * DeliveryModule — Closy Delivery Agent (vertical B2, restaurantes).
@@ -11,8 +14,8 @@ import { VerticalsModule } from '../verticals.module';
  * vertical se registra en `VerticalRouterService` en S2.3.
  */
 @Module({
-  imports: [FeatureFlagsModule, VerticalsModule],
-  providers: [],
-  exports: [],
+  imports: [FeatureFlagsModule, VerticalsModule, PersistenceModule],
+  providers: [...DELIVERY_CONFIG_PROVIDERS],
+  exports: [DeliveryConfigService],
 })
 export class DeliveryModule {}

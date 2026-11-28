@@ -6,11 +6,12 @@
  * AC-11: Unit tests covering service methods
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MerchantConfigService } from './merchant-config.service';
 import { PrismaService } from '../persistence/prisma/prisma.service';
 import { Industry } from '@prisma/client';
 import { MERCHANT_CONFIG_PRESETS, getPresetForIndustry } from './merchant-config-presets';
+import { FeatureFlagsService } from '../common/feature-flags/feature-flags.service';
 
 const mockRopaConfig = {
   id: 'config-ropa-1',
@@ -72,11 +73,13 @@ describe('AC-05: All MerchantConfig fields function correctly', () => {
 describe('MerchantConfigService', () => {
   let service: MerchantConfigService;
   let prisma: jest.Mocked<PrismaService>;
+  const featureFlags = { isDeliveryEnabled: false };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MerchantConfigService,
+        { provide: FeatureFlagsService, useValue: featureFlags },
         {
           provide: PrismaService,
           useValue: {
@@ -261,6 +264,80 @@ describe('MerchantConfigService', () => {
       };
       expect(method.paymentLinkUrl).toBe('https://link.mercadopago.com.co/merchant');
       expect(method.type).toBe('payment_link');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // S1.2-T4: deliveryConfig (Delivery vertical, B2)
+  // ---------------------------------------------------------------------------
+
+  describe('S1.2-T4: updateConfig() with deliveryConfig', () => {
+    const restaurante = { id: 'm-rest', industry: Industry.restaurante };
+    const zone = {
+      id: 'cabecera',
+      name: 'Cabecera',
+      aliases: [],
+      fee: 4000,
+      minOrder: 15000,
+      etaMinutes: 20,
+    };
+
+    beforeEach(() => {
+      featureFlags.isDeliveryEnabled = true;
+      (prisma.merchantConfig.findUnique as jest.Mock).mockResolvedValue(mockRopaConfig);
+      (prisma.merchant.findUnique as jest.Mock).mockResolvedValue(restaurante);
+      (prisma.merchantConfig.update as jest.Mock).mockImplementation(({ data }) => ({
+        ...mockRopaConfig,
+        ...data,
+      }));
+    });
+    afterEach(() => {
+      featureFlags.isDeliveryEnabled = false;
+    });
+
+    it('FEATURES_MODE=mvp (flag off) → 403 and nothing persisted', async () => {
+      featureFlags.isDeliveryEnabled = false;
+      await expect(service.updateConfig('m-rest', { deliveryConfig: {} })).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(prisma.merchantConfig.update).not.toHaveBeenCalled();
+    });
+
+    it('non-restaurante merchant → 403', async () => {
+      (prisma.merchant.findUnique as jest.Mock).mockResolvedValue({
+        id: 'm',
+        industry: Industry.ropa,
+      });
+      await expect(service.updateConfig('m', { deliveryConfig: {} })).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('AC-02: invalid field → 400 with exact path', async () => {
+      const err = await service
+        .updateConfig('m-rest', { deliveryConfig: { zones: [{ ...zone, fee: 'x' }] } })
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      const body = (err as BadRequestException).getResponse() as {
+        errors: Array<{ path: string }>;
+      };
+      expect(body.errors.map((e) => e.path)).toEqual(['deliveryConfig.zones[0].fee']);
+      expect(prisma.merchantConfig.update).not.toHaveBeenCalled();
+    });
+
+    it('valid override → persisted merged over technical defaults', async () => {
+      const result = await service.updateConfig('m-rest', { deliveryConfig: { zones: [zone] } });
+      const data = (prisma.merchantConfig.update as jest.Mock).mock.calls[0][0].data;
+      expect(Object.keys(data)).toEqual(['deliveryConfig']);
+      expect(data.deliveryConfig.zones).toEqual([zone]);
+      expect(data.deliveryConfig.maxLines).toBe(15);
+      expect(result.deliveryConfig?.zones).toEqual([zone]);
+    });
+
+    it('legacy PATCH without deliveryConfig ignores the flag', async () => {
+      featureFlags.isDeliveryEnabled = false;
+      await service.updateConfig('m-rest', { autoConfirmCod: false });
+      expect(prisma.merchant.findUnique).not.toHaveBeenCalled();
     });
   });
 });
