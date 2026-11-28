@@ -7,6 +7,7 @@ import type { DeliveryConfigService } from '../config/delivery-config.service';
 import type { DeliveryAgentService } from '../agent/delivery-agent.service';
 import { DELIVERY_TEXTS } from '../agent/delivery-agent.prompt';
 import { DeliveryVerticalHandler } from './delivery-vertical.handler';
+import type { MediaRouter } from '../media/media-router.service';
 
 const vctx = (text: string, industry: string | null = 'restaurante'): VerticalContext => ({
   merchant: { id: 'm1', name: 'Burger Barrio', industry, playbookConfig: null },
@@ -70,6 +71,9 @@ function setup(
   const handoff = { createHandoff: jest.fn().mockResolvedValue({}) };
   const flags = { isDeliveryEnabled: opts.enabled ?? true } as FeatureFlagsService;
   const router = new VerticalRouterService();
+  const mediaRouter = {
+    route: jest.fn().mockResolvedValue({ action: 'none' }),
+  } as unknown as MediaRouter;
   const handler = new DeliveryVerticalHandler(
     flags,
     prisma as unknown as PrismaService,
@@ -77,8 +81,9 @@ function setup(
     agent as unknown as DeliveryAgentService,
     router,
     { get: () => handoff } as unknown as ModuleRef,
+    mediaRouter,
   );
-  return { handler, prisma, agent, handoff, router, deliveryConfig };
+  return { handler, prisma, agent, handoff, router, deliveryConfig, mediaRouter };
 }
 
 describe('DeliveryVerticalHandler (S2.3-T3)', () => {
@@ -86,6 +91,44 @@ describe('DeliveryVerticalHandler (S2.3-T3)', () => {
     const { handler, router } = setup();
     handler.onModuleInit();
     expect(router.registeredHandlers).toEqual(['delivery']);
+  });
+
+  it('S5.0: media fallback short-circuits before touching the conversation', async () => {
+    const { handler, prisma, agent, mediaRouter } = setup();
+    (mediaRouter.route as jest.Mock).mockResolvedValue({
+      action: 'reply',
+      response: DELIVERY_TEXTS.mediaFallback,
+    });
+    const ctx = vctx('');
+    ctx.input.mediaType = 'audio';
+    ctx.input.mediaId = 'wamid.media.1';
+
+    const res = await handler.handle(ctx);
+
+    expect(res).toMatchObject({ response: DELIVERY_TEXTS.mediaFallback, intent: 'DELIVERY_GUARD' });
+    expect(agent.handleTurn).not.toHaveBeenCalled();
+    expect(prisma.conversation.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('S5.0/AC-26 base: transcribed audio runs the normal turn with the echo prefixed', async () => {
+    const { handler, agent, mediaRouter } = setup();
+    (mediaRouter.route as jest.Mock).mockResolvedValue({
+      action: 'continue',
+      text: '2 hamburguesas sencillas',
+      echoPrefix: '🎙️ Entendí: «2 hamburguesas sencillas»\n\n',
+    });
+    const ctx = vctx('');
+    ctx.input.mediaType = 'audio';
+    ctx.input.mediaId = 'wamid.media.1';
+
+    const res = await handler.handle(ctx);
+
+    expect(res?.response.startsWith('🎙️ Entendí: «2 hamburguesas sencillas»')).toBe(true);
+    expect(agent.handleTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ctx: expect.objectContaining({ text: '2 hamburguesas sencillas' }),
+      }),
+    );
   });
 
   it('RN-21: flag off → canHandle false without touching the DB', async () => {

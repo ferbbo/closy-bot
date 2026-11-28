@@ -36,6 +36,7 @@ import { ORDER_SINKS, POS_ADAPTERS } from './contracts';
 import { ServicesModule } from '../../services/services.module';
 import { BusinessMessengerService } from './messaging/business-messenger.service';
 import { CustomerServiceWindowService } from './messaging/customer-service-window.service';
+import { MEDIA_PROVIDERS } from './media/media.providers';
 
 /**
  * DeliveryModule — Closy Delivery Agent (vertical B2, restaurantes).
@@ -93,6 +94,8 @@ import { CustomerServiceWindowService } from './messaging/customer-service-windo
       useFactory: (kitchen: WhatsAppKitchenSink, pos: PosOrderSink) => [kitchen, pos],
       inject: [WhatsAppKitchenSink, PosOrderSink],
     },
+    // Multimodal (S5.0): MediaFetcher real + MediaRouter; Transcriber/ImageInterpreter stub
+    ...MEDIA_PROVIDERS,
   ],
   exports: [
     DeliveryConfigService,
