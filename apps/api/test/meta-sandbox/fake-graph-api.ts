@@ -22,7 +22,7 @@ export type { RegisteredTemplate, SentMessage } from './graph-validation';
  * habla con graph.facebook.com.
  *
  * Endpoints (`:v` = versión, p. ej. v21.0):
- *   POST /:v/:phoneNumberId/messages        text | template | interactive | image → { messages:[{id:'wamid.SANDBOX…'}] }
+ *   POST /:v/:phoneNumberId/messages        text | template | interactive → { messages:[{id:'wamid.SANDBOX…'}] }
  *   GET  /:v/:mediaId                        metadatos del media → { url, mime_type, file_size, sha256 }
  *   GET  /__media/:mediaId                   binario del media (requiere Bearer)
  *   POST /:v/:wabaId/message_templates       registro de plantilla (valida categoría, nombre, ejemplos) → APPROVED

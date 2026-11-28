@@ -6,7 +6,7 @@
 export interface SentMessage {
   id: string;
   to: string;
-  type: 'text' | 'template' | 'interactive' | 'image';
+  type: 'text' | 'template' | 'interactive'; // contrato FakeGraphApi (S5.4 añadirá image)
   payload: Record<string, unknown>;
   at: Date;
 }
@@ -83,10 +83,6 @@ export function validateMessage(
         'type, body.text and action are required',
       );
     }
-  } else if (type === 'image') {
-    const image = body.image as { link?: string; id?: string } | undefined;
-    if (!image?.link && !image?.id)
-      throw new GraphError(400, 100, '(#100) image.link or image.id is required');
   } else {
     throw new GraphError(400, 100, `(#100) Unsupported message type: ${String(type)}`);
   }
