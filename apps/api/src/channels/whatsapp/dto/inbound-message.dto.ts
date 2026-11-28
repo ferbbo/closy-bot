@@ -45,6 +45,11 @@ export class InboundMessageDto {
   @IsString()
   @IsOptional()
   caption?: string;
+
+  // Delivery S5.4: id del botón pulsado (`interactive.button_reply.id`); `text` lleva su título.
+  @IsString()
+  @IsOptional()
+  interactive_reply_id?: string;
 }
 
 /**
