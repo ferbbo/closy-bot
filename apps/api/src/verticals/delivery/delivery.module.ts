@@ -5,6 +5,8 @@ import { PersistenceModule } from '../../persistence/persistence.module';
 import { DELIVERY_CONFIG_PROVIDERS } from './config/delivery-config.providers';
 import { DeliveryConfigService } from './config/delivery-config.service';
 import { MESSAGING_PROVIDERS } from './messaging/messaging.providers';
+import { CART_TOOLS_PROVIDERS } from './agent/tools/cart-tools.providers';
+import { ServicesModule } from '../../services/services.module';
 import { BusinessMessengerService } from './messaging/business-messenger.service';
 import { CustomerServiceWindowService } from './messaging/customer-service-window.service';
 
@@ -17,8 +19,8 @@ import { CustomerServiceWindowService } from './messaging/customer-service-windo
  * vertical se registra en `VerticalRouterService` en S2.3.
  */
 @Module({
-  imports: [FeatureFlagsModule, VerticalsModule, PersistenceModule],
-  providers: [...DELIVERY_CONFIG_PROVIDERS, ...MESSAGING_PROVIDERS],
+  imports: [FeatureFlagsModule, VerticalsModule, PersistenceModule, ServicesModule],
+  providers: [...DELIVERY_CONFIG_PROVIDERS, ...MESSAGING_PROVIDERS, ...CART_TOOLS_PROVIDERS],
   exports: [DeliveryConfigService, BusinessMessengerService, CustomerServiceWindowService],
 })
 export class DeliveryModule {}

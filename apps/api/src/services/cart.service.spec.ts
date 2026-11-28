@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { BadRequestException } from '@nestjs/common';
-import { CartService } from './cart.service';
+import { CartService, normalizeCartNotes } from './cart.service';
 import { CartRepository } from '../persistence/repositories/cart.repository';
 import { CartItemRepository } from '../persistence/repositories/cart-item.repository';
 import { ProductRepository } from '../persistence/repositories/product.repository';
@@ -282,6 +282,135 @@ describe('CartService', () => {
       await expect(service.addItem('customer-1', 'merchant-1', 'variant-1', 5)).rejects.toThrow(
         'Stock insuficiente',
       );
+    });
+  });
+
+  describe('Delivery S2.2: addItem con notas y skipStockCheck (RN-04, RN-05, AC-08)', () => {
+    const itemWith = (id: string, notes: string, quantity: number) => ({
+      id,
+      cartId: 'cart-1',
+      variantId: 'variant-1',
+      notes,
+      quantity,
+      priceSnapshot: new Decimal(25),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      variant: {
+        id: 'variant-1',
+        name: 'Talla M',
+        price: new Decimal(25),
+        productId: 'product-1',
+        product: { id: 'product-1', name: 'Camiseta Roja' },
+      },
+    });
+
+    beforeEach(() => {
+      productRepository.findByVariantId.mockResolvedValue(mockProduct);
+      cartRepository.findActiveCart.mockResolvedValue(mockCart);
+    });
+
+    it('normalizeCartNotes: trim, colapsa espacios, minúsculas y máx. 120', () => {
+      expect(normalizeCartNotes('  Sin   CEBOLLA \n ')).toBe('sin cebolla');
+      expect(normalizeCartNotes(undefined)).toBe('');
+      expect(normalizeCartNotes('   ')).toBe('');
+      expect(normalizeCartNotes('a'.repeat(200))).toHaveLength(120);
+    });
+
+    it('AC-08: mismo producto con notas distintas crea una línea nueva (2 líneas)', async () => {
+      // El carrito ya tiene la línea legacy (notes='') del mismo variant
+      cartRepository.findByIdWithItems.mockResolvedValue({
+        ...mockCart,
+        items: [itemWith('item-1', '', 1)],
+      });
+
+      await service.addItem('customer-1', 'merchant-1', 'variant-1', 2, {
+        notes: ' Sin  Cebolla ',
+      });
+
+      expect(cartItemRepository.findByCartAndVariant).not.toHaveBeenCalled();
+      expect(cartItemRepository.updateQuantity).not.toHaveBeenCalled();
+      expect(cartItemRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ quantity: 2, notes: 'sin cebolla' }),
+      );
+    });
+
+    it('AC-08: mismas notas (normalizadas) incrementan la línea existente', async () => {
+      cartRepository.findByIdWithItems.mockResolvedValue({
+        ...mockCart,
+        items: [itemWith('item-1', '', 1), itemWith('item-2', 'sin cebolla', 2)],
+      });
+
+      await service.addItem('customer-1', 'merchant-1', 'variant-1', 1, { notes: 'SIN cebolla' });
+
+      expect(cartItemRepository.create).not.toHaveBeenCalled();
+      expect(cartItemRepository.updateQuantity).toHaveBeenCalledWith('item-2', 3);
+    });
+
+    it('sin notas usa la búsqueda legacy y no envía notes al crear', async () => {
+      cartRepository.findByIdWithItems.mockResolvedValue({ ...mockCart, items: [] });
+      cartItemRepository.findByCartAndVariant.mockResolvedValue(null);
+
+      await service.addItem('customer-1', 'merchant-1', 'variant-1', 1, { notes: '  ' });
+
+      expect(cartItemRepository.findByCartAndVariant).toHaveBeenCalledWith('cart-1', 'variant-1');
+      expect(cartItemRepository.create.mock.calls[0][0]).not.toHaveProperty('notes');
+    });
+
+    it('RN-04: skipStockCheck agrega aunque el stock sea insuficiente', async () => {
+      productRepository.findByVariantId.mockResolvedValue({
+        ...mockProduct,
+        variants: [{ ...mockVariant, stock: 0 }],
+      });
+      cartRepository.findByIdWithItems.mockResolvedValue({ ...mockCart, items: [] });
+      cartItemRepository.findByCartAndVariant.mockResolvedValue(null);
+
+      await service.addItem('customer-1', 'merchant-1', 'variant-1', 5, { skipStockCheck: true });
+
+      expect(cartItemRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ quantity: 5 }),
+      );
+    });
+
+    it('RN-04: skipStockCheck también omite el chequeo al incrementar', async () => {
+      productRepository.findByVariantId.mockResolvedValue({
+        ...mockProduct,
+        variants: [{ ...mockVariant, stock: 0 }],
+      });
+      cartRepository.findByIdWithItems.mockResolvedValue({
+        ...mockCart,
+        items: [itemWith('item-2', 'doble queso', 4)],
+      });
+
+      await service.addItem('customer-1', 'merchant-1', 'variant-1', 3, {
+        notes: 'doble queso',
+        skipStockCheck: true,
+      });
+
+      expect(cartItemRepository.updateQuantity).toHaveBeenCalledWith('item-2', 7);
+    });
+
+    it('opts sin skipStockCheck mantiene el chequeo de stock', async () => {
+      productRepository.findByVariantId.mockResolvedValue({
+        ...mockProduct,
+        variants: [{ ...mockVariant, stock: 1 }],
+      });
+      cartRepository.findByIdWithItems.mockResolvedValue({ ...mockCart, items: [] });
+
+      await expect(
+        service.addItem('customer-1', 'merchant-1', 'variant-1', 2, { notes: 'sin salsa' }),
+      ).rejects.toThrow('Stock insuficiente');
+    });
+
+    it('getCartSummary incluye las notas de cada línea', async () => {
+      cartRepository.findByIdWithItems.mockResolvedValue({
+        ...mockCart,
+        items: [itemWith('item-1', '', 1), itemWith('item-2', 'sin cebolla', 2)],
+      });
+
+      const summary = await service.getCartSummary('cart-1');
+
+      expect(summary.items.map((i) => i.notes)).toEqual(['', 'sin cebolla']);
+      expect(summary.total).toBe(75);
     });
   });
 

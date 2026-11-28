@@ -5,6 +5,28 @@ import { CartRepository, CartWithItems } from '../persistence/repositories/cart.
 import { CartItemRepository } from '../persistence/repositories/cart-item.repository';
 import { ProductRepository } from '../persistence/repositories/product.repository';
 import { MerchantResolverService } from './merchant-resolver.service';
+import type { AddItemOptions } from '../verticals/delivery/contracts';
+
+/** RN-05: longitud máxima de las notas por ítem. */
+export const CART_NOTES_MAX_LENGTH = 120;
+
+/**
+ * Delivery S2.2 (RN-05): normaliza las notas de un ítem, que forman parte de la
+ * clave única `(cartId, variantId, notes)`.
+ * - trim + colapsa espacios internos a uno solo
+ * - minúsculas (locale es) para que "Sin Cebolla" y "sin  cebolla" sean la misma línea
+ * - recorta a 120 caracteres
+ * `undefined`/vacío → `''` (valor de los ítems legacy).
+ */
+export function normalizeCartNotes(raw?: string | null): string {
+  if (typeof raw !== 'string') return '';
+  return raw
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLocaleLowerCase('es')
+    .slice(0, CART_NOTES_MAX_LENGTH)
+    .trim();
+}
 
 /**
  * CartSummary DTO for conversational display
@@ -14,6 +36,8 @@ export interface CartSummary {
     id: string;
     productName: string;
     variantName: string;
+    /** Delivery S2.2: notas normalizadas del ítem ('' en ítems legacy). */
+    notes: string;
     quantity: number;
     priceSnapshot: number;
     subtotal: number;
@@ -105,6 +129,8 @@ export class CartService {
    * @param merchantId - Merchant ID
    * @param variantId - Product variant ID
    * @param quantity - Quantity to add (min 1)
+   * @param opts - Delivery S2.2 (opcional): `notes` (RN-05, upsert por (cartId, variantId, notes))
+   *               y `skipStockCheck` (RN-04, trackStock=false). Sin opts el comportamiento es el legacy.
    * @throws BadRequestException if stock insufficient
    * @throws NotFoundException if variant not found
    */
@@ -113,7 +139,11 @@ export class CartService {
     merchantId: string,
     variantId: string,
     quantity: number,
+    opts?: AddItemOptions,
   ): Promise<CartWithItems> {
+    const notes = normalizeCartNotes(opts?.notes);
+    const checkStock = opts?.skipStockCheck !== true;
+
     if (quantity < 1) {
       throw new BadRequestException('Quantity must be at least 1');
     }
@@ -134,21 +164,26 @@ export class CartService {
     }
 
     // Guardrail: Validate stock (AC-06)
-    if (variant.stock < quantity) {
+    if (checkStock && variant.stock < quantity) {
       throw new BadRequestException(
         `Stock insuficiente. Solo quedan ${variant.stock} unidades de ${product.name} - ${variant.name}`,
       );
     }
 
     // Check if item already exists (idempotency via unique constraint)
-    const existingItem = await this.cartItemRepository.findByCartAndVariant(cartId, variantId);
+    // Delivery S2.2: con notas, la línea se busca en los ítems del carrito ya cargado
+    // (el repositorio legacy busca por notes='').
+    const existingItem =
+      notes === ''
+        ? await this.cartItemRepository.findByCartAndVariant(cartId, variantId)
+        : (cart.items.find((item) => item.variantId === variantId && item.notes === notes) ?? null);
 
     if (existingItem) {
       // Increment quantity instead of creating duplicate
       const newQuantity = existingItem.quantity + quantity;
 
       // Re-validate stock for new quantity
-      if (variant.stock < newQuantity) {
+      if (checkStock && variant.stock < newQuantity) {
         throw new BadRequestException(
           `Stock insuficiente. Solo quedan ${variant.stock} unidades (tienes ${existingItem.quantity} en carrito)`,
         );
@@ -166,6 +201,7 @@ export class CartService {
           variant: { connect: { id: variantId } },
           quantity,
           priceSnapshot: variant.price, // Guardrail: always from variant.price
+          ...(notes !== '' ? { notes } : {}),
         });
         this.logger.log(
           `Added item to cart ${cartId}: variant ${variantId} x${quantity} @ ${variant.price.toString()}`,
@@ -181,12 +217,14 @@ export class CartService {
           if (!freshCart) {
             throw new Error('Cart not found after concurrent creation');
           }
-          const nowExistingItem = freshCart.items.find((item) => item.variant.id === variantId);
+          const nowExistingItem = freshCart.items.find(
+            (item) => item.variant.id === variantId && (item.notes ?? '') === notes,
+          );
           if (nowExistingItem) {
             const newQuantity = nowExistingItem.quantity + quantity;
 
             // AC-06: Re-validate stock for new quantity (concurrency guardrail)
-            if (variant.stock < newQuantity) {
+            if (checkStock && variant.stock < newQuantity) {
               throw new BadRequestException(
                 `Stock insuficiente. Solo quedan ${variant.stock} unidades (tienes ${nowExistingItem.quantity} en carrito)`,
               );
@@ -337,6 +375,7 @@ export class CartService {
       id: item.id,
       productName: item.variant.product.name,
       variantName: item.variant.name,
+      notes: item.notes ?? '',
       quantity: item.quantity,
       priceSnapshot: item.priceSnapshot.toNumber(),
       subtotal: item.priceSnapshot.toNumber() * item.quantity,
