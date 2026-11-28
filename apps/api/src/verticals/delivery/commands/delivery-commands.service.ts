@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { OrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../persistence/prisma/prisma.service';
 import { DeliveryConfigService, normalizeText } from '../config/delivery-config.service';
-import { cartLineLabel } from '../presenters/cart.presenter';
+import { cartLineLabel, formatCop } from '../presenters/cart.presenter';
+import { periodLabel, ReportPeriod, reportRange } from './report-period';
 
 type StockAction = 'agotado' | 'disponible';
 
@@ -19,6 +20,9 @@ interface PendingStockChoice {
 
 /** Ventana de la desambiguación pendiente de agotado/disponible (RN-22). */
 export const STOCK_CHOICE_TTL_MS = 10 * 60 * 1000;
+
+/** §0.2 (c): un pedido cancelado dentro de las 24 h siguientes no es facturable. */
+export const BILLABLE_CANCEL_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Sección de ayuda de delivery. `ayuda` devuelve SOLO esta sección: el comando legacy
@@ -63,6 +67,8 @@ export class DeliveryCommandsService {
     if (!norm) return null;
 
     if (norm === 'ayuda' || norm === 'ayuda domicilios') return DELIVERY_HELP_TEXT;
+    if (norm === 'reporte' || norm === 'reporte hoy') return this.report(merchantId, 'day');
+    if (norm === 'reporte mes') return this.report(merchantId, 'month');
     if (norm === 'cerrar tienda') return this.setTemporarilyClosed(merchantId, true);
     if (norm === 'abrir tienda') return this.setTemporarilyClosed(merchantId, false);
 
@@ -76,6 +82,35 @@ export class DeliveryCommandsService {
     }
 
     return null;
+  }
+
+  // ===== reporte / reporte mes (F-13, AC-21) =====
+
+  /**
+   * Pedidos facturables (§0.2) del día o mes local en curso (`deliveryConfig.timezone`).
+   * Todo `Order` lo crea el bot tras la confirmación explícita del cliente (a, b); se
+   * excluyen los cancelados dentro de las 24 h desde su creación (c). Un pedido de las
+   * últimas 24 h aún no cancelado cuenta (provisional hasta cumplir la ventana).
+   * El período se ubica por `createdAt` (momento de la confirmación del cliente).
+   */
+  private async report(merchantId: string, period: ReportPeriod): Promise<string> {
+    const cfg = await this.deliveryConfig.get(merchantId);
+    const now = new Date();
+    const { start, end } = reportRange(now, cfg.timezone, period);
+    const orders = await this.prisma.order.findMany({
+      where: { merchantId, createdAt: { gte: start, lt: end } },
+      select: { totalAmount: true, status: true, createdAt: true, cancelledAt: true },
+    });
+    const billable = orders.filter((o) => {
+      if (o.status !== OrderStatus.cancelled && !o.cancelledAt) return true;
+      if (!o.cancelledAt) return false; // cancelado sin fecha: conservador, no se factura
+      return o.cancelledAt.getTime() - o.createdAt.getTime() > BILLABLE_CANCEL_WINDOW_MS;
+    });
+    const total = billable.reduce((sum, o) => sum + Number(o.totalAmount), 0);
+    const label = periodLabel(now, cfg.timezone, period);
+    const title =
+      period === 'day' ? `📊 Reporte de hoy (${label})` : `📊 Reporte del mes (${label})`;
+    return `${title}\nPedidos facturables: ${billable.length}\nTotal: ${formatCop(total)}`;
   }
 
   // ===== cerrar / abrir tienda (AC-20) =====

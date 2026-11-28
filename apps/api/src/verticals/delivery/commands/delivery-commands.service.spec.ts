@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import { OrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../persistence/prisma/prisma.service';
 import { DeliveryConfigService } from '../config/delivery-config.service';
 import {
@@ -14,7 +15,11 @@ const VARIANTS = [
   { id: 'v-perro', name: 'Sencillo', product: { name: 'Perro Caliente' } },
 ];
 
-function build(configRow: { deliveryConfig: unknown } | null = { deliveryConfig: null }) {
+function build(
+  configRow: { deliveryConfig: unknown } | null = { deliveryConfig: null },
+  orders: unknown[] = [],
+) {
+  const orderFindMany = jest.fn().mockResolvedValue(orders);
   const findMany = jest.fn().mockResolvedValue(VARIANTS);
   const updateMany = jest.fn().mockResolvedValue({ count: 1 });
   const findUnique = jest.fn().mockResolvedValue(configRow);
@@ -22,9 +27,16 @@ function build(configRow: { deliveryConfig: unknown } | null = { deliveryConfig:
   const prisma = {
     productVariant: { findMany, updateMany },
     merchantConfig: { findUnique, update },
+    order: { findMany: orderFindMany },
   } as unknown as PrismaService;
   const config = new DeliveryConfigService(prisma);
-  return { service: new DeliveryCommandsService(prisma, config), findMany, updateMany, update };
+  return {
+    service: new DeliveryCommandsService(prisma, config),
+    findMany,
+    updateMany,
+    update,
+    orderFindMany,
+  };
 }
 
 describe('DeliveryCommandsService — agotado/disponible (RN-22, AC-20)', () => {
@@ -180,5 +192,76 @@ describe('DeliveryCommandsService — cerrar/abrir tienda y ayuda (AC-20)', () =
     ]) {
       expect(reply).toContain(cmd);
     }
+  });
+});
+
+describe('DeliveryCommandsService — reporte (F-13, AC-21)', () => {
+  const H = 60 * 60 * 1000;
+  const order = (total: number, createdAt: string, cancelAfterH?: number) => ({
+    totalAmount: new Prisma.Decimal(total),
+    status: cancelAfterH === undefined ? OrderStatus.delivered : OrderStatus.cancelled,
+    createdAt: new Date(createdAt),
+    cancelledAt:
+      cancelAfterH === undefined
+        ? null
+        : new Date(new Date(createdAt).getTime() + cancelAfterH * H),
+  });
+  afterEach(() => jest.useRealTimers());
+
+  it('AC-21: "reporte" a las 23:59 de Bogotá cuenta los facturables de hoy local con total en COP', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-29T04:59:00Z')); // 28/11 23:59 local
+    const orders = [
+      order(28000, '2026-11-28T15:00:00Z'),
+      order(15500, '2026-11-29T04:30:00Z'),
+      order(40000, '2026-11-28T16:00:00Z', 1), // cancelado en < 24 h → no facturable
+    ];
+    const { service, orderFindMany } = build(
+      { deliveryConfig: { timezone: 'America/Bogota' } },
+      orders,
+    );
+    const reply = await service.tryHandle('m1', 'reporte');
+    expect(orderFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          merchantId: 'm1',
+          createdAt: {
+            gte: new Date('2026-11-28T05:00:00Z'),
+            lt: new Date('2026-11-29T05:00:00Z'),
+          },
+        },
+      }),
+    );
+    expect(reply).toBe('📊 Reporte de hoy (28/11/2026)\nPedidos facturables: 2\nTotal: $43.500');
+  });
+
+  it('AC-21: "reporte" a las 00:00 de Bogotá usa el día nuevo', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-29T05:00:00Z'));
+    const { service, orderFindMany } = build({ deliveryConfig: null });
+    const reply = await service.tryHandle('m1', 'Reporte');
+    const where = orderFindMany.mock.calls[0][0].where;
+    expect(where.createdAt.gte).toEqual(new Date('2026-11-29T05:00:00Z'));
+    expect(reply).toContain('Pedidos facturables: 0');
+    expect(reply).toContain('Total: $0');
+  });
+
+  it('AC-21: "reporte mes" cubre el mes local; cancelado después de 24 h sí es facturable', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-28T17:00:00Z'));
+    const orders = [
+      order(100000, '2026-11-02T15:00:00Z', 30),
+      order(20000, '2026-11-10T15:00:00Z'),
+    ];
+    const { service, orderFindMany } = build({ deliveryConfig: null }, orders);
+    const reply = await service.tryHandle('m1', 'reporte mes');
+    expect(orderFindMany.mock.calls[0][0].where.createdAt).toEqual({
+      gte: new Date('2026-11-01T05:00:00Z'),
+      lt: new Date('2026-12-01T05:00:00Z'),
+    });
+    expect(reply).toBe('📊 Reporte del mes (11/2026)\nPedidos facturables: 2\nTotal: $120.000');
+  });
+
+  it('cancelado sin fecha de cancelación no se factura (conservador)', async () => {
+    const orders = [{ ...order(9000, '2026-11-28T15:00:00Z'), status: OrderStatus.cancelled }];
+    const { service } = build({ deliveryConfig: null }, orders);
+    expect(await service.tryHandle('m1', 'reporte')).toContain('Pedidos facturables: 0');
   });
 });
