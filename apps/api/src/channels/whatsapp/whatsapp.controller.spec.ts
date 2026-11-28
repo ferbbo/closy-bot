@@ -14,6 +14,7 @@ import { ModuleRef } from '@nestjs/core';
 import { MetaWebhookPayload } from './dto/meta-webhook.dto';
 import { TemplateWebhookHandler } from '../../verticals/delivery/messaging/template-webhook.handler';
 import { FeatureFlagsService } from '../../common/feature-flags/feature-flags.service';
+import { BurstBufferService } from '../../verticals/delivery/burst/burst-buffer.service';
 
 describe('WhatsAppController', () => {
   let controller: WhatsAppController;
@@ -425,6 +426,125 @@ describe('WhatsAppController', () => {
       expect(orchestratorMock.process).toHaveBeenCalledWith(
         expect.objectContaining({ mediaType: 'audio', mediaId: 'aud_1', mimeType: 'audio/ogg' }),
       );
+    });
+  });
+
+  describe('burst debounce (S5.1-T1)', () => {
+    const payload = (msg: Record<string, unknown>): MetaWebhookPayload =>
+      ({
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'waba-123',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: { display_phone_number: '1', phone_number_id: 'phone-id-test' },
+                  messages: [{ from: '573001234567', timestamp: '1700000000', ...msg }],
+                },
+              },
+            ],
+          },
+        ],
+      }) as unknown as MetaWebhookPayload;
+    const textMsg = { id: 'wamid.T1', type: 'text', text: { body: 'hola' } };
+    const audioMsg = { id: 'wamid.A1', type: 'audio', audio: { id: 'aud_1', mime_type: 'a/o' } };
+
+    const build = (opts: {
+      isDeliveryEnabled?: boolean;
+      industry?: string;
+      enabled?: boolean;
+      whatsappNumber?: string;
+    }) => {
+      const whatsappService = { processInboundMessage: jest.fn() };
+      const merchant = {
+        id: 'merchant-1',
+        industry: opts.industry ?? 'restaurante',
+        status: 'active',
+        botPaused: false,
+        whatsappNumber: opts.whatsappNumber ?? null,
+      };
+      const merchantResolver = {
+        resolveByChannel: jest.fn().mockResolvedValue({ merchant, channel: { id: 'channel-1' } }),
+      };
+      const orchestratorMock = { process: jest.fn().mockResolvedValue({ shouldSend: false }) };
+      const burst = {
+        isEnabled: jest.fn(() => opts.enabled ?? true),
+        enqueue: jest.fn().mockResolvedValue(undefined),
+        flushPending: jest.fn().mockResolvedValue(undefined),
+      };
+      const moduleRef = { get: jest.fn(() => burst) };
+      const ctrl = new WhatsAppController(
+        whatsappService as unknown as WhatsAppService,
+        {} as WhatsAppOutboundService,
+        orchestratorMock as unknown as ConversationOrchestrator,
+        merchantResolver as unknown as MerchantResolverService,
+        { get: jest.fn(() => 'tok') } as unknown as ConfigService,
+        { enqueueWhatsAppText: jest.fn() } as unknown as OutboxService,
+        moduleRef as unknown as ModuleRef,
+        { isDeliveryEnabled: opts.isDeliveryEnabled ?? true } as FeatureFlagsService,
+      );
+      return { ctrl, whatsappService, orchestratorMock, burst, moduleRef };
+    };
+
+    it('buffers text after the inbound dedupe and does not call the orchestrator', async () => {
+      const { ctrl, whatsappService, orchestratorMock, burst, moduleRef } = build({});
+      await expect(ctrl.handleMetaWebhook(payload(textMsg), {} as never)).resolves.toEqual({
+        received: true,
+      });
+      expect(whatsappService.processInboundMessage).toHaveBeenCalled();
+      expect(moduleRef.get).toHaveBeenCalledWith(BurstBufferService, { strict: false });
+      expect(burst.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messageId: 'wamid.T1',
+          text: 'hola',
+          merchantId: 'merchant-1',
+          channelId: 'channel-1',
+          receiverPhoneId: 'phone-id-test',
+        }),
+      );
+      expect(orchestratorMock.process).not.toHaveBeenCalled();
+    });
+
+    it('does not buffer a duplicate message_id', async () => {
+      const { ctrl, whatsappService, burst } = build({});
+      whatsappService.processInboundMessage.mockRejectedValue(new ConflictException('dup'));
+      await ctrl.handleMetaWebhook(payload(textMsg), {} as never);
+      expect(burst.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('media flushes the pending burst first and is processed as its own turn', async () => {
+      const { ctrl, orchestratorMock, burst } = build({});
+      await ctrl.handleMetaWebhook(payload(audioMsg), {} as never);
+      expect(burst.flushPending).toHaveBeenCalled();
+      expect(burst.enqueue).not.toHaveBeenCalled();
+      expect(burst.flushPending.mock.invocationCallOrder[0]).toBeLessThan(
+        orchestratorMock.process.mock.invocationCallOrder[0],
+      );
+    });
+
+    it.each([
+      ['flag off', { isDeliveryEnabled: false }],
+      ['non-restaurante industry', { industry: 'ropa' }],
+      ['DELIVERY_DEBOUNCE_MS=0', { enabled: false }],
+      ['merchant own number', { whatsappNumber: '573001234567' }],
+    ])('processes immediately (legacy) with %s', async (_label, opts) => {
+      const { ctrl, orchestratorMock, burst, moduleRef } = build(opts);
+      await ctrl.handleMetaWebhook(payload(textMsg), {} as never);
+      expect(burst.enqueue).not.toHaveBeenCalled();
+      expect(orchestratorMock.process).toHaveBeenCalledWith(
+        expect.objectContaining({ messageId: 'wamid.T1', text: 'hola' }),
+      );
+      if (opts.isDeliveryEnabled === false) expect(moduleRef.get).not.toHaveBeenCalled();
+    });
+
+    it('falls back to immediate processing when the buffer fails', async () => {
+      const { ctrl, orchestratorMock, burst } = build({});
+      burst.enqueue.mockRejectedValue(new Error('db down'));
+      await ctrl.handleMetaWebhook(payload(textMsg), {} as never);
+      expect(orchestratorMock.process).toHaveBeenCalledTimes(1);
     });
   });
 });

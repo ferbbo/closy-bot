@@ -32,6 +32,7 @@ import {
   isWabaWebhookField,
 } from '../../verticals/delivery/messaging/template-webhook.handler';
 import { FeatureFlagsService } from '../../common/feature-flags/feature-flags.service';
+import { BurstBufferService } from '../../verticals/delivery/burst/burst-buffer.service';
 
 /**
  * Controller for WhatsApp webhooks (Meta WhatsApp Cloud API)
@@ -304,6 +305,10 @@ export class WhatsAppController {
       // 1. Process and dedupe inbound message
       await this.whatsappService.processInboundMessage(dto);
 
+      // S5.1: debounce de ráfagas (solo vertical delivery). El texto se guarda en el buffer y
+      // se responde 200; la media vacía el buffer primero y se procesa como turno propio.
+      if (await this.divertToBurst(dto, resolution, phoneNumberId)) return;
+
       // 2-3. Orchestrate + Send (best-effort, never block 200 after persistence)
       try {
         const result = await this.orchestrator.process({
@@ -362,6 +367,57 @@ export class WhatsAppController {
         `Failed to process message ${dto.message_id}`,
         error instanceof Error ? error.stack : error,
       );
+    }
+  }
+
+  /**
+   * S5.1-T1: desvía el mensaje al buffer de ráfagas cuando aplica (flag delivery + industria
+   * restaurante + DELIVERY_DEBOUNCE_MS > 0 + remitente que no es el comercio).
+   * @returns true si el texto quedó en el buffer (no hay que procesarlo ahora)
+   */
+  private async divertToBurst(
+    dto: InboundMessageDto,
+    resolution: NonNullable<Awaited<ReturnType<MerchantResolverService['resolveByChannel']>>>,
+    phoneNumberId: string,
+  ): Promise<boolean> {
+    const { merchant, channel } = resolution;
+    if (!this.featureFlags.isDeliveryEnabled || merchant.industry !== 'restaurante') return false;
+    if (merchant.whatsappNumber && dto.from === merchant.whatsappNumber) return false;
+    if (merchant.botPaused || merchant.status !== 'active') return false;
+
+    let burst: BurstBufferService;
+    try {
+      burst = this.moduleRef.get(BurstBufferService, { strict: false });
+    } catch {
+      return false;
+    }
+    if (!burst.isEnabled()) return false;
+
+    const ref = {
+      from: dto.from,
+      receiverPhoneId: phoneNumberId,
+      merchantId: merchant.id,
+      channelId: channel.id,
+    };
+    try {
+      if (dto.media_type) {
+        await burst.flushPending(ref);
+        return false;
+      }
+      if (!dto.text?.trim()) return false;
+      await burst.enqueue({
+        ...ref,
+        messageId: dto.message_id,
+        text: dto.text,
+        timestamp: new Date(dto.timestamp),
+      });
+      return true;
+    } catch (error) {
+      // Si el buffer falla, se procesa de inmediato (comportamiento previo)
+      this.logger.error(
+        `Burst buffer failed for message ${dto.message_id}: ${(error as Error).message}`,
+      );
+      return false;
     }
   }
 }
