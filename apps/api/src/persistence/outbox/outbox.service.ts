@@ -15,6 +15,24 @@ export interface EnqueueWhatsAppTextParams {
 }
 
 /**
+ * Delivery (S1.4): parámetros para encolar una plantilla de WhatsApp (`SEND_TEMPLATE`).
+ * `dedupeKey` es obligatorio: los mensajes iniciados por el negocio siempre son idempotentes.
+ */
+export interface EnqueueWhatsAppTemplateParams {
+  merchantId: string;
+  conversationId?: string;
+  channelId?: string;
+  to: string;
+  templateName: string;
+  languageCode: string;
+  params: Record<string, string>;
+  dedupeKey: string;
+  /** Cuerpo renderizado (para MessageLog tras el envío); no se loguea. */
+  renderedText?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
  * Service for enqueueing outbound messages via transactional outbox pattern
  * Provides high-level API for adding messages to the outbox
  */
@@ -92,5 +110,51 @@ export class OutboxService {
     this.logger.debug(`Enqueued OutboxMessage id=${message.id}, status=${message.status}`);
 
     return message;
+  }
+
+  /**
+   * Delivery (S1.4): encola una plantilla utility de WhatsApp (`SEND_TEMPLATE`).
+   * Idempotente por `@@unique([merchantId, dedupeKey])`.
+   */
+  async enqueueWhatsAppTemplate(params: EnqueueWhatsAppTemplateParams) {
+    const { merchantId, conversationId, channelId, to, dedupeKey } = params;
+
+    const payloadJson = {
+      template: {
+        name: params.templateName,
+        languageCode: params.languageCode,
+        params: params.params,
+      },
+      renderedText: params.renderedText,
+      metadata: params.metadata,
+    };
+
+    this.logger.log(
+      `Enqueueing WhatsApp template: name=${params.templateName}, to=${maskPhone(to)}, dedupeKey=${dedupeKey}`,
+    );
+
+    const createInput: {
+      merchant: { connect: { id: string } };
+      conversationId?: string;
+      channel: OutboxChannel;
+      type: OutboxMessageType;
+      to: string;
+      payloadJson: Prisma.InputJsonValue;
+      dedupeKey: string;
+      channelRef?: { connect: { id: string } };
+    } = {
+      merchant: { connect: { id: merchantId } },
+      conversationId,
+      channel: OutboxChannel.WHATSAPP,
+      type: OutboxMessageType.SEND_TEMPLATE,
+      to,
+      payloadJson: payloadJson as unknown as Prisma.InputJsonValue,
+      dedupeKey,
+    };
+    if (channelId) {
+      createInput.channelRef = { connect: { id: channelId } };
+    }
+
+    return this.outboxRepo.create(createInput);
   }
 }
