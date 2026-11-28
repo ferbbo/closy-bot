@@ -22,3 +22,8 @@ process.env.NODE_ENV = 'test';
 
 // Note: DATABASE_URL should be set in .env or .env.test
 // E2E tests require a real database connection
+
+// Delivery S1.5: Meta Sandbox. WhatsApp vars are NOT set globally here (WHATSAPP_APP_SECRET
+// would enable MetaSignatureGuard for legacy suites that post unsigned webhooks). Delivery
+// suites opt in with `applySandboxEnv(baseUrl)` from test/meta-sandbox/env.ts before
+// importing AppModule.
