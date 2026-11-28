@@ -13,6 +13,8 @@ import { GroundingValidator } from './agent/grounding-validator';
 import { DeliveryAgentService, DELIVERY_LLM_PROVIDER } from './agent/delivery-agent.service';
 import { DeliveryVerticalHandler } from './handler/delivery-vertical.handler';
 import { POS_PROVIDERS } from './pos/pos.providers';
+import { ORDER_TOOLS_PROVIDERS } from './agent/tools/order-tools.providers';
+import { DELIVERY_ORDER_LIFECYCLE } from './agent/tools/order.tools';
 import { LIFECYCLE_PROVIDERS } from './lifecycle/lifecycle.providers';
 import { LifecycleCommandsService } from './lifecycle/lifecycle-commands';
 import { DeliveryOrderLifecycleService } from './lifecycle/delivery-order-lifecycle.service';
@@ -75,6 +77,9 @@ import { CustomerServiceWindowService } from './messaging/customer-service-windo
     ...DELIVERY_COMMANDS_PROVIDERS,
     // Kitchen lifecycle (S4.1) + merchant command delegation: first handler that answers wins
     ...LIFECYCLE_PROVIDERS,
+    // Customer self-service tools (S4.2)
+    ...ORDER_TOOLS_PROVIDERS,
+    { provide: DELIVERY_ORDER_LIFECYCLE, useExisting: DeliveryOrderLifecycleService },
     {
       provide: DELIVERY_MERCHANT_COMMANDS,
       useFactory: (lifecycle: LifecycleCommandsService, commands: DeliveryCommandsService) => [

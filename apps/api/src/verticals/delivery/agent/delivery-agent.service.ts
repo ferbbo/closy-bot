@@ -17,6 +17,7 @@ import { CatalogTools } from './tools/catalog.tools';
 import { DeliveryTools } from './tools/delivery.tools';
 import { PaymentTools } from './tools/payment.tools';
 import { ConfirmTools } from './tools/confirm.tools';
+import { OrderTools } from './tools/order.tools';
 import { OpeningHoursGuard } from '../handler/guards/opening-hours.guard';
 import { parseOrderText } from './fallback-parser';
 import { buildDeliverySystemPrompt, DELIVERY_TEXTS } from './delivery-agent.prompt';
@@ -76,6 +77,7 @@ export class DeliveryAgentService {
     private readonly paymentTools: PaymentTools,
     private readonly confirmTools: ConfirmTools,
     private readonly openingHours: OpeningHoursGuard,
+    private readonly orderTools: OrderTools,
     @Optional() @Inject(DELIVERY_LLM_PROVIDER) private readonly providerOverride?: LlmProvider,
   ) {}
 
@@ -205,6 +207,7 @@ export class DeliveryAgentService {
       ...this.deliveryTools.definitions,
       ...this.paymentTools.definitions,
       ...this.confirmTools.definitions,
+      ...this.orderTools.definitions,
     ];
   }
 
@@ -217,6 +220,7 @@ export class DeliveryAgentService {
       ...this.deliveryTools.handlers(),
       ...this.paymentTools.handlers(),
       ...this.confirmTools.handlers(),
+      ...this.orderTools.handlers(),
     });
   }
 
