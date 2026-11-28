@@ -1,5 +1,14 @@
 import { Type } from 'class-transformer';
-import { IsString, IsArray, IsOptional, ValidateNested, IsIn, IsNotEmpty } from 'class-validator';
+import {
+  IsString,
+  IsArray,
+  IsOptional,
+  ValidateNested,
+  IsIn,
+  IsNotEmpty,
+  ValidateIf,
+  Allow,
+} from 'class-validator';
 
 /**
  * Meta WhatsApp Cloud API webhook payload structure
@@ -114,10 +123,29 @@ export class MetaMetadata {
   phone_number_id!: string;
 }
 
+/**
+ * Delivery S1.4-T4: los cambios de WABA (`message_template_status_update`,
+ * `template_category_update`, `phone_number_quality_update`) no traen `messaging_product`
+ * ni `metadata`. Esos dos campos siguen siendo obligatorios para el resto (campo `messages`).
+ */
+export function isWabaAccountValue(value: MetaValue): boolean {
+  return (
+    value.messages === undefined &&
+    value.statuses === undefined &&
+    value.contacts === undefined &&
+    (value.message_template_name !== undefined ||
+      value.new_category !== undefined ||
+      value.event !== undefined ||
+      value.current_limit !== undefined)
+  );
+}
+
 export class MetaValue {
+  @ValidateIf((o: MetaValue) => !isWabaAccountValue(o))
   @IsString()
   messaging_product!: string;
 
+  @ValidateIf((o: MetaValue) => !isWabaAccountValue(o))
   @ValidateNested()
   @Type(() => MetaMetadata)
   metadata!: MetaMetadata;
@@ -139,6 +167,56 @@ export class MetaValue {
   @IsArray()
   @IsOptional()
   statuses?: MetaStatus[];
+
+  // ---- Delivery S1.4-T4: campos de WABA (plantillas y calidad del número) ----
+  @IsOptional()
+  @IsString()
+  event?: string;
+
+  @Allow()
+  message_template_id?: number | string;
+
+  @IsOptional()
+  @IsString()
+  message_template_name?: string;
+
+  @IsOptional()
+  @IsString()
+  message_template_language?: string;
+
+  @Allow()
+  reason?: string | null;
+
+  @Allow()
+  other_info?: unknown;
+
+  @IsOptional()
+  @IsString()
+  previous_category?: string;
+
+  @IsOptional()
+  @IsString()
+  new_category?: string;
+
+  @IsOptional()
+  @IsString()
+  correct_category?: string;
+
+  @IsOptional()
+  @IsString()
+  display_phone_number?: string;
+
+  @Allow()
+  current_limit?: string;
+
+  @Allow()
+  old_limit?: string;
+
+  @Allow()
+  current_quality_rating?: string;
+
+  @Allow()
+  max_daily_conversation_per_phone?: number;
 }
 
 export class MetaChange {
@@ -153,6 +231,10 @@ export class MetaChange {
 export class MetaEntry {
   @IsString()
   id!: string;
+
+  /** Delivery S1.4-T4: los eventos de WABA incluyen `time` (epoch) en la entrada. */
+  @Allow()
+  time?: number;
 
   @ValidateNested()
   @Type(() => MetaChange)

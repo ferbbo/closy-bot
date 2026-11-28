@@ -9,6 +9,10 @@ import { MerchantResolverService } from '../../services/merchant-resolver.servic
 import { InboundMessageDto } from './dto/inbound-message.dto';
 import { MetaSignatureGuard } from './guards/meta-signature.guard';
 import { OutboxService } from '../../persistence/outbox/outbox.service';
+import { ArgumentMetadata, BadRequestException, ValidationPipe } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { MetaWebhookPayload } from './dto/meta-webhook.dto';
+import { TemplateWebhookHandler } from '../../verticals/delivery/messaging/template-webhook.handler';
 
 describe('WhatsAppController', () => {
   let controller: WhatsAppController;
@@ -193,6 +197,142 @@ describe('WhatsAppController', () => {
       expect(service.processInboundMessage).toHaveBeenCalledWith(validDto);
       expect(orchestrator.process).toHaveBeenCalled();
       expect(outboxService.enqueueWhatsAppText).not.toHaveBeenCalled();
+    });
+  });
+  // Delivery S1.4-T4: webhooks de WABA (plantillas y calidad del número)
+  describe('WABA fields (S1.4-T4)', () => {
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    });
+    const meta: ArgumentMetadata = { type: 'body', metatype: MetaWebhookPayload };
+    const waba = (field: string, value: Record<string, unknown>) => ({
+      object: 'whatsapp_business_account',
+      entry: [{ id: 'waba-123', time: 1764300000, changes: [{ field, value }] }],
+    });
+    const statusUpdate = waba('message_template_status_update', {
+      event: 'APPROVED',
+      message_template_id: 123456789,
+      message_template_name: 'pedido_en_camino',
+      message_template_language: 'es',
+      reason: 'NONE',
+    });
+    const categoryUpdate = waba('template_category_update', {
+      message_template_id: 123456789,
+      message_template_name: 'pedido_en_camino',
+      message_template_language: 'es',
+      previous_category: 'UTILITY',
+      new_category: 'MARKETING',
+    });
+    const qualityUpdate = waba('phone_number_quality_update', {
+      display_phone_number: '573001234567',
+      event: 'FLAGGED',
+      current_limit: 'TIER_1K',
+      current_quality_rating: 'RED',
+    });
+    const buildController = (moduleRef: Partial<ModuleRef>) => {
+      const orchestratorMock = { process: jest.fn() };
+      const ctrl = new WhatsAppController(
+        { processInboundMessage: jest.fn() } as unknown as WhatsAppService,
+        {} as WhatsAppOutboundService,
+        orchestratorMock as unknown as ConversationOrchestrator,
+        { resolveByChannel: jest.fn() } as unknown as MerchantResolverService,
+        { get: jest.fn(() => 'tok') } as unknown as ConfigService,
+        { enqueueWhatsAppText: jest.fn() } as unknown as OutboxService,
+        moduleRef as ModuleRef,
+      );
+      return { ctrl, orchestratorMock };
+    };
+
+    it.each([
+      ['message_template_status_update', statusUpdate],
+      ['template_category_update', categoryUpdate],
+      ['phone_number_quality_update', qualityUpdate],
+    ])('global ValidationPipe accepts %s payloads', async (_f, body) => {
+      await expect(pipe.transform(body, meta)).resolves.toBeInstanceOf(MetaWebhookPayload);
+    });
+
+    it('messages payloads keep strict validation (messaging_product required, unknown fields rejected)', async () => {
+      const messages = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'waba-123',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messages: [{ from: '57300', id: 'wamid.1', timestamp: '1', type: 'text' }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      await expect(pipe.transform(messages, meta)).rejects.toBeInstanceOf(BadRequestException);
+      const withUnknown = JSON.parse(JSON.stringify(messages));
+      withUnknown.entry[0].changes[0].value.messaging_product = 'whatsapp';
+      withUnknown.entry[0].changes[0].value.metadata = {
+        display_phone_number: '1',
+        phone_number_id: 'p',
+      };
+      await expect(pipe.transform(withUnknown, meta)).resolves.toBeDefined();
+      withUnknown.entry[0].changes[0].value.hacker = true;
+      await expect(pipe.transform(withUnknown, meta)).rejects.toBeInstanceOf(BadRequestException);
+      // un campo WABA dentro de un payload de messages no relaja messaging_product
+      const mixed = JSON.parse(JSON.stringify(messages));
+      mixed.entry[0].changes[0].value.event = 'APPROVED';
+      await expect(pipe.transform(mixed, meta)).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('delegates WABA changes to TemplateWebhookHandler and returns 200 without orchestrating', async () => {
+      const handler = { handle: jest.fn().mockResolvedValue(undefined) };
+      const get = jest.fn().mockReturnValue(handler);
+      const { ctrl, orchestratorMock } = buildController({ get } as Partial<ModuleRef>);
+
+      const body = (await pipe.transform(categoryUpdate, meta)) as MetaWebhookPayload;
+      await expect(ctrl.handleMetaWebhook(body, {} as never)).resolves.toEqual({ received: true });
+
+      expect(get).toHaveBeenCalledWith(TemplateWebhookHandler, { strict: false });
+      expect(handler.handle).toHaveBeenCalledWith(
+        'waba-123',
+        'template_category_update',
+        expect.objectContaining({
+          new_category: 'MARKETING',
+          message_template_name: 'pedido_en_camino',
+        }),
+      );
+      expect(orchestratorMock.process).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op (200) when the handler is not registered (delivery off)', async () => {
+      const get = jest.fn(() => {
+        throw new Error('not found');
+      });
+      const { ctrl } = buildController({ get } as unknown as Partial<ModuleRef>);
+      await expect(
+        ctrl.handleMetaWebhook(statusUpdate as unknown as MetaWebhookPayload, {} as never),
+      ).resolves.toEqual({ received: true });
+    });
+
+    it('swallows handler errors and still returns 200', async () => {
+      const handler = { handle: jest.fn().mockRejectedValue(new Error('db down')) };
+      const { ctrl } = buildController({ get: jest.fn().mockReturnValue(handler) });
+      await expect(
+        ctrl.handleMetaWebhook(qualityUpdate as unknown as MetaWebhookPayload, {} as never),
+      ).resolves.toEqual({ received: true });
+    });
+
+    it('does not resolve the handler for plain messages/status payloads', async () => {
+      const get = jest.fn();
+      const { ctrl } = buildController({ get });
+      await ctrl.handleMetaWebhook(
+        { object: 'whatsapp_business_account', entry: [] } as unknown as MetaWebhookPayload,
+        {} as never,
+      );
+      expect(get).not.toHaveBeenCalled();
     });
   });
 });
