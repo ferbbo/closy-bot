@@ -2,6 +2,7 @@
  * LLM Provider interface - abstraction for LLM API calls
  * Allows swapping between Groq, OpenAI, Anthropic, etc.
  */
+import type { LlmToolRequest, LlmToolResponse } from '../../verticals/delivery/contracts';
 
 export interface LlmProvider {
   /**
@@ -10,7 +11,18 @@ export interface LlmProvider {
    * @returns LLM response with content and metadata
    */
   generateResponse(params: GenerateResponseParams): Promise<LlmResponse>;
+
+  /**
+   * S1.3: Tool calling (formato OpenAI). NUNCA lanza: cualquier fallo se devuelve
+   * como `{ ok: false, reason }` (TIMEOUT | PROVIDER_ERROR | INVALID_RESPONSE).
+   * Timeout por defecto: 8000 ms (SPEC §3.5). Sin reintentos (presupuesto de latencia del turno).
+   */
+  generateWithTools(req: LlmToolRequest): Promise<LlmToolResponse>;
 }
+
+/** S1.3: Razón de fallo común a los métodos que no lanzan (alias de `LlmToolResponse` ok:false). */
+export type LlmFailureReason = Extract<LlmToolResponse, { ok: false }>['reason'];
+export type LlmFailure = { ok: false; reason: LlmFailureReason };
 
 export interface GenerateResponseParams {
   /** System prompt with instructions and guardrails */
