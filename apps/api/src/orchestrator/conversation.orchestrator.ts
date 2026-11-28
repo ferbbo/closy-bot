@@ -40,6 +40,11 @@ export interface OrchestratorInput {
   timestamp: Date;
   merchantId?: string; // PR-03.11: Pre-resolved from controller
   channelId?: string; // PR-03.11: Pre-resolved from controller
+  // Delivery S5.0-T1: media del mensaje (propagado al VerticalContext; ignorado por los flujos legacy)
+  mediaType?: 'audio' | 'image' | 'video' | 'document' | 'sticker';
+  mediaId?: string;
+  mimeType?: string;
+  caption?: string;
 }
 
 export interface OrchestratorResult {
@@ -241,7 +246,15 @@ export class ConversationOrchestrator {
         id: conversation.id,
         metadata: (conversation as { metadata?: unknown }).metadata ?? null,
       },
-      input: { messageId: input.messageId, text: input.text, timestamp: input.timestamp },
+      input: {
+        messageId: input.messageId,
+        text: input.text,
+        timestamp: input.timestamp,
+        mediaType: input.mediaType,
+        mediaId: input.mediaId,
+        mimeType: input.mimeType,
+        caption: input.caption,
+      },
     });
     if (verticalResult) {
       return {

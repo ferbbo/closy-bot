@@ -31,6 +31,11 @@ export class MetaMessageMedia {
   @IsString()
   @IsOptional()
   sha256?: string;
+
+  // Delivery S5.0-T1: image/video/document pueden traer caption (audio no).
+  @IsString()
+  @IsOptional()
+  caption?: string;
 }
 
 export class MetaMessage {
