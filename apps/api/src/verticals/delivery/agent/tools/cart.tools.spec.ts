@@ -170,4 +170,61 @@ describe('CartTools (S2.2-T3)', () => {
       expect(result).toEqual({ ok: false, error: 'CART_ERROR' });
     });
   });
+
+  describe('quitar_del_carrito', () => {
+    it('sin cantidad quita la línea completa por itemId', async () => {
+      cartService.createOrGetActiveCart.mockResolvedValue(cartOf([line('i-1', 'v-1', '', 2)]));
+      cartService.removeItem.mockResolvedValue(cartOf([]));
+
+      const result = await run('quitar_del_carrito', { itemId: 'i-1' });
+
+      expect(cartService.removeItem).toHaveBeenCalledWith('cart-1', 'i-1');
+      expect(result.ok).toBe(true);
+      expect((result.data as { text: string }).text).toBe('Tu carrito está vacío.');
+    });
+
+    it('con cantidad menor reduce la línea sin chequeo de stock', async () => {
+      cartService.createOrGetActiveCart.mockResolvedValue(cartOf([line('i-1', 'v-1', '', 3)]));
+      cartService.getCart.mockResolvedValue(cartOf([line('i-1', 'v-1', '', 2)]));
+
+      const result = await run('quitar_del_carrito', { variantId: 'v-1', cantidad: 1 });
+
+      expect(cartItemRepository.updateQuantity).toHaveBeenCalledWith('i-1', 2);
+      expect((result.data as { subtotal: number }).subtotal).toBe(32000);
+    });
+
+    it('variantId con varias líneas (notas distintas) → AMBIGUOUS_ITEM con opciones', async () => {
+      cartService.createOrGetActiveCart.mockResolvedValue(
+        cartOf([line('i-1', 'v-1', 'sin cebolla', 1), line('i-2', 'v-1', '', 1)]),
+      );
+
+      const result = await run('quitar_del_carrito', { variantId: 'v-1' });
+
+      expect(result.error).toBe('AMBIGUOUS_ITEM');
+      expect((result.data as { options: unknown[] }).options).toHaveLength(2);
+      expect(cartService.removeItem).not.toHaveBeenCalled();
+    });
+
+    it('ítem que no está → ITEM_NOT_IN_CART; sin ids → INVALID_ARGS', async () => {
+      expect(await run('quitar_del_carrito', { itemId: 'nope' })).toEqual({
+        ok: false,
+        error: 'ITEM_NOT_IN_CART',
+      });
+      expect(await run('quitar_del_carrito', {})).toEqual({ ok: false, error: 'INVALID_ARGS' });
+    });
+  });
+
+  it('ver_carrito devuelve la vista del presenter (subtotal = suma de BD)', async () => {
+    cartService.createOrGetActiveCart.mockResolvedValue(
+      cartOf([line('i-1', 'v-1', 'sin cebolla', 2), line('i-3', 'v-3', '', 1, 4000)]),
+    );
+
+    const result = await run('ver_carrito', {});
+
+    expect(cartService.createOrGetActiveCart).toHaveBeenCalledWith('c-1', 'm-1');
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({ cartId: 'cart-1', subtotal: 36000, moreLines: 0 }),
+    );
+  });
 });
