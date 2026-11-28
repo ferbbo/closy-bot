@@ -12,6 +12,9 @@ import { LlmModule } from '../../llm/llm.module';
 import { GroundingValidator } from './agent/grounding-validator';
 import { DeliveryAgentService, DELIVERY_LLM_PROVIDER } from './agent/delivery-agent.service';
 import { DeliveryVerticalHandler } from './handler/delivery-vertical.handler';
+import { POS_PROVIDERS } from './pos/pos.providers';
+import { PosOrderSink } from './sinks/pos-order.sink';
+import { POS_ADAPTERS } from './contracts';
 import { ServicesModule } from '../../services/services.module';
 import { BusinessMessengerService } from './messaging/business-messenger.service';
 import { CustomerServiceWindowService } from './messaging/customer-service-window.service';
@@ -36,6 +39,10 @@ import { CustomerServiceWindowService } from './messaging/customer-service-windo
     DeliveryVerticalHandler,
     // Override point for tests/e2e (FakeLlmProvider); null → Groq via LlmService
     { provide: DELIVERY_LLM_PROVIDER, useValue: null },
+    // POS port (S3.4): no concrete connector yet → registry falls back to NoopPosAdapter
+    ...POS_PROVIDERS,
+    { provide: POS_ADAPTERS, useValue: [] },
+    PosOrderSink,
   ],
   exports: [
     DeliveryConfigService,
