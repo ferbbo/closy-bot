@@ -19,6 +19,7 @@ import { ServicesModule } from '../services/services.module';
 import { LlmModule } from '../llm/llm.module';
 import { PersistenceModule } from '../persistence/persistence.module'; // PR-03.10
 import { CommonModule } from '../common/common.module'; // PR-03.10 AC-06
+import { VerticalsModule } from '../verticals/verticals.module'; // Delivery vertical (S1.1-T4)
 
 /**
  * Orchestrator Module
@@ -30,7 +31,7 @@ import { CommonModule } from '../common/common.module'; // PR-03.10 AC-06
  * PR-06: Added PaymentFallbackFlow for manual payment confirmation
  */
 @Module({
-  imports: [ServicesModule, LlmModule, PersistenceModule, CommonModule],
+  imports: [ServicesModule, LlmModule, PersistenceModule, CommonModule, VerticalsModule],
   providers: [
     ConversationOrchestrator,
     IntentRouterService,

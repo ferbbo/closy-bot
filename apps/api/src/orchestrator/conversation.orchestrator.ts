@@ -28,6 +28,7 @@ import { MessageRelayService } from '../services/message-relay.service'; // PR-0
 import { LlmService } from '../llm/llm.service';
 import { MessageLogRepository } from '../persistence/repositories/message-log.repository'; // PR-03.10
 import { MemoryConfigService } from '../common/config/memory-config.service'; // PR-03.10 AC-06
+import { VerticalRouterService } from '../verticals/vertical-router.service'; // Delivery vertical (S1.1-T4)
 import { parseNumericSelection } from '../common/helpers/selection-helpers'; // PR-04.2
 import { CartService } from '../services/cart.service'; // PR-04.2
 
@@ -102,6 +103,7 @@ export class ConversationOrchestrator {
     private readonly playbookService: PlaybookService, // Fix: para usar unknownIntent del playbook
     private readonly expectingService: ExpectingService, // PR-04.1 + PR-04.2
     private readonly cartService: CartService, // PR-04.2
+    private readonly verticalRouter: VerticalRouterService, // Delivery vertical (S1.1-T4)
   ) {
     // PR-03.5.1, REQ-08, AC-08: Removed `this.llmEnabled` binary toggle
   }
@@ -223,6 +225,32 @@ export class ConversationOrchestrator {
     } catch (error) {
       // Don't fail orchestration if logging fails
       this.logger.warn(`Failed to log inbound message for conversation ${conversation.id}`, error);
+    }
+
+    // 4b. Vertical router (S1.1-T4): verticales B2 (delivery) detrás de feature flag.
+    // Sin handler aplicable (o flag apagado) → null y se siguen los flujos legacy.
+    const verticalResult = await this.verticalRouter.tryHandle({
+      merchant: {
+        id: merchant.id,
+        name: merchant.name,
+        industry: merchant.industry ?? null,
+        playbookConfig: merchant.playbookConfig,
+      },
+      customer: { id: customer.id, phone: input.from },
+      conversation: {
+        id: conversation.id,
+        metadata: (conversation as { metadata?: unknown }).metadata ?? null,
+      },
+      input: { messageId: input.messageId, text: input.text, timestamp: input.timestamp },
+    });
+    if (verticalResult) {
+      return {
+        response: verticalResult.response,
+        shouldSend: verticalResult.shouldSend,
+        conversationId: conversation.id,
+        merchantId: merchant.id,
+        intent: verticalResult.intent as IntentKey,
+      };
     }
 
     // 5. PR-05: Check for active checkout state BEFORE intent routing
@@ -540,7 +568,9 @@ export class ConversationOrchestrator {
           conversationContext: {
             conversationId: conversation.id,
             merchantName: merchant.name,
-            industry: merchant.industry ?? undefined,
+            // 'restaurante' (delivery vertical) has no legacy LLM persona → generic
+            industry:
+              merchant.industry === 'restaurante' ? undefined : (merchant.industry ?? undefined),
           },
         });
         break;

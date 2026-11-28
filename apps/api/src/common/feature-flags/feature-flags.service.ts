@@ -65,4 +65,13 @@ export class FeatureFlagsService {
     if (this.isMvpMode()) return false;
     return this.configService.get<boolean>('INDUSTRIES_ENABLED') ?? false;
   }
+
+  /**
+   * Delivery vertical (Closy Delivery Agent, B2). Habilita el agente de pedidos a
+   * domicilio para comercios con industry='restaurante'. Kill-switch: mvp → false.
+   */
+  get isDeliveryEnabled(): boolean {
+    if (this.isMvpMode()) return false;
+    return this.configService.get<boolean>('DELIVERY_ENABLED') ?? false;
+  }
 }
