@@ -139,6 +139,82 @@ describe('BusinessMessengerService (S1.4-T3) — decision matrix', () => {
     expect(outbox.enqueueWhatsAppText.mock.calls[0][0].text).toBe(comanda.freeText);
   });
 
+  it('AC-35 opted-out customer → skipped OPTED_OUT, nothing enqueued', async () => {
+    prisma.conversation.findUnique.mockResolvedValue({ optedOutAt: new Date() });
+    await expect(service.notify(onTheWay)).resolves.toEqual({
+      status: 'skipped',
+      reason: 'OPTED_OUT',
+    });
+    expect(outbox.enqueueWhatsAppTemplate).not.toHaveBeenCalled();
+    expect(outbox.enqueueWhatsAppText).not.toHaveBeenCalled();
+  });
+
+  it('AC-35 opt-out resolved by phone when no conversationId', async () => {
+    prisma.conversation.findFirst.mockResolvedValue({ id: 'conv-x' });
+    await expect(service.notify({ ...onTheWay, conversationId: null })).resolves.toMatchObject({
+      reason: 'OPTED_OUT',
+    });
+  });
+
+  it('AC-36 template recategorized to MARKETING + window closed → skipped TEMPLATE_NOT_USABLE + alerta_operacion', async () => {
+    prisma.whatsappTemplateState.findUnique.mockImplementation(({ where }) =>
+      Promise.resolve(
+        where.channelId_name_language.name === 'pedido_en_camino'
+          ? { status: 'APPROVED', category: 'MARKETING' }
+          : { status: 'APPROVED', category: 'UTILITY' },
+      ),
+    );
+    await expect(service.notify(onTheWay)).resolves.toEqual({
+      status: 'skipped',
+      reason: 'TEMPLATE_NOT_USABLE',
+    });
+    expect(outbox.enqueueWhatsAppTemplate).toHaveBeenCalledTimes(1);
+    expect(outbox.enqueueWhatsAppTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        templateName: 'alerta_operacion',
+        to: '+573110000000',
+        dedupeKey: 'alert:template_not_usable:ch-1:pedido_en_camino:APPROVED:MARKETING',
+      }),
+    );
+  });
+
+  it('AC-36 template not usable + window open → free text fallback + alert', async () => {
+    window.isOpen.mockResolvedValue(true);
+    prisma.whatsappTemplateState.findUnique.mockImplementation(({ where }) =>
+      Promise.resolve(
+        where.channelId_name_language.name === 'pedido_en_camino'
+          ? { status: 'PAUSED', category: 'UTILITY' }
+          : null,
+      ),
+    );
+    await expect(service.notify(onTheWay)).resolves.toMatchObject({
+      status: 'queued',
+      channel: 'text',
+    });
+    expect(outbox.enqueueWhatsAppText).toHaveBeenCalledWith(
+      expect.objectContaining({ to: onTheWay.to, text: onTheWay.freeText }),
+    );
+  });
+
+  it('RN-30 cap per order reached → skipped CAP_REACHED', async () => {
+    prisma.outboxMessage.count.mockResolvedValue(6);
+    await expect(service.notify(onTheWay)).resolves.toEqual({
+      status: 'skipped',
+      reason: 'CAP_REACHED',
+    });
+    expect(prisma.outboxMessage.count).toHaveBeenCalledWith({
+      where: { merchantId: 'm-1', to: onTheWay.to, dedupeKey: { startsWith: 'order:o-1:' } },
+    });
+  });
+
+  it('RN-30 cap honours configured maxBusinessInitiatedPerOrder', async () => {
+    prisma.merchantConfig.findUnique.mockResolvedValue({
+      deliveryConfig: { notifications: { maxBusinessInitiatedPerOrder: 2 } },
+    });
+    prisma.outboxMessage.count.mockResolvedValue(2);
+    await expect(service.notify(onTheWay)).resolves.toMatchObject({ reason: 'CAP_REACHED' });
+  });
+
   it('RN-15 duplicate dedupeKey → skipped DUPLICATE', async () => {
     prisma.outboxMessage.findUnique.mockResolvedValue({ id: 'out-old' });
     await expect(service.notify(onTheWay)).resolves.toEqual({
