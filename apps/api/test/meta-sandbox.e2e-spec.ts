@@ -263,6 +263,8 @@ describe('Meta Sandbox (e2e) — AC-38', () => {
       try {
         await prisma.outboxMessage.deleteMany({ where: { merchantId } });
         await prisma.messageLog.deleteMany({ where: { merchantId } });
+        // with DELIVERY_ENABLED the incomplete sandbox store opens a handoff (AC-41)
+        await prisma.handoff.deleteMany({ where: { conversation: { merchantId } } });
         await prisma.conversation.deleteMany({ where: { merchantId } });
         await prisma.channel.deleteMany({ where: { merchantId } });
         await prisma.merchant.deleteMany({ where: { id: merchantId } });
