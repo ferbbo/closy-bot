@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsString,
   IsArray,
   IsOptional,
@@ -36,6 +37,12 @@ export class MetaMessageMedia {
   @IsString()
   @IsOptional()
   caption?: string;
+
+  // Delivery S5.2: Meta marca las notas de voz con `audio.voice: true`; sin esto el
+  // ValidationPipe global (forbidNonWhitelisted) responde 400 a todo audio real.
+  @IsBoolean()
+  @IsOptional()
+  voice?: boolean;
 }
 
 export class MetaMessage {
