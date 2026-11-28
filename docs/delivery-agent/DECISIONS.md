@@ -170,3 +170,28 @@
 
 ### D-047 · Eco de voz truncado a 200 caracteres totales · Tier 1 · run-20261127-2210 · 2026-11-27
 - RN-24 dice "máximo 200 caracteres" para el eco `🎙️ Entendí: «…»`. Se truncó el texto transcrito para que el mensaje completo (wrapper incluido) no pase de 200, no solo el texto citado.
+
+### D-048 · Debounce de ráfagas (S5.1) · Tier 2 · run-20261128-0008 · 2026-11-28
+- `DELIVERY_DEBOUNCE_MS` (Joi, default 4000, 0 = desactivado; `jest-e2e.setup.ts` lo fija en 0 para las suites síncronas). `WhatsAppController.divertToBurst` corre después del dedupe del inbound y solo con flag + `restaurante` + ventana > 0. Si el flag está apagado, sale antes de `ModuleRef`, así que el legacy queda idéntico.
+- No pasan por el buffer: el número del comercio, `botPaused`, comercio no activo y textos vacíos. El turno combinado usa el último `message_id` (outbox `reply:<id>`). El buffer no guarda el teléfono ni la media. La reclamación es compare-and-set en SQL (lee y borra con row lock). El barrido de 60 s solo corre con el flag activo. El timer es un `setTimeout` gestionado.
+- Riesgo: si otro código reescribe todo `metadata` mientras corre un turno, puede borrar un `pendingBurst` escrito en paralelo (D-040 lo mitiga en el handler).
+
+### D-049 · Transcriber Groq (S5.2) · Tier 1 · run-20261128-0008 · 2026-11-28
+- Usa `groq-sdk` (`audio.transcriptions` + `toFile`) y no axios: la versión 0.8 tipa audio y `axios` no está declarado en `apps/api`. Timeout de 9 s, sin reintentos. Primero se valida la duración (TOO_LONG) y después la clave (UNSUPPORTED). La extensión del archivo sale del mime type.
+- Deuda: Graph API no entrega `durationSec`, así que en producción solo aplica el tope de 16 MB.
+
+### D-050 · `audio.voice` en el DTO del webhook · Tier 2 · run-20261128-0008 · 2026-11-28
+- Meta manda `audio.voice: true` en toda nota de voz y `forbidNonWhitelisted` respondía 400. Se agregó `voice?: boolean` a `MetaMessageMedia` (cambio aditivo). Con el flag apagado la media se sigue ignorando (D-045).
+
+### D-051 · Foto de producto y comprobante (S5.3) · Tier 1 · run-20261128-0008 · 2026-11-28
+- `GroqVisionInterpreter` usa groq-sdk (`image_url` como data URL), timeout de 9 s y acepta jpeg, png y webp. Solo copia `query` y `quantity`, sin precios ni ids, y quita los montos de `query`.
+- `kind:'product'` pasa por `ProductPhotoResolver` (CatalogMatcher) y MediaRouter devuelve `continue` con:
+  - un texto sintético sin precios para el agente;
+  - el eco "📷 En tu foto veo: …";
+  - los candidatos con `suggestedQuantity`, que el handler siembra en `lastCandidates`.
+- En el turno siguiente, una nota interna en el historial lleva la cantidad sugerida. No va en el texto del cliente porque el fallback parser la leería como pedido.
+- Que el carrito no se toque en el turno de la foto depende solo del prompt; no hay guard en código. Queda como deuda.
+- Comprobante: se revisa antes que el producto, también cuando la visión falla pero el caption menciona pago. Usa `alertOperation` (`alerta_operacion`) con el código del pedido y dedupe `order:{id}:receipt:{wamid}`. La imagen no se reenvía porque `SEND_IMAGE` es S5.4. El bot nunca cambia el estado del pedido. El "handoff si insiste" de RN-26 está pendiente.
+
+### D-052 · Merges bloqueados: PRs apilados · Tier 1 · run-20261128-0008 · 2026-11-28
+- `merge_pull_request` sigue denegado por el clasificador del entorno (igual que en run-20261127-2210). Esta corrida no intenta rodear la denegación con merges locales ni con REST. Deja los PRs verificados y abiertos con un orden de merge sugerido: #154, #155 y #156 son independientes. El PR de S5.3 incluye un merge de `da/S5.2-voice` (conflicto en `media.providers.ts` resuelto) y debe mergearse después de #155.

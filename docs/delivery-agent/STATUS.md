@@ -5,7 +5,7 @@
 
 ## Lock
 ```
-LOCK: run-20261128-0008 since 2026-11-28T00:08:30-05:00
+LOCK: free
 ```
 Formato cuando está tomado: `LOCK: run-<YYYYMMDD-HHmm> since <ISO-8601 -05:00>`.
 Si existe un lock con menos de 110 minutos de antigüedad, la corrida nueva **no trabaja**: reporta "corrida anterior activa" y termina.
@@ -55,13 +55,13 @@ PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 npx prisma generate --no-engine --schem
 | S3.2 | B | MERGED | #148 | 5 | AC-10, AC-13, AC-24 (base) | fijar_pago, guard de horario, AmountLimitGuard |
 | S3.4 | C | MERGED | #146 | 5 | AC-30 | registry + Noop/Fake + kit de contrato + PosOrderSink |
 | S3.3 | Integrador | MERGED | #149 | 7 | AC-14, AC-15, AC-24, AC-30, AC-32, AC-37 | resumen/confirmar, comanda, ORDER_SINKS, e2e delivery-checkout |
-| S4.1 | A | MERGED | #151 | 5 | AC-16, AC-34 (notifier), AC-20 (cableado) | lifecycle + notifier + delegación de comandos (D-042); e2e lifecycle pendiente |
-| S4.2 | B | MERGED | #152 | 3 | AC-17, AC-18, AC-19 | estado/cancelar/repetir; e2e customer pendiente |
+| S4.1 | A | MERGED | #151 | 5 | AC-16, AC-34 (notifier), AC-20 (cableado) | lifecycle + notifier + delegación de comandos (D-042); e2e lifecycle en PR #154 (IN_REVIEW) |
+| S4.2 | B | MERGED | #152 | 3 | AC-17, AC-18, AC-19 | estado/cancelar/repetir; e2e customer en PR #154 (IN_REVIEW) |
 | S4.3 | C | MERGED | #150 | 4 | AC-20, AC-21 | ⚠️ criterio de facturable (§0.2) a revisar (D-041) |
-| S5.0 | Integrador | BLOCKED-HUMAN(merge denegado por el clasificador de auto-mode del harness; PR listo y verificado) | #153 | 4 | — (base de AC-26/27/31) | T1-T4 completos, G-slice verde (unit 1640/1645, e2e sin regresión); `merge_pull_request` fue denegado por "Destructive or Unwanted Actions" pese a ser T2 autorizado en MASTER-PROMPT §5 y precedente de 15 merges previos de esta misma corrida programada. Necesita que un humano mergee #153 (o ajuste el permiso) |
-| S5.1 | A | TODO | | | | P0 debounce |
-| S5.2 | B | TODO | | | | P0 voz |
-| S5.3 | C | TODO | | | | P0 imagen producto + comprobante |
+| S5.0 | Integrador | MERGED | #153 | 4 | — (base de AC-26/27/31) | mergeado manualmente por el owner |
+| S5.1 | A | IN_REVIEW(#156) | #156 | 3 | AC-25 | G-slice verde; merge denegado por el entorno → merge humano (D-052) |
+| S5.2 | B | IN_REVIEW(#155) | #155 | 3 | AC-26 | G-slice verde; incluye fix DTO `audio.voice` (D-050) |
+| S5.3 | C | IN_REVIEW(#157) | #157 | 5 + merge de S5.2 | AC-27, AC-31 | G-slice verde; mergear **después** de #155 |
 | S5.4 | C | TODO | | | | P1 botón |
 | S5.5 | Integrador | TODO | | | | P0 release |
 
@@ -88,12 +88,19 @@ Las corridas programadas siguen usando **solo el Meta Sandbox (S1.5)**: no tiene
 - [ ] `GROQ_API_KEY` real + revisar los modelos `DELIVERY_*_MODEL`.
 
 ## Bloqueos para el humano
-- **BLOQUEANTE para seguir con F5:** PR #153 (`da/S5.0-media-plumbing → feat/delivery-agent`) está listo y verificado (G-slice verde) pero esta corrida no pudo mergearlo: `merge_pull_request` fue denegado por el clasificador de auto-mode del entorno ("Destructive or Unwanted Actions"), aunque MASTER-PROMPT §5 lo autoriza como T2 y las 15 corridas anteriores mergearon PRs de slice sin problema. Acción pedida: que un humano mergee #153 manualmente, o ajuste el permiso del entorno para `merge_pull_request` en corridas futuras. S5.1/S5.2/S5.3 dependen del código de S5.0 (contratos `MediaFetcher`/`MediaRouter`) y no se pudieron arrancar en esta corrida por esto.
+- **BLOQUEANTE para seguir con F5 (S5.4/S5.5):** el entorno sigue denegando `merge_pull_request` ("Destructive or Unwanted Actions"). Esta corrida no intentó rodearlo (D-052). Hay 4 PRs verificados, con G-slice verde y la misma lista de fallos que la baseline, esperando merge humano a `feat/delivery-agent`, en este orden:
+  1. **#154**: e2e `delivery-lifecycle` + `delivery-customer` (AC-16..19). Solo tests.
+  2. **#155**: S5.2 voz (AC-26) + fix del DTO `audio.voice`. ⚠️ Sin ese fix, las notas de voz reales reciben 400.
+  3. **#156**: S5.1 debounce (AC-25). ⚠️ Nueva variable `DELIVERY_DEBOUNCE_MS` y cambio en el controlador legacy.
+  4. **#157**: S5.3 imagen (AC-27, AC-31). Incluye el merge de S5.2, así que va **después de #155**.
+  Si #156 y #157 chocan al mergear, los archivos en común son `delivery.module.ts` y `channels/whatsapp`: rebasear la rama del segundo PR.
+- Alternativa: ajustar el permiso del entorno para `merge_pull_request` en las corridas.
+- Hallazgo legacy: Meta envía `from` sin "+", y el orquestador compara exacto contra `merchant.whatsappNumber`. El seed demo guarda "+57…", así que el encargado no se reconoce (el e2e lo normaliza). Conviene normalizar en settings u onboarding.
 
 Revisar en el PR final (⚠️ Tier 2/criterio):
 - D-041: criterio de "pedido facturable" usado por `reporte` (§0.2 no tiene campo de confirmación explícita; se usa `createdAt` y cancelación < 24 h).
 - D-016: `db push` en producción pedirá `--accept-data-loss` por el unique nuevo de `cart_items` (superconjunto del anterior, no hay pérdida real).
-- Deuda: los e2e `delivery-lifecycle` y `delivery-customer` están pendientes; unit spec dedicado de `confirm.tools`; `formatCop`/`paymentInstructions`/helper de draft duplicados; logs legacy de búsqueda con texto del cliente (PII) en `CatalogService`/`ProductRepository`.
+- Deuda: unit spec dedicado de `confirm.tools`; `formatCop`/`paymentInstructions`/helper de draft duplicados; logs legacy de búsqueda con texto del cliente (PII) en `CatalogService`/`ProductRepository`.
 
 ## Log de corridas
 | Run | Inicio | Fin | Slices tocados | Resultado | Siguiente |
@@ -101,3 +108,4 @@ Revisar en el PR final (⚠️ Tier 2/criterio):
 | plan | 2026-11-27 16:40 | 2026-11-27 17:20 | docs | SPEC, PLAN, CONTRACTS, MASTER-PROMPT, CLAUDE.md · PR #137 (draft → dev) | Run 1: S1.1 |
 | run-20261127-2008 | 2026-11-27 20:08 | 2026-11-27 21:26 | S1.1–S1.5, S2.1–S2.3, S3.1–S3.4, S4.1–S4.3 (15 slices, PR #138–#152) | ✅ F1–F4 MERGED. Lock previo (run-20261127-1801) abandonado >110 min. Engines Prisma disponibles → e2e reales; baseline e2e medida (121 fallos preexistentes) | Run siguiente: S5.0 (Integrador) → S5.1 ∥ S5.2 ∥ S5.3; pendientes e2e lifecycle/customer |
 | run-20261127-2210 | 2026-11-27 22:10 | 2026-11-27 22:28 | S5.0 (T1-T4 completos, PR #153 abierto, no mergeado) | ⚠️ BLOCKED-HUMAN: `merge_pull_request` denegado por el clasificador de auto-mode del entorno (ver §Bloqueos). Entorno verificado contra baseline (tsc 0 errores, unit 1640/1645 mismos 5 fallos preexistentes + 19 nuevos en verde, engines Prisma disponibles, e2e sin regresión en `whatsapp-webhook*`/`delivery-*`/`whatsapp-onboarding`). No se arrancaron S5.1/S5.2/S5.3 (dependen del código de S5.0, que solo vive en la rama `da/S5.0-media-plumbing` hasta que se mergee #153) | Mergear #153 manualmente; luego S5.1 ∥ S5.2 ∥ S5.3 |
+| run-20261128-0008 | 2026-11-28 00:08 | 2026-11-28 00:40 | S5.1, S5.2, S5.3 (subagentes en paralelo) + e2e de deuda F4 | 🔄 4 PRs IN_REVIEW (#154–#157) con G-slice verde: unit 1680/1685 (con S5.2+S5.3), e2e sin regresión (mismos 121 fallos) y lo mismo en modo mvp. #153 ya estaba mergeado por el owner. ⚠️ El merge sigue denegado por el entorno (D-052) | Merge humano de #154→#155→#156→#157; después S5.4 (P1) ∥ S5.5 (release) |
