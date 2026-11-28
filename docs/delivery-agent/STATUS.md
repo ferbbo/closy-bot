@@ -5,7 +5,7 @@
 
 ## Lock
 ```
-LOCK: run-20261128-0408 since 2026-11-28T04:08:41-05:00
+LOCK: free
 ```
 Formato cuando está tomado: `LOCK: run-<YYYYMMDD-HHmm> since <ISO-8601 -05:00>`.
 Si existe un lock con menos de 110 minutos de antigüedad, la corrida nueva **no trabaja**: reporta "corrida anterior activa" y termina.
@@ -63,7 +63,7 @@ PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 npx prisma generate --no-engine --schem
 | S5.2 | B | IN_REVIEW(#155) | #155 | 3 | AC-26 | G-slice verde; incluye fix DTO `audio.voice` (D-050) |
 | S5.3 | C | IN_REVIEW(#157) | #157 | 5 + merge de S5.2 | AC-27, AC-31 | G-slice verde; mergear **después** de #155 |
 | S5.4 | C | IN_REVIEW(#159) | #159 | 7 | AC-28 | apilado sobre #157 (base `da/S5.3-image`); G-slice verde; ⚠️ D-054/D-055 |
-| S5.5 | Integrador | IN_REVIEW(#158) | #158 | 2 | AC-29, AC-01 | T1 journey e2e + T3 docs; apilado sobre #154 (base `da/S4-e2e-debt`). Falta T4 (#137) tras los merges |
+| S5.5 | Integrador | IN_REVIEW(#158) | #158 | 3 | AC-29, AC-01 | T1 journey e2e + T3 docs + T2 integración en seco (fix del harness para S5.4, D-057); apilado sobre #154 (base `da/S4-e2e-debt`). Falta T4 (#137) tras los merges |
 
 Estados: `TODO` · `IN_PROGRESS(run-id)` · `IN_REVIEW(PR#)` · `MERGED` · `BLOCKED-HUMAN(motivo)` · `BLOCKED-ENV(motivo)` · `CUT(P1 recortado)`
 
@@ -96,7 +96,8 @@ Las corridas programadas siguen usando **solo el Meta Sandbox (S1.5)**: no tiene
   5. **#158**: S5.5 journey e2e (AC-29) + docs. Base `da/S4-e2e-debt` → después de #154, cambiar la base a `feat/delivery-agent`.
   6. **#159**: S5.4 botón Sí/No + `SEND_IMAGE` + `ver_foto_producto` (AC-28). Base `da/S5.3-image` → después de #157, cambiar la base. ⚠️ D-054 (enum aditivo), D-055 (DTO `interactive`).
   Re-verificado en run-20261128-0208: `merge_pull_request` sigue denegado (un intento sobre #154, sin rodeos).
-  Si #156 y #157 chocan al mergear, los archivos en común son `delivery.module.ts` y `channels/whatsapp`: rebasear la rama del segundo PR.
+  **run-20261128-0408:** integración local en seco de los 6 PRs en este orden: 0 conflictos; unit 1727/1732 y e2e 225/349 con la lista de fallos idéntica a la baseline (también en modo mvp). Se corrigió una incompatibilidad #158↔#159 en el harness e2e (commit `38efbbd` en #158, D-057). El stack queda listo para mergear en orden. El merge sigue denegado (un intento sobre #154).
+  Verificado en run-20261128-0408 que #156 y #157 no chocan (git los mergea solo).
 - Alternativa: ajustar el permiso del entorno para `merge_pull_request` en las corridas.
 - Hallazgo legacy: Meta envía `from` sin "+", y el orquestador compara exacto contra `merchant.whatsappNumber`. El seed demo guarda "+57…", así que el encargado no se reconoce (el e2e lo normaliza). Conviene normalizar en settings u onboarding.
 
@@ -113,3 +114,4 @@ Revisar en el PR final (⚠️ Tier 2/criterio):
 | run-20261127-2210 | 2026-11-27 22:10 | 2026-11-27 22:28 | S5.0 (T1-T4 completos, PR #153 abierto, no mergeado) | ⚠️ BLOCKED-HUMAN: `merge_pull_request` denegado por el clasificador de auto-mode del entorno (ver §Bloqueos). Entorno verificado contra baseline (tsc 0 errores, unit 1640/1645 mismos 5 fallos preexistentes + 19 nuevos en verde, engines Prisma disponibles, e2e sin regresión en `whatsapp-webhook*`/`delivery-*`/`whatsapp-onboarding`). No se arrancaron S5.1/S5.2/S5.3 (dependen del código de S5.0, que solo vive en la rama `da/S5.0-media-plumbing` hasta que se mergee #153) | Mergear #153 manualmente; luego S5.1 ∥ S5.2 ∥ S5.3 |
 | run-20261128-0008 | 2026-11-28 00:08 | 2026-11-28 00:26 | S5.1, S5.2, S5.3 (subagentes en paralelo) + e2e de deuda F4 | 🔄 4 PRs IN_REVIEW (#154–#157) con G-slice verde: unit 1680/1685 (con S5.2+S5.3), e2e sin regresión (mismos 121 fallos) y lo mismo en modo mvp. #153 ya estaba mergeado por el owner. ⚠️ El merge sigue denegado por el entorno (D-052) | Merge humano de #154→#155→#156→#157; después S5.4 (P1) ∥ S5.5 (release) |
 | run-20261128-0208 | 2026-11-28 02:08 | 2026-11-28 02:26 | S5.4 (subagente, apilado sobre #157), S5.5-T1/T3 (Integrador, apilado sobre #154) | 🔄 2 PRs nuevos IN_REVIEW (#158, #159) con G-slice verde: S5.5 unit 1640/1645 · e2e 206/330 · S5.4 unit 1707/1712 · e2e 214/338, mismos 121 fallos de la baseline e idéntico en modo mvp. Baseline de la rama re-medida: unit 1640/1645, e2e 199/323 (sin cambios). Merge aún denegado (D-052) | Merge humano #154→#155→#156→#157→#158→#159; luego S5.5-T2/T4 (verificación integrada + PR #137 a ready) |
+| run-20261128-0408 | 2026-11-28 04:08 | 2026-11-28 04:30 | S5.5-T2 (integración en seco de #154–#159) | 🔄 Sin merges del owner desde la corrida anterior. La integración local de los 6 PRs no tiene conflictos; encontró y corrigió un e2e roto entre #158 y #159 (harness → `SEND_INTERACTIVE`, `38efbbd` en #158). Integrado: unit 1727/1732 · e2e 225/349, la misma lista de fallos que la baseline (feat @ f091752: 199/323), idéntico en modos mvp y dev+delivery. Merge denegado (D-052) | Merge humano #154→#155→#156→#157→#158→#159; luego S5.5-T4 (#137 a ready). Si no hay merges, la corrida de las 04:00 del 29-nov hace T4 igual (release) |

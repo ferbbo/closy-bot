@@ -212,3 +212,9 @@
 - dedupeKey `reply:<messageId>`.
 - `ver_foto_producto({variantId}|{menu:true})`: solo variantIds vistos en el turno, `Product.imageUrl` o `menuImageUrl` de la BD, solo links http(s), sin precio; si no hay imagen responde "No tengo foto de ese producto." (RN-00).
 - El helper `send` de `delivery-checkout.e2e-spec.ts` lee también `SEND_INTERACTIVE`; ninguna aserción cambió.
+
+### D-057 · Integración en seco del stack #154–#159 + fix del harness · Tier 1 · run-20261128-0408 · 2026-11-28
+- Con los merges todavía denegados (D-052), S5.5-T2 se adelanta como integración **local** (no se sube) de #154 → #155 → #156 → #157 → #158 → #159: 0 conflictos.
+- La integración encontró que `delivery-journey` (AC-29, #158) falla al combinarse con #159, porque el resumen pasa a `SEND_INTERACTIVE` y el harness solo leía `SEND_TEXT`. El fix va en el harness compartido, en la rama de #158 (`38efbbd`): lee la respuesta más reciente que no sea plantilla. `type: { not: 'SEND_TEMPLATE' }` es válido con y sin el valor nuevo del enum.
+- Resultado: unit 1727/1732 · e2e 225/349 con la lista de fallos idéntica a la baseline (121), igual en los modos mvp y dev+delivery.
+- Entorno: el seed de los e2e corre `npx tsx` en un subproceso y necesita `DATABASE_URL` exportada (no la toma del `.env`).
