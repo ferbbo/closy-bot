@@ -43,6 +43,8 @@ export interface AgentTurnOutput {
   candidates: VariantCandidate[] | null;
   fallbackUsed: string | null;
   groundingFailures: number;
+  /** S5.4: bloque exacto de `resumen_pedido` de este turno (para el mensaje interactivo). */
+  summaryBlock?: string | null;
 }
 
 /** Candidatos vigentes (TTL 30 min). Solo sirven para resolver referencias, nunca para precios. */
@@ -175,6 +177,7 @@ export class DeliveryAgentService {
       candidates,
       fallbackUsed: failures >= 2 ? 'GROUNDING' : null,
       groundingFailures: failures,
+      summaryBlock: summaryBlock as string | null,
     });
   }
 

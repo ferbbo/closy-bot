@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { MessageDirection, Prisma } from '@prisma/client';
 import { FeatureFlagsService } from '../../../common/feature-flags/feature-flags.service';
@@ -17,6 +17,7 @@ import { DeliveryAgentService } from '../agent/delivery-agent.service';
 import { DELIVERY_TEXTS, isInfoQuery, isOffTopic, isOptOut } from '../agent/delivery-agent.prompt';
 import { MediaRouter } from '../media/media-router.service';
 import { photoQuantityHint, withoutSuggestedQuantity } from '../media/product-photo.service';
+import { InteractiveConfirmationSender } from './interactive-confirmation';
 
 interface DeliveryMeta {
   privacyNoticeAt?: string;
@@ -46,6 +47,7 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
     private readonly router: VerticalRouterService,
     private readonly moduleRef: ModuleRef,
     private readonly mediaRouter: MediaRouter,
+    @Optional() private readonly confirmation?: InteractiveConfirmationSender,
   ) {}
 
   onModuleInit(): void {
@@ -70,7 +72,7 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
     const now = new Date();
     const conv = await this.prisma.conversation.findUnique({
       where: { id: ctx.conversation.id },
-      select: { metadata: true, optedOutAt: true },
+      select: { metadata: true, optedOutAt: true, channelId: true },
     });
     const metadata = (conv?.metadata ?? {}) as Record<string, unknown>;
     const delivery: DeliveryMeta = { ...((metadata.delivery as DeliveryMeta | undefined) ?? {}) };
@@ -101,6 +103,7 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
 
     let out: { text: string; intent: DeliveryTurnResult['intent'] };
     let reactivate = false;
+    let summaryBlock: string | null = null;
     if (isOffTopic(text)) {
       out = { text: DELIVERY_TEXTS.offTopic, intent: 'DELIVERY_GUARD' };
     } else if (!completeness.complete) {
@@ -153,6 +156,7 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
             items: withoutSuggestedQuantity(delivery.lastCandidates.items),
           };
         }
+        summaryBlock = turn.summaryBlock ?? null;
         out = { text: turn.text, intent: 'DELIVERY_ORDER' };
       }
     }
@@ -180,6 +184,19 @@ export class DeliveryVerticalHandler implements VerticalHandler, OnModuleInit {
         ...(reactivate && conv?.optedOutAt ? { optedOutAt: null } : {}),
       },
     });
+    // S5.4-T2 (F-18): el resumen sale como interactivo Sí/No; si no aplica, cae al texto.
+    if (summaryBlock && this.confirmation) {
+      const body = await this.confirmation.send({
+        merchantId: ctx.merchant.id,
+        conversationId: ctx.conversation.id,
+        channelId: conv?.channelId ?? null,
+        to: ctx.customer.phone,
+        inboundMessageId: ctx.input.messageId,
+        prefix: echoPrefix + prefix,
+        summaryBlock,
+      });
+      if (body) return { response: body, shouldSend: false, intent: out.intent };
+    }
     return this.result(echoPrefix + prefix + out.text, out.intent);
   }
 

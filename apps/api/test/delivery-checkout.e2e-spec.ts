@@ -39,11 +39,13 @@ describe('Delivery checkout (e2e)', () => {
       .set('X-Hub-Signature-256', signPayload(raw))
       .send(raw)
       .expect(200);
+    // S5.4 (AC-28): the summary turn replies with SEND_INTERACTIVE (body = presenter block)
     const last = await prisma.outboxMessage.findFirst({
-      where: { merchantId: MERCHANT_ID, type: 'SEND_TEXT' },
+      where: { merchantId: MERCHANT_ID, type: { in: ['SEND_TEXT', 'SEND_INTERACTIVE'] } },
       orderBy: { createdAt: 'desc' },
     });
-    return String((last?.payloadJson as { text?: string } | null)?.text ?? '');
+    const payload = last?.payloadJson as { text?: string; interactive?: { body: string } } | null;
+    return String(payload?.text ?? payload?.interactive?.body ?? '');
   };
   beforeAll(async () => {
     ({ baseUrl: v.base } = await graph.start());
