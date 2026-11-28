@@ -15,6 +15,7 @@
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { MerchantCommandService } from './merchant-command.service';
+import { DELIVERY_MERCHANT_COMMANDS } from '../verticals/delivery/lifecycle/merchant-commands.token';
 import { MessageRelayService } from './message-relay.service'; // PR-05.2
 import { PrismaService } from '../persistence/prisma/prisma.service';
 import { OrderRepository } from '../persistence/repositories/order.repository';
@@ -384,6 +385,59 @@ describe('MerchantCommandService', () => {
       const result = await service.markAsShipped(MERCHANT_ID, ORDER_CODE);
       expect(result).toContain('❌');
       expect(orderRepository.updateStatus).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // S4.1: delegación a DELIVERY_MERCHANT_COMMANDS
+  // ---------------------------------------------------------------------------
+  describe('S4.1: delivery_passthrough', () => {
+    const UNKNOWN = "❌ Comando no reconocido. Escribe 'ayuda' para ver comandos disponibles.";
+    const cmd = { command: 'delivery_passthrough', args: { text: 'salio 42' } };
+
+    function build(enabled: boolean, handlers: unknown) {
+      const moduleRef = {
+        get: (token: unknown) => {
+          if (token === DELIVERY_MERCHANT_COMMANDS) {
+            if (handlers === undefined) throw new Error('not found');
+            return handlers;
+          }
+          return { isDeliveryEnabled: enabled };
+        },
+      };
+      return new MerchantCommandService(
+        prisma,
+        orderRepository,
+        outboxRepository,
+        {} as never,
+        moduleRef as never,
+      );
+    }
+
+    it('flag activo → el primer handler que responde gana', async () => {
+      const a = { tryHandle: jest.fn().mockResolvedValue(null) };
+      const b = { tryHandle: jest.fn().mockResolvedValue('✅ Pedido ORD-042 en camino.') };
+      const c = { tryHandle: jest.fn().mockResolvedValue('otro') };
+      const result = await build(true, [a, b, c]).executeCommand(MERCHANT_ID, cmd);
+      expect(result).toBe('✅ Pedido ORD-042 en camino.');
+      expect(a.tryHandle).toHaveBeenCalledWith(MERCHANT_ID, 'salio 42');
+      expect(c.tryHandle).not.toHaveBeenCalled();
+    });
+
+    it('flag apagado → respuesta legacy sin consultar handlers', async () => {
+      const h = { tryHandle: jest.fn() };
+      expect(await build(false, [h]).executeCommand(MERCHANT_ID, cmd)).toBe(UNKNOWN);
+      expect(h.tryHandle).not.toHaveBeenCalled();
+    });
+
+    it('sin handlers registrados, ninguno responde o falla → respuesta legacy', async () => {
+      expect(await build(true, undefined).executeCommand(MERCHANT_ID, cmd)).toBe(UNKNOWN);
+      const failing = { tryHandle: jest.fn().mockRejectedValue(new Error('x')) };
+      expect(await build(true, [failing]).executeCommand(MERCHANT_ID, cmd)).toBe(UNKNOWN);
+    });
+
+    it('sin ModuleRef (servicio legacy por defecto) → respuesta legacy', async () => {
+      expect(await service.executeCommand(MERCHANT_ID, cmd)).toBe(UNKNOWN);
     });
   });
 });

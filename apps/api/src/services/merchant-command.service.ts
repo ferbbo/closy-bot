@@ -1,10 +1,20 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { OutboxChannel, OutboxMessageType, OrderStatus } from '@prisma/client';
 import { PrismaService } from '../persistence/prisma/prisma.service';
 import { OrderRepository } from '../persistence/repositories/order.repository';
 import { OutboxRepository } from '../persistence/repositories/outbox.repository';
 import { MessageRelayService } from './message-relay.service'; // PR-05.2
-import type { ParsedCommand } from './merchant-command-parser.service';
+import {
+  DELIVERY_PASSTHROUGH_COMMAND,
+  type ParsedCommand,
+} from './merchant-command-parser.service';
+import {
+  isDeliveryEnabledVia,
+  resolveDeliveryCommandHandlers,
+} from '../verticals/delivery/lifecycle/merchant-commands.token';
+
+const UNKNOWN_COMMAND = "❌ Comando no reconocido. Escribe 'ayuda' para ver comandos disponibles.";
 
 // ---------------------------------------------------------------------------
 // State machine: valid transitions per OrderStatus
@@ -44,6 +54,7 @@ export class MerchantCommandService {
     private readonly orderRepository: OrderRepository,
     private readonly outboxRepository: OutboxRepository,
     private readonly messageRelayService: MessageRelayService, // PR-05.2
+    @Optional() private readonly moduleRef?: ModuleRef, // S4.1: handlers de la vertical en caliente
   ) {}
 
   /**
@@ -82,9 +93,29 @@ export class MerchantCommandService {
         return this.messageRelayService.activateHandoff(merchantId, command.args['orderCode']!);
       case 'cerrar_handoff':
         return this.messageRelayService.deactivateHandoff(merchantId);
+      case DELIVERY_PASSTHROUGH_COMMAND:
+        return this.delegateToDelivery(merchantId, command.args['text'] ?? '');
       default:
-        return "❌ Comando no reconocido. Escribe 'ayuda' para ver comandos disponibles.";
+        return UNKNOWN_COMMAND;
     }
+  }
+
+  /**
+   * S4.1 (CONTRACTS §2): comando no legacy → handlers de DELIVERY_MERCHANT_COMMANDS, solo con
+   * `isDeliveryEnabled`. El primero que devuelve texto gana. Sin flag, sin handlers o si fallan,
+   * se responde exactamente lo mismo que el legacy.
+   */
+  private async delegateToDelivery(merchantId: string, text: string): Promise<string> {
+    if (!text || !isDeliveryEnabledVia(this.moduleRef)) return UNKNOWN_COMMAND;
+    for (const handler of resolveDeliveryCommandHandlers(this.moduleRef)) {
+      try {
+        const reply = await handler.tryHandle(merchantId, text);
+        if (reply) return reply;
+      } catch (error) {
+        this.logger.error(`Delivery command handler failed: ${(error as Error).message}`);
+      }
+    }
+    return UNKNOWN_COMMAND;
   }
 
   // ---------------------------------------------------------------------------
